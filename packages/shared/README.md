@@ -1,7 +1,7 @@
-# @stock-dailies/shared
+# @stock-indicator-dailies/shared
 
-The single source of truth for Stock Dailies' domain logic. Everything else — the
-Playwright agent, the Gemini VLM wrapper, the web UI, and both eval suites — imports
+The single source of truth for Stock Indicator Dailies' domain logic. Everything else — the
+Playwright agent, the VLM wrapper, the web UI, and both eval suites — imports
 from here instead of re-encoding indicator settings or signal rules.
 
 ## What's here
@@ -27,7 +27,7 @@ SELL is evaluated first, so if the thresholds are ever lowered such that both co
 match, the protective (exit) signal wins.
 
 ```ts
-import { deriveSignal, readingsFromSignals } from '@stock-dailies/shared';
+import { deriveSignal, readingsFromSignals } from '@stock-indicator-dailies/shared';
 
 deriveSignal(readingsFromSignals([
   ['macd', 'BUY'],
@@ -47,6 +47,6 @@ Override the thresholds via `deriveSignal(readings, { buyConsensus, sellConsensu
 ## Develop
 
 ```bash
-npm test -w @stock-dailies/shared        # node:test, native TS
-npm run typecheck -w @stock-dailies/shared
+npm test -w @stock-indicator-dailies/shared        # node:test, native TS
+npm run typecheck -w @stock-indicator-dailies/shared
 ```

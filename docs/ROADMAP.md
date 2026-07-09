@@ -17,7 +17,7 @@ Goal: enter a ticker → get a Buy/Sell/Hold Daily Report in under 15 seconds.
 - ⬜ **Web** (`apps/web`): Next.js dashboard, single ticker input, Daily Report card
 - ⬜ **Agent** (`packages/agent`): Playwright login → indicator config → screenshot → crop/sanitize
 - ⬜ **Agent**: structural validation that all three indicators are in-frame before inference
-- ⬜ **VLM** (`packages/vlm`): Gemini system prompt + structured JSON verdict
+- ⬜ **VLM** (`packages/vlm`): provider-agnostic VLM (Gemini/GPT-class) system prompt + structured JSON verdict
 - ⬜ **DB** (`supabase`): schema for preferences + daily history; history purge
 - ⬜ **Security**: OS-vault credential storage; read-only scoping; no trade-execution paths
 - ⬜ **Evals**: `retrieval` (SSIM ≥ 95%) and `interpretation` (100% on labeled set)

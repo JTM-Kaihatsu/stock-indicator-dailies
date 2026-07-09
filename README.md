@@ -1,14 +1,14 @@
-# Stock Dailies
+# Stock Indicator Dailies
 
 > An AI-driven technical-analysis utility that automates the daily ritual of checking market signals.
 
-**Stock Dailies** turns the repetitive chore of logging into a charting platform, configuring
+**Stock Indicator Dailies** turns the repetitive chore of logging into a charting platform, configuring
 indicators, and eyeballing crossovers into a single click. You enter a ticker; an autonomous
 browser agent logs in, applies a fixed indicator set, screenshots the chart, and a Visual
 Language Model (VLM) reads it back to you as a **Buy / Sell / Hold** signal.
 
 > [!IMPORTANT]
-> This is **not financial advice**. Stock Dailies is a data-acquisition and reporting tool.
+> This is **not financial advice**. Stock Indicator Dailies is a data-acquisition and reporting tool.
 > Every final investment decision remains the sole responsibility of the user.
 
 ---
@@ -28,7 +28,7 @@ Language Model (VLM) reads it back to you as a **Buy / Sell / Hold** signal.
             ▼                                                         ▼
   ┌───────────────────┐   interprets crossovers vs. signal   ┌───────────────────┐
   │  VLM Analysis     │◀─────────────────────────────────────│  Chart image      │
-  │  (Gemini 1.5 Pro) │   criteria → structured JSON          └───────────────────┘
+  │  (Gemini/GPT)     │   criteria → structured JSON          └───────────────────┘
   └───────────────────┘
             │
             ▼
@@ -53,19 +53,19 @@ Indicator parameters: MACD fast 8 / slow 17 / signal 9 · Slow Stochastic %K 14 
 | -------------- | ------------------------------- | ------------------------------------------------ |
 | Frontend       | Next.js                         | Responsive dashboard + Daily Report cards        |
 | Agentic layer  | Playwright + light orchestration| Log in, configure indicators, capture chart      |
-| AI layer       | Gemini API (1.5 Pro)            | Multimodal image reasoning, JSON-structured output |
+| AI layer       | Frontier VLM (Gemini/GPT-class) | Multimodal image reasoning, JSON-structured output |
 | Database       | Supabase                        | User preferences & "Daily" history               |
 | Evals          | SSIM + labeled ground truth     | Guard against retrieval failures & model drift   |
 
 ## Repository layout
 
 ```
-stock-dailies/
+stock-indicator-dailies/
 ├── apps/
 │   └── web/                 # Next.js dashboard (frontend)
 ├── packages/
 │   ├── agent/               # Playwright browser-automation layer
-│   ├── vlm/                 # Gemini VLM analysis + prompts
+│   ├── vlm/                 # VLM analysis + prompts (Gemini/GPT-class)
 │   └── shared/              # Shared types & signal-criteria definitions
 ├── evals/
 │   ├── retrieval/           # SSIM-based chart-retrieval eval (target ≥ 95%)
@@ -79,11 +79,11 @@ stock-dailies/
 ## Getting started
 
 Prerequisites: Node.js 20+, npm, and a Playwright-capable environment. AI + DB integration
-require a Gemini API key and a Supabase project (see [`.env.example`](.env.example)).
+require a VLM API key (Gemini/GPT-class) and a Supabase project (see [`.env.example`](.env.example)).
 
 ```bash
-git clone https://github.com/JTM-Kaihatsu/stock-dailies.git
-cd stock-dailies
+git clone https://github.com/JTM-Kaihatsu/stock-indicator-dailies.git
+cd stock-indicator-dailies
 cp .env.example .env.local   # then fill in your keys
 ```
 
@@ -103,7 +103,7 @@ for the full model. Highlights:
 
 ## Roadmap
 
-Phase II extends Stock Dailies into financial-statement extraction and analysis. See
+Phase II extends Stock Indicator Dailies into financial-statement extraction and analysis. See
 [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License

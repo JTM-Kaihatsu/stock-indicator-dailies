@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the intended architecture for the Stock Dailies MVP. It is the reference
+This document describes the intended architecture for the Stock Indicator Dailies MVP. It is the reference
 that the (not-yet-written) application code will be built against.
 
 ## Components
@@ -20,7 +20,7 @@ that the (not-yet-written) application code will be built against.
                 │ sanitized chart PNG
                 ▼
 ┌───────────────────────────────┐
-│      packages/vlm (Gemini)     │
+│       packages/vlm (VLM)       │
 │  system prompt + criteria →    │
 │  structured JSON verdict       │
 └───────────────┬───────────────┘
@@ -33,8 +33,8 @@ that the (not-yet-written) application code will be built against.
   card (screenshot + Buy/Sell/Hold + per-indicator rationale), and shows historical dailies.
 - **`packages/agent`** — Playwright automation. Logs into the charting provider, enters the ticker,
   applies the fixed indicator set, captures a high-res screenshot, then crops/sanitizes it.
-- **`packages/vlm`** — Wraps the Gemini API. Owns the system prompt and returns a structured JSON
-  verdict validated against a schema in `packages/shared`.
+- **`packages/vlm`** — Wraps a frontier VLM (Gemini/GPT-class) behind a provider-agnostic interface.
+  Owns the system prompt and returns a structured JSON verdict validated against a schema in `packages/shared`.
 - **`packages/shared`** — Cross-cutting TypeScript types, the indicator parameter constants, and the
   signal-criteria definitions (single source of truth shared by agent, vlm, web, and evals).
 - **`evals/`** — Independent evaluation of the two failure-prone stages (see [Evaluation](#evaluation)).
@@ -90,5 +90,6 @@ is not masked by the other.
 - Charting provider(s) to support first (TradingView vs. StockCharts vs. brokerage API).
 - Whether the agent runs locally (aligns with local-first) or in a controlled backend, and how that
   reconciles with keeping credentials on-device.
-- VLM provider lock-in vs. an abstraction that allows swapping Gemini/GPT-4o.
-- Monorepo tooling (npm/pnpm workspaces, Turborepo?) — decide when app code is scaffolded.
+- Which VLM provider to default to (`VLM_PROVIDER`) — the `packages/vlm` interface stays
+  provider-agnostic (Gemini/GPT-class) so the concrete default can change without rippling out.
+- Monorepo tooling — **decided:** npm workspaces.

@@ -1,5 +1,5 @@
 {
-  "name": "@stock-dailies/shared",
+  "name": "@stock-indicator-dailies/shared",
   "version": "0.0.0",
   "private": true,
   "type": "module",

@@ -1,4 +1,4 @@
-/** The three technical indicators Stock Dailies evaluates on every chart. */
+/** The three technical indicators Stock Indicator Dailies evaluates on every chart. */
 export type IndicatorKey = 'macd' | 'slowStochastic' | 'sma';
 
 /**
