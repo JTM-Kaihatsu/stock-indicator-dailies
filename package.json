@@ -1,0 +1,21 @@
+{
+  "name": "stock-dailies",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AI-driven technical-analysis utility: ticker in, Buy/Sell/Hold out.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "node --test \"packages/**/test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p packages/shared/tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

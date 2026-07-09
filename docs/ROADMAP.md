@@ -7,8 +7,8 @@ Status legend: ⬜ not started · 🟡 in progress · ✅ done
 - ✅ PRD captured ([PRD.md](PRD.md))
 - ✅ Architecture defined ([ARCHITECTURE.md](ARCHITECTURE.md))
 - ✅ Repository structure & conventions
-- ⬜ Choose monorepo tooling (npm/pnpm workspaces, Turborepo)
-- ⬜ `packages/shared`: indicator constants + signal-criteria types + verdict schema
+- ✅ Monorepo tooling — npm workspaces; TypeScript run/tested natively via `node --test` (zero runtime test deps)
+- ✅ `packages/shared`: indicator constants, verdict types, and `deriveSignal()` decision logic (17 unit tests)
 
 ## Phase 1 — MVP
 

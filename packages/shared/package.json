@@ -1,0 +1,14 @@
+{
+  "name": "@stock-dailies/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Single source of truth: indicator parameters, signal criteria, verdict types, and the Buy/Sell/Hold decision logic.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}
