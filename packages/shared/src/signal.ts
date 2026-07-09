@@ -2,11 +2,14 @@ import type { IndicatorReading, IndicatorSignal, Signal } from './types.ts';
 
 export interface DeriveSignalOptions {
   /**
-   * Minimum number of aligned indicators required to emit a directional signal.
-   * Defaults to 2 ("majority"). Set to the indicator count (3) for unanimity,
-   * or 1 for a looser policy.
+   * Minimum number of BUY readings required to emit BUY. Defaults to 3 —
+   * BUY requires unanimity across all three indicators.
    */
-  minConsensus?: number;
+  buyConsensus?: number;
+  /**
+   * Minimum number of SELL readings required to emit SELL. Defaults to 2.
+   */
+  sellConsensus?: number;
 }
 
 /** Tally of BUY / SELL readings (NEUTRAL is implied by the remainder). */
@@ -30,24 +33,25 @@ export function tallyReadings(readings: readonly IndicatorReading[]): SignalTall
 /**
  * Combine per-indicator readings into an overall Buy/Sell/Hold recommendation.
  *
- * Policy — "confluence without contradiction":
- *   - BUY  if at least `minConsensus` indicators read BUY and none read SELL.
- *   - SELL if at least `minConsensus` indicators read SELL and none read BUY.
- *   - HOLD otherwise (conflicting, insufficient, or all-neutral readings).
+ * Policy — asymmetric, risk-averse:
+ *   - SELL if at least `sellConsensus` indicators read SELL (default 2).
+ *   - BUY  if at least `buyConsensus` indicators read BUY   (default 3 — unanimity).
+ *   - HOLD otherwise.
  *
- * Any contradiction (at least one BUY *and* at least one SELL) resolves to HOLD:
- * the conservative default for a tool that explicitly does not give financial
- * advice. The threshold is configurable via {@link DeriveSignalOptions.minConsensus}.
+ * The bar to enter (BUY) is deliberately higher than the bar to step aside
+ * (SELL). SELL is evaluated first, so if thresholds are ever lowered to a point
+ * where both could match, the protective (exit) signal takes precedence.
  */
 export function deriveSignal(
   readings: readonly IndicatorReading[],
   options: DeriveSignalOptions = {},
 ): Signal {
-  const minConsensus = options.minConsensus ?? 2;
+  const buyConsensus = options.buyConsensus ?? 3;
+  const sellConsensus = options.sellConsensus ?? 2;
   const { buys, sells } = tallyReadings(readings);
 
-  if (buys >= minConsensus && sells === 0) return 'BUY';
-  if (sells >= minConsensus && buys === 0) return 'SELL';
+  if (sells >= sellConsensus) return 'SELL';
+  if (buys >= buyConsensus) return 'BUY';
   return 'HOLD';
 }
 

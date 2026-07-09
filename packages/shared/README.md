@@ -15,15 +15,15 @@ from here instead of re-encoding indicator settings or signal rules.
 
 ## Signal policy
 
-`deriveSignal()` implements **"confluence without contradiction"**:
+`deriveSignal()` implements an **asymmetric, risk-averse** policy — a higher bar to
+enter than to step aside:
 
-- **BUY** if ≥ `minConsensus` indicators read BUY and none read SELL.
-- **SELL** if ≥ `minConsensus` indicators read SELL and none read BUY.
-- **HOLD** otherwise — including any contradiction (at least one BUY *and* one SELL),
-  which always resolves to HOLD.
+- **SELL** if ≥ `sellConsensus` indicators read SELL (default **2**).
+- **BUY** if ≥ `buyConsensus` indicators read BUY (default **3** — unanimity).
+- **HOLD** otherwise.
 
-`minConsensus` defaults to **2** (majority of 3). Pass `{ minConsensus: 3 }` for
-unanimity or `{ minConsensus: 1 }` for a looser policy.
+SELL is evaluated first, so if the thresholds are ever lowered such that both could
+match, the protective (exit) signal wins.
 
 ```ts
 import { deriveSignal, readingsFromSignals } from '@stock-dailies/shared';
@@ -32,8 +32,16 @@ deriveSignal(readingsFromSignals([
   ['macd', 'BUY'],
   ['slowStochastic', 'BUY'],
   ['sma', 'NEUTRAL'],
-])); // => 'BUY'
+])); // => 'HOLD'  (BUY needs all three)
+
+deriveSignal(readingsFromSignals([
+  ['macd', 'SELL'],
+  ['slowStochastic', 'SELL'],
+  ['sma', 'BUY'],
+])); // => 'SELL'  (two SELL is enough)
 ```
+
+Override the thresholds via `deriveSignal(readings, { buyConsensus, sellConsensus })`.
 
 ## Develop
 

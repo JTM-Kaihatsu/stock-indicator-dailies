@@ -26,31 +26,38 @@ test('tallyReadings counts each directional bucket', () => {
   assert.deepEqual(t, { buys: 1, sells: 1, neutrals: 1 });
 });
 
-test('all three BUY -> BUY', () => {
+// BUY requires all three; SELL requires at least two.
+
+test('all three BUY -> BUY (unanimity required for BUY)', () => {
   assert.equal(deriveSignal(readings('BUY', 'BUY', 'BUY')), 'BUY');
+});
+
+test('two BUY + one NEUTRAL -> HOLD (BUY needs all three)', () => {
+  assert.equal(deriveSignal(readings('BUY', 'BUY', 'NEUTRAL')), 'HOLD');
+});
+
+test('two BUY + one SELL -> HOLD (not unanimous, and only one SELL)', () => {
+  assert.equal(deriveSignal(readings('BUY', 'BUY', 'SELL')), 'HOLD');
 });
 
 test('all three SELL -> SELL', () => {
   assert.equal(deriveSignal(readings('SELL', 'SELL', 'SELL')), 'SELL');
 });
 
-test('two BUY + one NEUTRAL -> BUY (majority, no contradiction)', () => {
-  assert.equal(deriveSignal(readings('BUY', 'BUY', 'NEUTRAL')), 'BUY');
-});
-
-test('two SELL + one NEUTRAL -> SELL', () => {
+test('two SELL + one NEUTRAL -> SELL (two is enough for SELL)', () => {
   assert.equal(deriveSignal(readings('SELL', 'SELL', 'NEUTRAL')), 'SELL');
 });
 
-test('two BUY + one SELL -> HOLD (contradiction always resolves to HOLD)', () => {
-  assert.equal(deriveSignal(readings('BUY', 'BUY', 'SELL')), 'HOLD');
+test('two SELL + one BUY -> SELL (two SELL fires even against a BUY)', () => {
+  assert.equal(deriveSignal(readings('SELL', 'SELL', 'BUY')), 'SELL');
 });
 
-test('two SELL + one BUY -> HOLD (contradiction)', () => {
-  assert.equal(deriveSignal(readings('SELL', 'SELL', 'BUY')), 'HOLD');
+test('one SELL + two others -> HOLD (below SELL threshold of 2)', () => {
+  assert.equal(deriveSignal(readings('SELL', 'BUY', 'NEUTRAL')), 'HOLD');
+  assert.equal(deriveSignal(readings('SELL', 'NEUTRAL', 'NEUTRAL')), 'HOLD');
 });
 
-test('one BUY + two NEUTRAL -> HOLD (below default consensus of 2)', () => {
+test('one BUY + two NEUTRAL -> HOLD', () => {
   assert.equal(deriveSignal(readings('BUY', 'NEUTRAL', 'NEUTRAL')), 'HOLD');
 });
 
@@ -62,20 +69,20 @@ test('empty readings -> HOLD', () => {
   assert.equal(deriveSignal([]), 'HOLD');
 });
 
-test('minConsensus: 3 requires unanimity', () => {
-  const opts = { minConsensus: 3 };
-  assert.equal(deriveSignal(readings('BUY', 'BUY', 'NEUTRAL'), opts), 'HOLD');
-  assert.equal(deriveSignal(readings('BUY', 'BUY', 'BUY'), opts), 'BUY');
+test('SELL takes precedence when custom thresholds allow both to match', () => {
+  // Lowered BUY bar so a single BUY qualifies; a 2-SELL still wins.
+  const opts = { buyConsensus: 1, sellConsensus: 2 };
+  assert.equal(deriveSignal(readings('SELL', 'SELL', 'BUY'), opts), 'SELL');
 });
 
-test('minConsensus: 1 emits on a single reading, but contradiction still HOLDs', () => {
-  const opts = { minConsensus: 1 };
-  assert.equal(deriveSignal(readings('BUY', 'NEUTRAL', 'NEUTRAL'), opts), 'BUY');
-  assert.equal(deriveSignal(readings('SELL', 'NEUTRAL', 'NEUTRAL'), opts), 'SELL');
-  assert.equal(deriveSignal(readings('BUY', 'SELL', 'NEUTRAL'), opts), 'HOLD');
+test('custom buyConsensus can loosen the BUY requirement', () => {
+  assert.equal(
+    deriveSignal(readings('BUY', 'BUY', 'NEUTRAL'), { buyConsensus: 2 }),
+    'BUY',
+  );
 });
 
 test('signal is order-independent', () => {
-  assert.equal(deriveSignal(readings('NEUTRAL', 'BUY', 'BUY')), 'BUY');
-  assert.equal(deriveSignal(readings('BUY', 'NEUTRAL', 'BUY')), 'BUY');
+  assert.equal(deriveSignal(readings('NEUTRAL', 'SELL', 'SELL')), 'SELL');
+  assert.equal(deriveSignal(readings('SELL', 'NEUTRAL', 'SELL')), 'SELL');
 });
