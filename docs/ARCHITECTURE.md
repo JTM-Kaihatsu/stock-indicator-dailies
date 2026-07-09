@@ -59,6 +59,7 @@ Defined once in `packages/shared` and consumed everywhere:
 | MACD           | Fast 8 · Slow 17 · Signal 9                 |
 | Slow Stochastic| %K 14 · %D 5                                |
 | SMA            | Period 10                                   |
+| Chart window   | 3 months (all indicators)                   |
 
 ## Evaluation
 

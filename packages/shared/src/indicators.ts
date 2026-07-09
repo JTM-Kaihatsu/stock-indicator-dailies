@@ -24,3 +24,15 @@ export const STOCHASTIC_THRESHOLDS = {
   oversold: 20,
   overbought: 80,
 } as const;
+
+/**
+ * The chart's visible time window. All three indicators are read over the same
+ * 3-month range, so the agent must set the chart timeframe accordingly before
+ * capture, and the VLM prompt / eval labels assume this window.
+ */
+export const CHART_WINDOW = {
+  /** Calendar months of price history displayed on the chart. */
+  months: 3,
+  /** Short range label for UI and provider selectors (e.g. TradingView "3M"). */
+  label: '3M',
+} as const;

@@ -7,7 +7,8 @@ from here instead of re-encoding indicator settings or signal rules.
 ## What's here
 
 - **`indicators.ts`** — Fixed indicator parameters (`INDICATOR_PARAMS`: MACD 8/17/9,
-  Slow Stoch 14/5, SMA 10) and the Stochastic oversold/overbought bands.
+  Slow Stoch 14/5, SMA 10), the Stochastic oversold/overbought bands, and
+  `CHART_WINDOW` (the 3-month timeframe all indicators are read over).
 - **`types.ts`** — `Signal` (`BUY | SELL | HOLD`), `IndicatorReading`, and the `Verdict`
   shape the VLM must return.
 - **`signal.ts`** — `deriveSignal()`, the pure function that combines per-indicator
