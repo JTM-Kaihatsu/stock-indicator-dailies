@@ -1,3 +1,16 @@
+import type { IndicatorKey } from './types.ts';
+
+/**
+ * All indicator keys in canonical order. Runtime companion to the
+ * {@link IndicatorKey} type; the `satisfies` clause fails the build if the two
+ * ever drift apart.
+ */
+export const INDICATOR_KEYS = [
+  'macd',
+  'slowStochastic',
+  'sma',
+] as const satisfies readonly IndicatorKey[];
+
 /**
  * Fixed indicator parameters — the single source of truth consumed by the
  * agent (to configure the chart), the VLM prompt (to describe what it's reading),

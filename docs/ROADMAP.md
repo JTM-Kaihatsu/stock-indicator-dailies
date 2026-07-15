@@ -8,7 +8,8 @@ Status legend: ⬜ not started · 🟡 in progress · ✅ done
 - ✅ Architecture defined ([ARCHITECTURE.md](ARCHITECTURE.md))
 - ✅ Repository structure & conventions
 - ✅ Monorepo tooling — npm workspaces; TypeScript run/tested natively via `node --test` (zero runtime test deps)
-- ✅ `packages/shared`: indicator constants, verdict types, and `deriveSignal()` decision logic — asymmetric policy (BUY needs all 3, SELL needs 2), 18 unit tests
+- ✅ `packages/shared`: indicator constants, verdict types, and `deriveSignal()` decision logic — asymmetric policy (BUY needs all 3, SELL needs 2)
+- ✅ `packages/shared`: `parseVerdict()` — validate VLM JSON, recompute the authoritative signal, warn on model disagreement (39 unit tests total)
 
 ## Phase 1 — MVP
 

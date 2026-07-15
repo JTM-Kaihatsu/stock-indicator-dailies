@@ -13,6 +13,9 @@ from here instead of re-encoding indicator settings or signal rules.
   shape the VLM must return.
 - **`signal.ts`** — `deriveSignal()`, the pure function that combines per-indicator
   readings into an overall recommendation, plus `tallyReadings()`.
+- **`verdict.ts`** — `parseVerdict()`, which validates raw VLM JSON into a trustworthy
+  `Verdict` and recomputes the overall signal from the readings (the model's own
+  overall call is only cross-checked, never trusted).
 
 ## Signal policy
 
@@ -43,6 +46,31 @@ deriveSignal(readingsFromSignals([
 ```
 
 Override the thresholds via `deriveSignal(readings, { buyConsensus, sellConsensus })`.
+
+## Validating VLM output
+
+`parseVerdict(rawJson)` turns untrusted model output into a `Verdict`:
+
+- **Structural validation** — object shape, known indicators, valid enums, no
+  duplicate/missing indicators, well-formed ticker and optional ISO `capturedAt`.
+  Failures return `{ ok: false, errors }`.
+- **Authoritative signal** — the overall `signal` is always recomputed with
+  `deriveSignal(readings)`. If the model also returned an overall signal, a mismatch
+  (or invalid value) comes back as a **warning**, not an error — the derived signal wins.
+
+```ts
+import { parseVerdict } from '@stock-indicator-dailies/shared';
+
+const result = parseVerdict(modelJson);
+if (result.ok) {
+  const { verdict, warnings } = result; // verdict.signal is trustworthy
+} else {
+  console.error(result.errors);
+}
+```
+
+Accepts the same `buyConsensus`/`sellConsensus` options as `deriveSignal`, plus
+`requireAllIndicators` (default `true`).
 
 ## Develop
 
