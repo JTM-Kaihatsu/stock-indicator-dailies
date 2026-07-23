@@ -1,0 +1,17 @@
+{
+  "name": "@stock-indicator-dailies/vlm",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "VLM analysis layer: prompt construction, response parsing, and a provider-agnostic model interface.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@stock-indicator-dailies/shared": "*"
+  }
+}
