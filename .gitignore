@@ -23,6 +23,7 @@ dist/
 
 # Screenshots / captured chart assets (may contain account-identifying data)
 /captures/
+/testing/
 *.png.tmp
 
 # Supabase
