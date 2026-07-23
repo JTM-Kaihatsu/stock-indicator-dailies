@@ -26,11 +26,22 @@ model-dependent part is isolated behind an interface.
 - The **provider** is the only component that touches the network or the real model.
   In tests it's a fake that returns canned strings — no keys, no network, not flaky.
 
-## Not yet implemented
+## Providers
 
-Concrete providers (a Gemini / GPT-class adapter behind `VlmProvider`, selected via
-`VLM_PROVIDER`) are the next chunk — they need an SDK, an API key, and live calls, and
-belong under integration/eval coverage rather than unit tests.
+- **`providers/claude.ts`** — `ClaudeVlmProvider`, backed by `@anthropic-ai/sdk`. Sends
+  the chart image + prompt to Claude (default `claude-sonnet-5`) and returns the model's
+  text. Unit-tested with an injected fake client — no network, no key. A live call needs
+  `VLM_API_KEY` set and bills your Anthropic account.
+
+```ts
+import { ClaudeVlmProvider, analyzeChart } from '@stock-indicator-dailies/vlm';
+
+const provider = new ClaudeVlmProvider(); // reads VLM_API_KEY from env
+const result = await analyzeChart({ ticker: 'NVDA', image, provider });
+```
+
+Gemini / GPT-class adapters can be added behind the same `VlmProvider` interface and
+compared through the interpretation eval.
 
 ## Develop
 
