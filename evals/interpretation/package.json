@@ -1,0 +1,17 @@
+{
+  "name": "@stock-indicator-dailies/eval-interpretation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Interpretation eval: grade the VLM's chart reading against a computed oracle.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@stock-indicator-dailies/shared": "*"
+  }
+}

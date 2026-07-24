@@ -5,11 +5,12 @@
   "description": "AI-driven technical-analysis utility: ticker in, Buy/Sell/Hold out.",
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/*",
+    "evals/*"
   ],
   "scripts": {
-    "test": "node --test \"packages/**/test/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p packages/vlm/tsconfig.json && tsc --noEmit -p packages/agent/tsconfig.json && tsc --noEmit -p packages/daily/tsconfig.json"
+    "test": "node --test \"packages/**/test/**/*.test.ts\" \"evals/**/test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p packages/vlm/tsconfig.json && tsc --noEmit -p packages/agent/tsconfig.json && tsc --noEmit -p packages/daily/tsconfig.json && tsc --noEmit -p evals/interpretation/tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
