@@ -22,8 +22,19 @@ export const INDICATOR_KEYS = [
 export const INDICATOR_PARAMS = {
   /** MACD: Fast Length 8, Slow Length 17, Signal Smoothing 9. */
   macd: { fastLength: 8, slowLength: 17, signalSmoothing: 9 },
-  /** Slow Stochastic: %K 14, %D 5. */
-  slowStochastic: { percentK: 14, percentD: 5 },
+  /**
+   * Slow Stochastic, as three parameters:
+   * - `percentKLength` — lookback window for the high/low range.
+   * - `percentKSmoothing` — moving average applied to raw %K (this is what
+   *   makes it "slow"; 1 would be a Fast Stochastic).
+   * - `percentDSmoothing` — moving average of %K, producing the %D signal line
+   *   that %K crosses.
+   *
+   * These mirror the live "Rule 1" TradingView layout (`Stoch 14 5 3`), which is
+   * authoritative — the chart, this spec, and the VLM prompt must agree or every
+   * signal measures a setup that isn't on screen.
+   */
+  slowStochastic: { percentKLength: 14, percentKSmoothing: 5, percentDSmoothing: 3 },
   /** Simple Moving Average: period 10. */
   sma: { period: 10 },
 } as const;

@@ -18,7 +18,7 @@ ${CHART_WINDOW.months}-month (${CHART_WINDOW.label}) price chart for one equity,
 indicators already configured:
 
 - MACD (${macd.fastLength}, ${macd.slowLength}, ${macd.signalSmoothing})
-- Slow Stochastic (%K ${slowStochastic.percentK}, %D ${slowStochastic.percentD})
+- Slow Stochastic (%K Length ${slowStochastic.percentKLength}, %K Smoothing ${slowStochastic.percentKSmoothing}, %D Smoothing ${slowStochastic.percentDSmoothing}) — %K is the faster line, %D the signal line it crosses
 - Simple Moving Average, period ${sma.period}
 
 For EACH indicator, decide its signal strictly by these criteria and nothing else:

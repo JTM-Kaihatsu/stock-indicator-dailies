@@ -59,6 +59,29 @@ account chrome (balances, watchlists, account numbers) never enters the image. T
 the PRD's regional-cropping requirement, enforced by construction rather than by
 post-processing.
 
+## ⚠️ Never use TradingView's date-range tabs
+
+The `1D / 5D / 1M / 3M / 6M …` buttons at the bottom of the chart are **range +
+interval presets**, not range selectors. Their own aria-labels give it away:
+
+| Tab | Actual behavior |
+|---|---|
+| `1M` | 1 month in **30 minute** intervals |
+| `3M` | 3 months in **1 hour** intervals |
+| `6M` | 6 months in **2 hours** intervals |
+
+Clicking `3M` silently switches the chart to **hourly bars**, so a "10-day SMA"
+becomes a 10-*hour* SMA and MACD 8/17/9 runs on hourly closes. The resulting
+image looks completely normal — nothing in the chart says the timeframe is wrong.
+
+The interval is therefore pinned via the URL (`&interval=D`) and **verified after
+load** (`src/interval.ts`); a mismatch fails with `wrong-interval` rather than
+capturing a misleading chart.
+
+**Known gap:** the visible window is whatever the saved layout uses (~6 months),
+not exactly 3. Every range control that would narrow it also forces an intraday
+interval. The indicator math is unaffected — only how much history is visible.
+
 ## Provider selectors are volatile
 
 The selectors in `profiles/tradingview.ts` target a third-party DOM that changes. When

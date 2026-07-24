@@ -15,10 +15,11 @@ test('MACD params match the PRD (8 / 17 / 9)', () => {
   });
 });
 
-test('Slow Stochastic params match the PRD (%K 14 / %D 5)', () => {
+test('Slow Stochastic params match the live "Rule 1" layout (14 / 5 / 3)', () => {
   assert.deepEqual(INDICATOR_PARAMS.slowStochastic, {
-    percentK: 14,
-    percentD: 5,
+    percentKLength: 14,
+    percentKSmoothing: 5,
+    percentDSmoothing: 3,
   });
 });
 

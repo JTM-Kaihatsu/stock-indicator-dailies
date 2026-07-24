@@ -16,8 +16,8 @@ Status legend: ⬜ not started · 🟡 in progress · ✅ done
 Goal: enter a ticker → get a Buy/Sell/Hold Daily Report in under 15 seconds.
 
 - ⬜ **Web** (`apps/web`): Next.js dashboard, single ticker input, Daily Report card
-- 🟡 **Agent** (`packages/agent`): core done — `ChartAgent` interface, typed failure modes, pacing/rate-limiting, TradingView profile, one-time interactive login (persistent profile, no stored passwords), `FakeChartAgent` (13 unit tests). Playwright capture flow still to build.
-- ⬜ **Agent**: structural validation that all three indicators are in-frame before inference
+- ✅ **Agent** (`packages/agent`): live capture working — pinned daily interval, saved-layout reuse, study + interval validation, sanitized chart-element screenshot in ~5s (29 unit tests). Visible window is ~6M not 3M (see README).
+- ✅ **Agent**: structural validation — studies present with exact params, and bar interval verified as daily, before inference
 - ✅ **VLM** (`packages/vlm`): prompt builder, response parser, provider interface, and the Claude provider adapter (`claude-sonnet-5` default) — 21 unit tests, all mocked. Live smoke test pending an API key.
 - ⬜ **DB** (`supabase`): schema for preferences + daily history; history purge
 - ⬜ **Security**: OS-vault credential storage; read-only scoping; no trade-execution paths

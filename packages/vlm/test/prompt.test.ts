@@ -13,8 +13,9 @@ test('system prompt embeds the shared indicator parameters', () => {
   const p = buildSystemPrompt();
   const { macd, slowStochastic, sma } = INDICATOR_PARAMS;
   assert.match(p, new RegExp(`MACD \\(${macd.fastLength}, ${macd.slowLength}, ${macd.signalSmoothing}\\)`));
-  assert.match(p, new RegExp(`%K ${slowStochastic.percentK}`));
-  assert.match(p, new RegExp(`%D ${slowStochastic.percentD}`));
+  assert.match(p, new RegExp(`%K Length ${slowStochastic.percentKLength}`));
+  assert.match(p, new RegExp(`%K Smoothing ${slowStochastic.percentKSmoothing}`));
+  assert.match(p, new RegExp(`%D Smoothing ${slowStochastic.percentDSmoothing}`));
   assert.match(p, new RegExp(`period ${sma.period}`));
 });
 

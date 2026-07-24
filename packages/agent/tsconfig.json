@@ -1,7 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "."
+    "rootDir": ".",
+    // page.evaluate() callbacks execute in the browser, so DOM globals are in
+    // scope inside them. Only this package needs DOM types.
+    "lib": ["ES2023", "DOM"]
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }

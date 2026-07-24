@@ -6,6 +6,11 @@ export type ChartAcquisitionFailure =
   | 'not-authenticated'
   /** Expected chart elements missing — DOM likely shifted (see PRD: DOM volatility). */
   | 'chart-not-found'
+  /**
+   * Chart loaded on the wrong bar interval (e.g. hourly instead of daily), which
+   * would compute every indicator over the wrong timeframe.
+   */
+  | 'wrong-interval'
   /** Ticker rejected by the provider. */
   | 'unknown-ticker'
   /** Timed out waiting for the chart to render. */
