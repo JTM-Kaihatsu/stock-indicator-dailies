@@ -27,12 +27,28 @@ yourself in a real browser window; the session is persisted and reused:
 npm run login -w @stock-indicator-dailies/agent
 ```
 
-A headed Chromium opens at TradingView. Sign in however you normally do — **Google SSO
-is fine** (and preferred: automating Google sign-in is both unreliable and a good way to
-get your Google account flagged). When you're signed in, close the window.
+A headed Chromium opens at TradingView. **Sign in with email + password**, then wait for
+the terminal to print `✅ SIGNED IN` before closing the window.
+
+> ⚠️ **Google SSO does not work here.** Google blocks OAuth in any automation-controlled
+> browser ("this browser or app may not be secure") — it's blocking the *browser*, not
+> the fact that you're typing by hand, so there's no way around it short of evading
+> Google's detection, which we don't do. If your TradingView account was created via
+> Google, add a password to it (profile → account settings, or the "Forgot password?"
+> flow against your Google address) and use that here.
+
+Verify the session at any time:
+
+```bash
+npm run status -w @stock-indicator-dailies/agent
+```
+
+A rendered chart does **not** mean you're signed in — TradingView serves charts to
+anonymous visitors, which is why auth is detected via the session cookie
+(`src/auth.ts`) rather than by looking at the page.
 
 The session is saved to `.agent-profile/` (gitignored). **Treat that directory as a
-secret** — it grants access to the signed-in account. Re-run the command whenever the
+secret** — it grants access to the signed-in account. Re-run the login whenever the
 session expires; the agent surfaces `not-authenticated` rather than silently capturing a
 logged-out page.
 

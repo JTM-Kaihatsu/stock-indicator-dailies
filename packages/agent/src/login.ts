@@ -23,8 +23,11 @@ const profileDir = resolveProfileDir();
 console.log(`Opening ${TRADINGVIEW.baseUrl}`);
 console.log(`Profile:  ${profileDir}\n`);
 console.log('  1. Click the user icon (top-right) or the ☰ menu → Sign in');
-console.log('  2. Sign in with Google — same as you normally would');
+console.log('  2. Sign in with EMAIL + PASSWORD');
 console.log('  3. Wait for this script to print "SIGNED IN", then close the window\n');
+console.log('Google SSO will NOT work here: Google blocks sign-in in any');
+console.log('automation-controlled browser ("this browser or app may not be secure").');
+console.log('If you signed up via Google, set a password on the account and use it.\n');
 console.log('NOTE: seeing a chart does NOT mean you are signed in — TradingView');
 console.log('      shows charts to anonymous visitors too.\n');
 
