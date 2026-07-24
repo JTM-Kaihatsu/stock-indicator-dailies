@@ -107,7 +107,19 @@ export async function runDaily(
 
   // --- 2. Analyze ---
   const analyzeStarted = now();
-  const result = await analyzeChart({ ticker, image, provider: input.provider }, options);
+  let result: Awaited<ReturnType<typeof analyzeChart>>;
+  try {
+    result = await analyzeChart({ ticker, image, provider: input.provider }, options);
+  } catch (err) {
+    // A thrown provider error (network, truncation, auth) — surface it cleanly.
+    return {
+      ok: false,
+      stage: 'analysis',
+      reason: 'provider-error',
+      errors: [err instanceof Error ? err.message : String(err)],
+      timings: timings(captureMs, now() - analyzeStarted),
+    };
+  }
   const analyzeMs = now() - analyzeStarted;
 
   if (!result.ok) {

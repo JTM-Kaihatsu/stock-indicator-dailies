@@ -24,9 +24,9 @@ const sellJson = JSON.stringify({
   signal: 'SELL',
   visibleRange: 'Dec 2025 to Aug 2026',
   readings: [
-    { indicator: 'macd', signal: 'SELL' },
-    { indicator: 'slowStochastic', signal: 'NEUTRAL' },
-    { indicator: 'sma', signal: 'SELL' },
+    { indicator: 'macd', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
+    { indicator: 'slowStochastic', crossover: 'NONE', qualified: false },
+    { indicator: 'sma', crossover: 'BEARISH', qualified: true, barsAgo: 2 },
   ],
 });
 
@@ -118,9 +118,9 @@ test('model disagreement surfaces as a warning, derived signal wins', async () =
     ticker: 'GEV',
     signal: 'HOLD',
     readings: [
-      { indicator: 'macd', signal: 'SELL' },
-      { indicator: 'slowStochastic', signal: 'SELL' },
-      { indicator: 'sma', signal: 'NEUTRAL' },
+      { indicator: 'macd', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
+      { indicator: 'slowStochastic', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
+      { indicator: 'sma', crossover: 'NONE', qualified: false },
     ],
   });
   const result = await runDaily({
@@ -150,9 +150,9 @@ test('consensus options flow through to the derived signal', async () => {
   const twoBuys = JSON.stringify({
     ticker: 'GEV',
     readings: [
-      { indicator: 'macd', signal: 'BUY' },
-      { indicator: 'slowStochastic', signal: 'BUY' },
-      { indicator: 'sma', signal: 'NEUTRAL' },
+      { indicator: 'macd', crossover: 'BULLISH', qualified: true, barsAgo: 1 },
+      { indicator: 'slowStochastic', crossover: 'BULLISH', qualified: true, barsAgo: 1 },
+      { indicator: 'sma', crossover: 'NONE', qualified: false },
     ],
   });
   const strict = await runDaily({

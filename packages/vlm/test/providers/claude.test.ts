@@ -75,9 +75,9 @@ test('plugs into analyzeChart end-to-end', async () => {
     ticker: 'NVDA',
     signal: 'SELL',
     readings: [
-      { indicator: 'macd', signal: 'SELL' },
-      { indicator: 'slowStochastic', signal: 'SELL' },
-      { indicator: 'sma', signal: 'NEUTRAL' },
+      { indicator: 'macd', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
+      { indicator: 'slowStochastic', crossover: 'BEARISH', qualified: true, barsAgo: 0 },
+      { indicator: 'sma', crossover: 'NONE', qualified: false },
     ],
   });
   const { client } = fakeClient([{ type: 'text', text: '```json\n' + verdictJson + '\n```' }]);

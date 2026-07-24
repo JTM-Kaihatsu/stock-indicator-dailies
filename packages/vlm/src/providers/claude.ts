@@ -4,8 +4,12 @@ import type { VlmProvider, VlmRequest } from '../provider.ts';
 
 /** Default model — Sonnet 5: high-res vision + strong structured output. */
 export const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5';
-/** The JSON verdict is tiny; this is a generous ceiling, not a target. */
-export const DEFAULT_MAX_TOKENS = 1024;
+/**
+ * Ceiling, not a target — you're billed on actual output. Must comfortably fit
+ * both the adaptive-thinking budget (on by default for Sonnet 5) AND the JSON
+ * verdict; 1024 truncated the JSON once thinking + three fuller rationales grew.
+ */
+export const DEFAULT_MAX_TOKENS = 4096;
 
 /**
  * The slice of the Anthropic SDK this provider depends on. Declaring it as an
@@ -30,6 +34,7 @@ type AnthropicRequestBlock =
 
 interface AnthropicResponse {
   content: Array<{ type: string; text?: string }>;
+  stop_reason?: string | null;
 }
 
 export interface ClaudeVlmProviderOptions {
@@ -84,6 +89,13 @@ export class ClaudeVlmProvider implements VlmProvider {
         },
       ],
     });
+
+    if (response.stop_reason === 'max_tokens') {
+      throw new Error(
+        `Claude response was truncated (stop_reason=max_tokens) at maxTokens=${this.#maxTokens} — ` +
+          `raise maxTokens. Thinking tokens share this budget.`,
+      );
+    }
 
     return response.content
       .filter((block): block is { type: 'text'; text: string } =>

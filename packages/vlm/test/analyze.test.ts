@@ -24,9 +24,9 @@ const goodJson = JSON.stringify({
   ticker: 'NVDA',
   signal: 'HOLD',
   readings: [
-    { indicator: 'macd', signal: 'BUY' },
-    { indicator: 'slowStochastic', signal: 'NEUTRAL' },
-    { indicator: 'sma', signal: 'NEUTRAL' },
+    { indicator: 'macd', crossover: 'BULLISH', qualified: true, barsAgo: 1 },
+    { indicator: 'slowStochastic', crossover: 'NONE', qualified: false },
+    { indicator: 'sma', crossover: 'NONE', qualified: false },
   ],
 });
 
@@ -51,9 +51,9 @@ test('requested ticker is authoritative over whatever the model returns', () => 
   const raw = JSON.stringify({
     ticker: 'WRONG',
     readings: [
-      { indicator: 'macd', signal: 'NEUTRAL' },
-      { indicator: 'slowStochastic', signal: 'NEUTRAL' },
-      { indicator: 'sma', signal: 'NEUTRAL' },
+      { indicator: 'macd', crossover: 'NONE', qualified: false },
+      { indicator: 'slowStochastic', crossover: 'NONE', qualified: false },
+      { indicator: 'sma', crossover: 'NONE', qualified: false },
     ],
   });
   const result = interpretChartResponse(raw, { ticker: 'tsla' });
@@ -81,9 +81,9 @@ test('derived signal overrides a disagreeing model signal, with a warning', () =
   const raw = JSON.stringify({
     signal: 'HOLD',
     readings: [
-      { indicator: 'macd', signal: 'SELL' },
-      { indicator: 'slowStochastic', signal: 'SELL' },
-      { indicator: 'sma', signal: 'BUY' },
+      { indicator: 'macd', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
+      { indicator: 'slowStochastic', crossover: 'BEARISH', qualified: true, barsAgo: 0 },
+      { indicator: 'sma', crossover: 'BULLISH', qualified: true, barsAgo: 2 },
     ],
   });
   const result = interpretChartResponse(raw, { ticker: 'NVDA' });
@@ -96,9 +96,9 @@ test('derived signal overrides a disagreeing model signal, with a warning', () =
 test('parse options flow through interpretChartResponse', () => {
   const raw = JSON.stringify({
     readings: [
-      { indicator: 'macd', signal: 'BUY' },
-      { indicator: 'slowStochastic', signal: 'BUY' },
-      { indicator: 'sma', signal: 'NEUTRAL' },
+      { indicator: 'macd', crossover: 'BULLISH', qualified: true, barsAgo: 1 },
+      { indicator: 'slowStochastic', crossover: 'BULLISH', qualified: true, barsAgo: 1 },
+      { indicator: 'sma', crossover: 'NONE', qualified: false },
     ],
   });
   const strict = interpretChartResponse(raw, { ticker: 'NVDA' });

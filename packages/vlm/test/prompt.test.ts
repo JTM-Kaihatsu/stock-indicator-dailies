@@ -28,11 +28,17 @@ test('system prompt embeds the stochastic thresholds and chart window', () => {
   assert.ok(p.includes('visibleRange'));
 });
 
-test('system prompt names all three indicators and the signal vocabulary', () => {
+test('system prompt names all three indicators and the fact vocabulary', () => {
   const p = buildSystemPrompt();
   for (const key of ['macd', 'slowStochastic', 'sma']) assert.ok(p.includes(key));
-  for (const s of ['BUY', 'SELL', 'NEUTRAL', 'HOLD']) assert.ok(p.includes(s));
+  for (const s of ['BULLISH', 'BEARISH', 'NONE']) assert.ok(p.includes(s), `missing ${s}`);
+  for (const field of ['crossover', 'barsAgo', 'qualified']) assert.ok(p.includes(field), `missing ${field}`);
   assert.ok(/JSON/.test(p));
+});
+
+test('system prompt tells the model to treat whipsaws as NONE', () => {
+  const p = buildSystemPrompt();
+  assert.match(p, /whipsaw|chopping|noise/i);
 });
 
 test('user instruction upper-cases the ticker and cites the window', () => {

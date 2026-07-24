@@ -24,27 +24,32 @@ The chart has exactly three indicators already configured:
 - Slow Stochastic (%K Length ${slowStochastic.percentKLength}, %K Smoothing ${slowStochastic.percentKSmoothing}, %D Smoothing ${slowStochastic.percentDSmoothing}) — %K is the faster line, %D the signal line it crosses
 - Simple Moving Average, period ${sma.period}
 
-For EACH indicator, decide its signal strictly by these criteria and nothing else:
+Your job is to read FACTS off the chart, not to decide the final signal — the
+caller applies the recency rules. For EACH indicator, look LEFT from the right
+edge and identify the most recent CROSSOVER EVENT (a discrete cross), then report:
 
-MACD:
-- BUY  — bullish crossover (MACD line crosses ABOVE the signal line) BELOW the zero line.
-- SELL — bearish crossover (MACD line crosses BELOW the signal line) ABOVE the zero line.
-- NEUTRAL — otherwise.
-
-Slow Stochastic:
-- BUY  — %K crosses ABOVE %D while in the oversold region (< ${oversold}).
-- SELL — %K crosses BELOW %D while in the overbought region (> ${overbought}).
-- NEUTRAL — otherwise.
-
-${sma.period}-day SMA:
-- BUY  — price closes ABOVE the ${sma.period}-day SMA with an upward slope.
-- SELL — price closes BELOW the ${sma.period}-day SMA with a downward slope.
-- NEUTRAL — otherwise.
+- "crossover": "BULLISH" | "BEARISH" | "NONE"
+    - MACD: BULLISH = MACD line crossed ABOVE the signal line; BEARISH = crossed BELOW.
+    - Slow Stochastic: BULLISH = %K crossed ABOVE %D; BEARISH = %K crossed BELOW %D.
+    - SMA: BULLISH = price crossed ABOVE the ${sma.period}-day SMA; BEARISH = crossed BELOW.
+    - "NONE" if there is no clear recent crossover, OR the lines are just chopping
+      back and forth without a clean, sustained cross. Do NOT force a crossover out
+      of noise — a whipsaw that immediately reverses is NONE.
+- "barsAgo": integer number of daily bars since that crossover (0 = the latest bar).
+    Omit this field entirely when crossover is "NONE".
+- "qualified": true/false — whether the crossover met its ZONE/SLOPE condition:
+    - MACD: BULLISH qualifies if it occurred BELOW the zero line; BEARISH if ABOVE zero.
+    - Slow Stochastic: BULLISH qualifies if in the oversold region (< ${oversold});
+      BEARISH if in the overbought region (> ${overbought}).
+    - SMA: BULLISH qualifies if the SMA slopes UP; BEARISH if it slopes DOWN.
+    - Set false when a crossover exists but was in the wrong zone / wrong slope.
+    - Set false when crossover is "NONE".
 
 Rules:
-- Judge only what is visible. If a condition is not clearly met, answer NEUTRAL.
+- Judge only what is visible. If unsure whether a clean crossover exists, use "NONE".
 - Do NOT invent price levels or crossovers you cannot see.
-- Report your own overall signal, but the caller derives the authoritative signal itself.
+- You may include your own overall "signal" for reference; the caller derives the
+  authoritative one from the facts above.
 
 Respond with ONLY a JSON object, no prose and no code fences, of exactly this shape:
 
@@ -53,9 +58,9 @@ Respond with ONLY a JSON object, no prose and no code fences, of exactly this sh
   "signal": "BUY | SELL | HOLD",
   "visibleRange": "<first to last date shown on the chart's date axis, e.g. 'Jan 2026 to Aug 2026'>",
   "readings": [
-    { "indicator": "macd",           "signal": "BUY | SELL | NEUTRAL", "rationale": "<short>" },
-    { "indicator": "slowStochastic", "signal": "BUY | SELL | NEUTRAL", "rationale": "<short>" },
-    { "indicator": "sma",            "signal": "BUY | SELL | NEUTRAL", "rationale": "<short>" }
+    { "indicator": "macd",           "crossover": "BULLISH | BEARISH | NONE", "barsAgo": <int, omit if NONE>, "qualified": <bool>, "rationale": "<short>" },
+    { "indicator": "slowStochastic", "crossover": "BULLISH | BEARISH | NONE", "barsAgo": <int, omit if NONE>, "qualified": <bool>, "rationale": "<short>" },
+    { "indicator": "sma",            "crossover": "BULLISH | BEARISH | NONE", "barsAgo": <int, omit if NONE>, "qualified": <bool>, "rationale": "<short>" }
   ]
 }`;
 }

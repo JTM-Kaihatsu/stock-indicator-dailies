@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { readingsFromSignals } from '@stock-indicator-dailies/shared';
+import { aggregate, scoreChart, type IndicatorVerdict } from '../src/score.ts';
 
-import { aggregate, scoreChart } from '../src/score.ts';
+/** Build per-indicator verdict pairs from directional shorthand. */
+function verdicts(
+  entries: Array<[IndicatorVerdict['indicator'], IndicatorVerdict['signal']]>,
+): IndicatorVerdict[] {
+  return entries.map(([indicator, signal]) => ({ indicator, signal }));
+}
 
-const truth = readingsFromSignals([
+const truth = verdicts([
   ['macd', 'SELL'],
   ['slowStochastic', 'NEUTRAL'],
   ['sma', 'SELL'],
@@ -20,7 +25,7 @@ test('perfect agreement scores 100%', () => {
 });
 
 test('a single miss is reported per indicator', () => {
-  const predicted = readingsFromSignals([
+  const predicted = verdicts([
     ['macd', 'NEUTRAL'], // wrong (truth SELL)
     ['slowStochastic', 'NEUTRAL'],
     ['sma', 'SELL'],
@@ -36,7 +41,7 @@ test('a single miss is reported per indicator', () => {
 });
 
 test('a missing predicted indicator counts as a miss', () => {
-  const predicted = readingsFromSignals([
+  const predicted = verdicts([
     ['macd', 'SELL'],
     ['sma', 'SELL'],
   ]);
@@ -49,7 +54,7 @@ test('a missing predicted indicator counts as a miss', () => {
 test('aggregate combines cards and accuracy', () => {
   const a = scoreChart(truth, truth); // 3/3
   const b = scoreChart(
-    readingsFromSignals([
+    verdicts([
       ['macd', 'BUY'], // wrong
       ['slowStochastic', 'NEUTRAL'],
       ['sma', 'SELL'],

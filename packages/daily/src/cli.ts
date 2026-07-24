@@ -8,6 +8,7 @@
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { deriveIndicatorSignal } from '@stock-indicator-dailies/shared';
 import { TradingViewChartAgent } from '@stock-indicator-dailies/agent';
 import { ClaudeVlmProvider } from '@stock-indicator-dailies/vlm';
 
@@ -36,7 +37,12 @@ console.log(`\n${'='.repeat(52)}`);
 console.log(`  ${verdict.ticker}   →   ${verdict.signal}`);
 console.log(`${'='.repeat(52)}`);
 for (const r of verdict.readings) {
-  console.log(`  ${r.indicator.padEnd(16)} ${r.signal.padEnd(8)} ${r.rationale ?? ''}`);
+  const signal = deriveIndicatorSignal(r);
+  const fact =
+    r.crossover === 'NONE'
+      ? 'no crossover'
+      : `${r.crossover.toLowerCase()} ${r.barsAgo}d ago${r.qualified ? '' : ', unqualified'}`;
+  console.log(`  ${r.indicator.padEnd(16)} ${signal.padEnd(8)} (${fact}) ${r.rationale ?? ''}`);
 }
 if (verdict.visibleRange) console.log(`\n  chart window: ${verdict.visibleRange}`);
 console.log(

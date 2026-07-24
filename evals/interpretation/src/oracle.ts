@@ -1,9 +1,6 @@
-import {
-  STOCHASTIC_THRESHOLDS,
-  readingsFromSignals,
-  type IndicatorReading,
-  type IndicatorSignal,
-} from '@stock-indicator-dailies/shared';
+import { STOCHASTIC_THRESHOLDS, type IndicatorSignal } from '@stock-indicator-dailies/shared';
+
+import type { IndicatorVerdict } from './score.ts';
 
 /**
  * Numeric indicator values read from TradingView's own legend at the last bar.
@@ -70,11 +67,11 @@ export function readSma(sma: number, close: number): IndicatorSignal {
   return 'NEUTRAL';
 }
 
-/** Ground-truth per-indicator readings computed from the legend values. */
-export function oracleReadings(values: IndicatorValues): IndicatorReading[] {
-  return readingsFromSignals([
-    ['macd', readMacd(values.macd)],
-    ['slowStochastic', readStochastic(values.stochastic)],
-    ['sma', readSma(values.sma, values.close)],
-  ]);
+/** Ground-truth per-indicator signals computed from the legend values. */
+export function oracleReadings(values: IndicatorValues): IndicatorVerdict[] {
+  return [
+    { indicator: 'macd', signal: readMacd(values.macd) },
+    { indicator: 'slowStochastic', signal: readStochastic(values.stochastic) },
+    { indicator: 'sma', signal: readSma(values.sma, values.close) },
+  ];
 }

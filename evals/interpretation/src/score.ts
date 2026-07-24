@@ -1,4 +1,14 @@
-import type { IndicatorKey, IndicatorReading } from '@stock-indicator-dailies/shared';
+import type { IndicatorKey, IndicatorSignal } from '@stock-indicator-dailies/shared';
+
+/**
+ * One indicator's final directional signal — what the VLM's reading derives to,
+ * and what the oracle computes. Scoring compares these, not the raw facts, so it
+ * is decoupled from how either side was produced.
+ */
+export interface IndicatorVerdict {
+  indicator: IndicatorKey;
+  signal: IndicatorSignal;
+}
 
 /** One indicator's expected-vs-actual mismatch. */
 export interface Disagreement {
@@ -9,7 +19,6 @@ export interface Disagreement {
 }
 
 export interface Scorecard {
-  /** Per-indicator comparisons made. */
   total: number;
   correct: number;
   /** correct / total, or 1 when nothing was compared. */
@@ -26,18 +35,17 @@ function emptyPerIndicator(): Scorecard['perIndicator'] {
   };
 }
 
-function index(readings: readonly IndicatorReading[]): Map<IndicatorKey, string> {
-  return new Map(readings.map((r) => [r.indicator, r.signal]));
+function index(verdicts: readonly IndicatorVerdict[]): Map<IndicatorKey, string> {
+  return new Map(verdicts.map((v) => [v.indicator, v.signal]));
 }
 
 /**
- * Grade one chart's predicted readings against the oracle. Only indicators the
- * oracle has a truth value for are scored; a prediction missing an indicator the
- * oracle covers counts as a miss (`got: "(missing)"`).
+ * Grade one chart's predicted per-indicator signals against the oracle. A
+ * prediction missing an indicator the oracle covers counts as a miss.
  */
 export function scoreChart(
-  predicted: readonly IndicatorReading[],
-  truth: readonly IndicatorReading[],
+  predicted: readonly IndicatorVerdict[],
+  truth: readonly IndicatorVerdict[],
   ticker?: string,
 ): Scorecard {
   const pred = index(predicted);

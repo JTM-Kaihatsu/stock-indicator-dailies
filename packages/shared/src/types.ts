@@ -2,19 +2,43 @@
 export type IndicatorKey = 'macd' | 'slowStochastic' | 'sma';
 
 /**
- * A single indicator's directional reading — whether its buy or sell criteria
- * (see the PRD criteria table) are met on the captured chart. `NEUTRAL` means
- * neither is met (e.g. no crossover, or a crossover outside the required zone).
+ * A single indicator's derived directional signal, after the recency/zone rules
+ * are applied to the reading. `NEUTRAL` means no active signal.
  */
 export type IndicatorSignal = 'BUY' | 'SELL' | 'NEUTRAL';
 
 /** The overall recommendation surfaced to the user on the Daily Report card. */
 export type Signal = 'BUY' | 'SELL' | 'HOLD';
 
-/** The VLM's interpreted reading for one indicator. */
+/**
+ * Direction of the most recent *clean* crossover for an indicator, as judged by
+ * the VLM. `NONE` covers both "no crossover" and "too choppy to call one" — the
+ * VLM is expected to not force a crossover out of noise.
+ *
+ * The crossover per indicator:
+ * - MACD: the MACD line crossing its signal line.
+ * - Slow Stochastic: %K crossing %D.
+ * - SMA: price crossing the 10-day SMA.
+ */
+export type CrossoverDirection = 'BULLISH' | 'BEARISH' | 'NONE';
+
+/**
+ * The VLM's interpreted *facts* for one indicator — what it read off the chart,
+ * before any recency judgment. The signal is derived from these downstream
+ * (see `deriveIndicatorSignal`), keeping the tunable rules out of the model.
+ */
 export interface IndicatorReading {
   indicator: IndicatorKey;
-  signal: IndicatorSignal;
+  /** Direction of the most recent clean crossover, or NONE. */
+  crossover: CrossoverDirection;
+  /** Daily bars since that crossover. Present iff `crossover !== 'NONE'`. */
+  barsAgo?: number;
+  /**
+   * Whether the crossover met its zone/slope condition — MACD below zero
+   * (bullish) / above zero (bearish); Stochastic oversold / overbought; SMA
+   * upward / downward slope. Ignored when `crossover` is NONE.
+   */
+  qualified: boolean;
   /**
    * Free-text justification the VLM produced, shown to the user so they can
    * verify the call against the source screenshot (human-in-the-loop).

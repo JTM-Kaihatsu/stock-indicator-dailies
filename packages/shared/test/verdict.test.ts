@@ -3,21 +3,25 @@ import assert from 'node:assert/strict';
 
 import { parseVerdict } from '../src/verdict.ts';
 
+/** A reading with a recent, qualified crossover in the given direction. */
+function cross(indicator: string, direction: 'BULLISH' | 'BEARISH', extra: Record<string, unknown> = {}) {
+  return { indicator, crossover: direction, qualified: true, barsAgo: 1, ...extra };
+}
+/** A reading with no crossover. */
+function none(indicator: string) {
+  return { indicator, crossover: 'NONE', qualified: false };
+}
+
 /** A structurally valid raw VLM payload; override fields per test. */
 function raw(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     ticker: 'NVDA',
     signal: 'HOLD',
-    readings: [
-      { indicator: 'macd', signal: 'BUY' },
-      { indicator: 'slowStochastic', signal: 'NEUTRAL' },
-      { indicator: 'sma', signal: 'NEUTRAL' },
-    ],
+    readings: [cross('macd', 'BULLISH'), none('slowStochastic'), none('sma')],
     ...overrides,
   };
 }
 
-/** Assert the result is ok and return the success branch (narrowed). */
 function expectOk(result: ReturnType<typeof parseVerdict>) {
   assert.equal(result.ok, true, `expected ok, got errors: ${JSON.stringify(result)}`);
   if (!result.ok) throw new Error('unreachable');
@@ -31,12 +35,20 @@ function expectErr(result: ReturnType<typeof parseVerdict>) {
 }
 
 test('valid payload parses and derives the overall signal', () => {
-  // 1 BUY + 2 NEUTRAL -> HOLD (BUY needs all three), and the model said HOLD.
+  // 1 bullish + 2 none -> HOLD (BUY needs all three), and the model said HOLD.
   const { verdict, warnings } = expectOk(parseVerdict(raw()));
   assert.equal(verdict.signal, 'HOLD');
   assert.equal(verdict.ticker, 'NVDA');
   assert.equal(verdict.readings.length, 3);
   assert.deepEqual(warnings, []);
+});
+
+test('reading facts are preserved', () => {
+  const { verdict } = expectOk(parseVerdict(raw()));
+  const macd = verdict.readings.find((r) => r.indicator === 'macd')!;
+  assert.equal(macd.crossover, 'BULLISH');
+  assert.equal(macd.barsAgo, 1);
+  assert.equal(macd.qualified, true);
 });
 
 test('ticker is trimmed and upper-cased', () => {
@@ -50,14 +62,9 @@ test('dotted ticker (e.g. BRK.B) is accepted', () => {
 });
 
 test('derived signal is authoritative and overrides a disagreeing model signal', () => {
-  // Three SELL -> SELL, but the model claimed HOLD.
   const input = raw({
     signal: 'HOLD',
-    readings: [
-      { indicator: 'macd', signal: 'SELL' },
-      { indicator: 'slowStochastic', signal: 'SELL' },
-      { indicator: 'sma', signal: 'SELL' },
-    ],
+    readings: [cross('macd', 'BEARISH'), cross('slowStochastic', 'BEARISH'), cross('sma', 'BEARISH')],
   });
   const { verdict, warnings } = expectOk(parseVerdict(input));
   assert.equal(verdict.signal, 'SELL');
@@ -65,18 +72,24 @@ test('derived signal is authoritative and overrides a disagreeing model signal',
   assert.match(warnings[0]!, /disagreed/);
 });
 
-test('matching model signal produces no warning', () => {
+test('a stale crossover does not fire, even if qualified', () => {
   const input = raw({
-    signal: 'SELL',
+    readings: [cross('macd', 'BEARISH', { barsAgo: 20 }), cross('slowStochastic', 'BEARISH', { barsAgo: 20 }), none('sma')],
+  });
+  const { verdict } = expectOk(parseVerdict(input));
+  assert.equal(verdict.signal, 'HOLD'); // both crossovers too old
+});
+
+test('an unqualified crossover does not fire', () => {
+  const input = raw({
     readings: [
-      { indicator: 'macd', signal: 'SELL' },
-      { indicator: 'slowStochastic', signal: 'SELL' },
-      { indicator: 'sma', signal: 'BUY' },
+      cross('macd', 'BEARISH', { qualified: false }),
+      cross('slowStochastic', 'BEARISH', { qualified: false }),
+      none('sma'),
     ],
   });
-  const { verdict, warnings } = expectOk(parseVerdict(input));
-  assert.equal(verdict.signal, 'SELL'); // two SELL is enough
-  assert.deepEqual(warnings, []);
+  const { verdict } = expectOk(parseVerdict(input));
+  assert.equal(verdict.signal, 'HOLD');
 });
 
 test('invalid model signal value is warned, not fatal', () => {
@@ -96,24 +109,28 @@ test('a missing model signal is fine (we derive it)', () => {
 test('consensus options flow through to the derived signal', () => {
   const input = raw({
     signal: 'HOLD',
-    readings: [
-      { indicator: 'macd', signal: 'BUY' },
-      { indicator: 'slowStochastic', signal: 'BUY' },
-      { indicator: 'sma', signal: 'NEUTRAL' },
-    ],
+    readings: [cross('macd', 'BULLISH'), cross('slowStochastic', 'BULLISH'), none('sma')],
   });
   const { verdict, warnings } = expectOk(parseVerdict(input, { buyConsensus: 2 }));
   assert.equal(verdict.signal, 'BUY');
   assert.match(warnings[0]!, /disagreed/);
 });
 
+test('recency window flows through as an option', () => {
+  const input = raw({
+    readings: [cross('macd', 'BEARISH', { barsAgo: 5 }), cross('slowStochastic', 'BEARISH', { barsAgo: 5 }), none('sma')],
+  });
+  assert.equal(expectOk(parseVerdict(input)).verdict.signal, 'HOLD'); // default 3
+  assert.equal(expectOk(parseVerdict(input, { recencyDays: 7 })).verdict.signal, 'SELL');
+});
+
 test('rationale on readings and top-level are preserved', () => {
   const input = raw({
     rationale: 'mixed picture',
     readings: [
-      { indicator: 'macd', signal: 'BUY', rationale: 'bullish cross below zero' },
-      { indicator: 'slowStochastic', signal: 'NEUTRAL' },
-      { indicator: 'sma', signal: 'NEUTRAL' },
+      cross('macd', 'BULLISH', { rationale: 'bullish cross below zero' }),
+      none('slowStochastic'),
+      none('sma'),
     ],
   });
   const { verdict } = expectOk(parseVerdict(input));
@@ -125,9 +142,7 @@ test('valid capturedAt is retained; invalid is rejected', () => {
   const iso = '2026-07-14T13:30:00.000Z';
   const { verdict } = expectOk(parseVerdict(raw({ capturedAt: iso })));
   assert.equal(verdict.capturedAt, iso);
-
-  const { errors } = expectErr(parseVerdict(raw({ capturedAt: 'not-a-date' })));
-  assert.match(errors.join('\n'), /capturedAt/);
+  assert.match(expectErr(parseVerdict(raw({ capturedAt: 'not-a-date' }))).errors.join('\n'), /capturedAt/);
 });
 
 // --- structural failures ---
@@ -139,8 +154,7 @@ test('non-object input fails', () => {
 });
 
 test('empty / missing ticker fails', () => {
-  const { errors } = expectErr(parseVerdict(raw({ ticker: '   ' })));
-  assert.match(errors.join('\n'), /ticker/);
+  assert.match(expectErr(parseVerdict(raw({ ticker: '   ' }))).errors.join('\n'), /ticker/);
 });
 
 test('malformed ticker fails', () => {
@@ -148,63 +162,56 @@ test('malformed ticker fails', () => {
 });
 
 test('readings must be an array', () => {
-  const { errors } = expectErr(parseVerdict(raw({ readings: {} })));
-  assert.match(errors.join('\n'), /readings must be an array/);
+  assert.match(expectErr(parseVerdict(raw({ readings: {} }))).errors.join('\n'), /readings must be an array/);
 });
 
 test('unknown indicator fails', () => {
-  const input = raw({
-    readings: [
-      { indicator: 'rsi', signal: 'BUY' },
-      { indicator: 'slowStochastic', signal: 'NEUTRAL' },
-      { indicator: 'sma', signal: 'NEUTRAL' },
-    ],
-  });
+  const input = raw({ readings: [cross('rsi', 'BULLISH'), none('slowStochastic'), none('sma')] });
   assert.match(expectErr(parseVerdict(input)).errors.join('\n'), /not a known indicator/);
 });
 
-test('invalid reading signal enum fails', () => {
+test('invalid crossover enum fails', () => {
   const input = raw({
-    readings: [
-      { indicator: 'macd', signal: 'MAYBE' },
-      { indicator: 'slowStochastic', signal: 'NEUTRAL' },
-      { indicator: 'sma', signal: 'NEUTRAL' },
-    ],
+    readings: [{ indicator: 'macd', crossover: 'MAYBE', qualified: false }, none('slowStochastic'), none('sma')],
   });
-  assert.match(expectErr(parseVerdict(input)).errors.join('\n'), /BUY, SELL, or NEUTRAL/);
+  assert.match(expectErr(parseVerdict(input)).errors.join('\n'), /BULLISH, BEARISH, or NONE/);
+});
+
+test('qualified must be a boolean', () => {
+  const input = raw({
+    readings: [{ indicator: 'macd', crossover: 'NONE', qualified: 'yes' }, none('slowStochastic'), none('sma')],
+  });
+  assert.match(expectErr(parseVerdict(input)).errors.join('\n'), /qualified must be a boolean/);
+});
+
+test('barsAgo required when a crossover is present', () => {
+  const input = raw({
+    readings: [{ indicator: 'macd', crossover: 'BULLISH', qualified: true }, none('slowStochastic'), none('sma')],
+  });
+  assert.match(expectErr(parseVerdict(input)).errors.join('\n'), /barsAgo must be a non-negative integer/);
+});
+
+test('barsAgo forbidden when crossover is NONE', () => {
+  const input = raw({
+    readings: [{ indicator: 'macd', crossover: 'NONE', qualified: false, barsAgo: 2 }, none('slowStochastic'), none('sma')],
+  });
+  assert.match(expectErr(parseVerdict(input)).errors.join('\n'), /barsAgo must be omitted when crossover is NONE/);
 });
 
 test('duplicate indicator fails', () => {
-  const input = raw({
-    readings: [
-      { indicator: 'macd', signal: 'BUY' },
-      { indicator: 'macd', signal: 'SELL' },
-      { indicator: 'sma', signal: 'NEUTRAL' },
-    ],
-  });
+  const input = raw({ readings: [cross('macd', 'BULLISH'), cross('macd', 'BEARISH'), none('sma')] });
   assert.match(expectErr(parseVerdict(input)).errors.join('\n'), /duplicate reading/);
 });
 
 test('missing indicator fails when requireAllIndicators (default)', () => {
-  const input = raw({
-    readings: [
-      { indicator: 'macd', signal: 'BUY' },
-      { indicator: 'slowStochastic', signal: 'NEUTRAL' },
-    ],
-  });
+  const input = raw({ readings: [cross('macd', 'BULLISH'), none('slowStochastic')] });
   assert.match(expectErr(parseVerdict(input)).errors.join('\n'), /missing reading for indicator "sma"/);
 });
 
 test('partial readings allowed when requireAllIndicators is false', () => {
-  const input = raw({
-    signal: 'HOLD',
-    readings: [
-      { indicator: 'macd', signal: 'SELL' },
-      { indicator: 'slowStochastic', signal: 'SELL' },
-    ],
-  });
+  const input = raw({ readings: [cross('macd', 'BEARISH'), cross('slowStochastic', 'BEARISH')] });
   const { verdict } = expectOk(parseVerdict(input, { requireAllIndicators: false }));
-  assert.equal(verdict.signal, 'SELL'); // two SELL
+  assert.equal(verdict.signal, 'SELL');
   assert.equal(verdict.readings.length, 2);
 });
 
@@ -218,8 +225,7 @@ test('visibleRange is preserved when the model reports it', () => {
 });
 
 test('visibleRange is optional', () => {
-  const { verdict } = expectOk(parseVerdict(raw()));
-  assert.equal(verdict.visibleRange, undefined);
+  assert.equal(expectOk(parseVerdict(raw())).verdict.visibleRange, undefined);
 });
 
 test('visibleRange of wrong type fails', () => {

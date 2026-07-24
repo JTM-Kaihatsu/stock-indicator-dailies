@@ -1,14 +1,14 @@
 import { INDICATOR_KEYS } from './indicators.ts';
 import { deriveSignal, type DeriveSignalOptions } from './signal.ts';
 import type {
+  CrossoverDirection,
   IndicatorKey,
   IndicatorReading,
-  IndicatorSignal,
   Verdict,
 } from './types.ts';
 
-/** Valid per-indicator reading values. */
-const INDICATOR_SIGNALS: readonly IndicatorSignal[] = ['BUY', 'SELL', 'NEUTRAL'];
+/** Valid crossover directions the VLM may report. */
+const CROSSOVERS: readonly string[] = ['BULLISH', 'BEARISH', 'NONE'];
 /** Valid overall signal values (what the VLM might echo back). */
 const OVERALL_SIGNALS: readonly string[] = ['BUY', 'SELL', 'HOLD'];
 /** Permissive exchange-ticker shape: leading letter, then letters/digits/`.`/`-`. */
@@ -74,7 +74,7 @@ export function parseVerdict(
         errors.push(`readings[${i}] must be an object`);
         return;
       }
-      const { indicator, signal, rationale } = raw;
+      const { indicator, crossover, barsAgo, qualified, rationale } = raw;
 
       const indicatorOk =
         typeof indicator === 'string' && INDICATOR_KEYS.includes(indicator as IndicatorKey);
@@ -88,19 +88,39 @@ export function parseVerdict(
         seen.add(indicator as string);
       }
 
-      const signalOk = typeof signal === 'string' && INDICATOR_SIGNALS.includes(signal as IndicatorSignal);
-      if (!signalOk) {
-        errors.push(`readings[${i}].signal "${String(signal)}" must be BUY, SELL, or NEUTRAL`);
+      const crossoverOk = typeof crossover === 'string' && CROSSOVERS.includes(crossover);
+      if (!crossoverOk) {
+        errors.push(`readings[${i}].crossover "${String(crossover)}" must be BULLISH, BEARISH, or NONE`);
+      }
+
+      if (typeof qualified !== 'boolean') {
+        errors.push(`readings[${i}].qualified must be a boolean`);
+      }
+
+      // barsAgo is required when a crossover is present, forbidden otherwise.
+      let barsAgoOk = true;
+      if (crossover === 'NONE') {
+        if (barsAgo !== undefined && barsAgo !== null) {
+          errors.push(`readings[${i}].barsAgo must be omitted when crossover is NONE`);
+          barsAgoOk = false;
+        }
+      } else if (crossoverOk) {
+        if (typeof barsAgo !== 'number' || !Number.isInteger(barsAgo) || barsAgo < 0) {
+          errors.push(`readings[${i}].barsAgo must be a non-negative integer when a crossover is present`);
+          barsAgoOk = false;
+        }
       }
 
       if (rationale !== undefined && typeof rationale !== 'string') {
         errors.push(`readings[${i}].rationale must be a string when present`);
       }
 
-      if (indicatorOk && !isDuplicate && signalOk) {
+      if (indicatorOk && !isDuplicate && crossoverOk && typeof qualified === 'boolean' && barsAgoOk) {
         readings.push({
           indicator: indicator as IndicatorKey,
-          signal: signal as IndicatorSignal,
+          crossover: crossover as CrossoverDirection,
+          qualified,
+          ...(typeof barsAgo === 'number' ? { barsAgo } : {}),
           ...(typeof rationale === 'string' ? { rationale } : {}),
         });
       }

@@ -64,6 +64,13 @@ export const STOCHASTIC_THRESHOLDS = {
  * Span affects only how much history is visible, never the indicator values.
  */
 /**
+ * How recently a crossover must have happened to still count as an active
+ * signal, in daily bars. A crossover older than this is treated as stale.
+ * Applied deterministically in `deriveIndicatorSignal`, not by the model.
+ */
+export const RECENCY_WINDOW_DAYS = 3;
+
+/**
  * Success targets from the PRD, kept next to the domain constants so code can
  * measure itself against them rather than restating numbers in prose.
  */
