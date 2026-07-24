@@ -10,7 +10,8 @@
   "scripts": {
     "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "login": "node --env-file-if-exists=../../.env.local src/login.ts"
+    "login": "node --env-file-if-exists=../../.env.local src/login.ts",
+    "status": "node src/status.ts"
   },
   "dependencies": {
     "@stock-indicator-dailies/shared": "*",

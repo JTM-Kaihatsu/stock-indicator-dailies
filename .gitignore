@@ -22,7 +22,8 @@ dist/
 /blob-report/
 
 # Persistent browser profile — holds the signed-in session. Treat as a secret.
-/.agent-profile/
+# Unanchored on purpose: must match at any depth, not just the repo root.
+.agent-profile/
 
 # Screenshots / captured chart assets (may contain account-identifying data)
 /captures/

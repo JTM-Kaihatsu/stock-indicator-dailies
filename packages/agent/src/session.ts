@@ -11,8 +11,20 @@ import path from 'node:path';
  */
 export const DEFAULT_PROFILE_DIR = '.agent-profile';
 
+/**
+ * Repo root, derived from this file's location rather than `process.cwd()`.
+ * `npm run -w <pkg>` sets cwd to the package directory, so a cwd-relative path
+ * would put the profile somewhere different depending on how you invoked it.
+ */
+export const REPO_ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
+
+/**
+ * Absolute path to the profile directory. Override with `AGENT_PROFILE_DIR`
+ * (resolved against cwd, so an explicit override behaves as typed).
+ */
 export function resolveProfileDir(env: NodeJS.ProcessEnv = process.env): string {
-  return path.resolve(env.AGENT_PROFILE_DIR ?? DEFAULT_PROFILE_DIR);
+  const override = env.AGENT_PROFILE_DIR;
+  return override ? path.resolve(override) : path.join(REPO_ROOT, DEFAULT_PROFILE_DIR);
 }
 
 /** True once a sign-in has been performed at least once. */
