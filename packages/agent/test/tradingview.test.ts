@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { INDICATOR_PARAMS, CHART_WINDOW } from '@stock-indicator-dailies/shared';
+import { INDICATOR_PARAMS } from '@stock-indicator-dailies/shared';
 
 import { TRADINGVIEW, TRADINGVIEW_EXPECTED_STUDIES } from '../src/profiles/tradingview.ts';
 import { normalizeLegend, validateStudies } from '../src/studies.ts';
@@ -21,10 +21,6 @@ test('chartUrl deep-links the symbol and pins the daily interval', () => {
     TRADINGVIEW.chartUrl('nvda'),
     'https://www.tradingview.com/chart/?symbol=NVDA&interval=D',
   );
-});
-
-test('chart window token still comes from shared', () => {
-  assert.equal(TRADINGVIEW.rangeToken, CHART_WINDOW.label);
 });
 
 test('the profile exposes no range-tab selector', () => {

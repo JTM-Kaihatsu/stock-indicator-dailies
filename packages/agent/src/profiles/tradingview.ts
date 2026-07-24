@@ -1,8 +1,4 @@
-import {
-  INDICATOR_PARAMS,
-  CHART_WINDOW,
-  type IndicatorKey,
-} from '@stock-indicator-dailies/shared';
+import { INDICATOR_PARAMS, type IndicatorKey } from '@stock-indicator-dailies/shared';
 
 /**
  * A study we expect to already be present on the user's saved layout.
@@ -59,7 +55,6 @@ export interface ChartProviderProfile {
   readonly id: string;
   readonly baseUrl: string;
   chartUrl(ticker: string): string;
-  readonly rangeToken: string;
   /** Bar interval: the URL value to request, and the token shown in the header. */
   readonly interval: { urlParam: string; displayToken: string };
   readonly expectedStudies: readonly ExpectedStudy[];
@@ -90,7 +85,6 @@ export const TRADINGVIEW: ChartProviderProfile = {
     const symbol = encodeURIComponent(ticker.toUpperCase());
     return `https://www.tradingview.com/chart/?symbol=${symbol}&interval=D`;
   },
-  rangeToken: CHART_WINDOW.label,
   interval: { urlParam: 'D', displayToken: '1D' },
   expectedStudies: TRADINGVIEW_EXPECTED_STUDIES,
   selectors: {

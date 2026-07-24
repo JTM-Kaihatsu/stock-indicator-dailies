@@ -47,6 +47,15 @@ export interface Verdict {
   readings: IndicatorReading[];
   /** Optional overall rationale summarizing the readings. */
   rationale?: string;
+  /**
+   * The date range the model actually saw on the chart's axis, as it reported it
+   * (e.g. `"Jan 2026 to Aug 2026"`).
+   *
+   * Observability only — the axis is canvas-rendered, so this is the one way to
+   * learn what history the model was given. Treat as a soft signal: it is the
+   * model's reading, not a measurement.
+   */
+  visibleRange?: string;
   /** ISO-8601 timestamp of when the underlying chart was captured. */
   capturedAt?: string;
 }

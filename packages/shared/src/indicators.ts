@@ -50,13 +50,22 @@ export const STOCHASTIC_THRESHOLDS = {
 } as const;
 
 /**
- * The chart's visible time window. All three indicators are read over the same
- * 3-month range, so the agent must set the chart timeframe accordingly before
- * capture, and the VLM prompt / eval labels assume this window.
+ * How the chart is framed.
+ *
+ * `interval` is the load-bearing part: every indicator parameter above is
+ * defined on DAILY closes. An intraday chart silently computes a "10-day SMA"
+ * over 10 hours, so the agent pins and verifies the interval.
+ *
+ * The visible span is deliberately NOT pinned. TradingView stores a zoom level
+ * (pixels per bar), not a time range — so the visible months vary with the saved
+ * layout and the rendering viewport width, and its date axis is canvas-drawn and
+ * unreadable by script. The VLM reports the range it actually sees
+ * (`Verdict.visibleRange`) instead of us asserting a number we can't control.
+ * Span affects only how much history is visible, never the indicator values.
  */
 export const CHART_WINDOW = {
-  /** Calendar months of price history displayed on the chart. */
-  months: 3,
-  /** Short range label for UI and provider selectors (e.g. TradingView "3M"). */
-  label: '3M',
+  /** Bar interval the indicators are computed on. */
+  interval: 'daily',
+  /** Rough expectation for the visible history; observational, not enforced. */
+  approximateMonths: 6,
 } as const;

@@ -31,7 +31,9 @@ test('Stochastic bands match the PRD (oversold < 20, overbought > 80)', () => {
   assert.deepEqual(STOCHASTIC_THRESHOLDS, { oversold: 20, overbought: 80 });
 });
 
-test('chart window is a 3-month range for all indicators', () => {
-  assert.equal(CHART_WINDOW.months, 3);
-  assert.equal(CHART_WINDOW.label, '3M');
+test('chart window pins the daily interval, not a span', () => {
+  // The interval is load-bearing (indicators are defined on daily closes);
+  // the visible span is observational because TradingView stores zoom, not range.
+  assert.equal(CHART_WINDOW.interval, 'daily');
+  assert.equal(typeof CHART_WINDOW.approximateMonths, 'number');
 });

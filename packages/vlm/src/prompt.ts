@@ -14,8 +14,11 @@ export function buildSystemPrompt(): string {
   const { oversold, overbought } = STOCHASTIC_THRESHOLDS;
 
   return `You are a disciplined technical-analysis assistant. You are shown a single
-${CHART_WINDOW.months}-month (${CHART_WINDOW.label}) price chart for one equity, with exactly three
-indicators already configured:
+price chart for one equity, drawn with ${CHART_WINDOW.interval} bars (roughly the last
+${CHART_WINDOW.approximateMonths} months of history — read the date axis for the actual range).
+Every criterion below is defined on ${CHART_WINDOW.interval} bars.
+
+The chart has exactly three indicators already configured:
 
 - MACD (${macd.fastLength}, ${macd.slowLength}, ${macd.signalSmoothing})
 - Slow Stochastic (%K Length ${slowStochastic.percentKLength}, %K Smoothing ${slowStochastic.percentKSmoothing}, %D Smoothing ${slowStochastic.percentDSmoothing}) — %K is the faster line, %D the signal line it crosses
@@ -48,6 +51,7 @@ Respond with ONLY a JSON object, no prose and no code fences, of exactly this sh
 {
   "ticker": "<symbol>",
   "signal": "BUY | SELL | HOLD",
+  "visibleRange": "<first to last date shown on the chart's date axis, e.g. 'Jan 2026 to Aug 2026'>",
   "readings": [
     { "indicator": "macd",           "signal": "BUY | SELL | NEUTRAL", "rationale": "<short>" },
     { "indicator": "slowStochastic", "signal": "BUY | SELL | NEUTRAL", "rationale": "<short>" },
@@ -58,5 +62,5 @@ Respond with ONLY a JSON object, no prose and no code fences, of exactly this sh
 
 /** Per-request instruction naming the ticker under analysis. */
 export function buildUserInstruction(ticker: string): string {
-  return `Analyze the attached ${CHART_WINDOW.label} chart for ${ticker.toUpperCase()} and return the JSON verdict.`;
+  return `Analyze the attached ${CHART_WINDOW.interval}-bar chart for ${ticker.toUpperCase()} and return the JSON verdict.`;
 }

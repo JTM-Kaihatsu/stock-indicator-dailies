@@ -23,8 +23,9 @@ test('system prompt embeds the stochastic thresholds and chart window', () => {
   const p = buildSystemPrompt();
   assert.match(p, new RegExp(`< ${STOCHASTIC_THRESHOLDS.oversold}`));
   assert.match(p, new RegExp(`> ${STOCHASTIC_THRESHOLDS.overbought}`));
-  assert.ok(p.includes(`${CHART_WINDOW.months}-month`));
-  assert.ok(p.includes(CHART_WINDOW.label));
+  assert.ok(p.includes(CHART_WINDOW.interval));
+  assert.ok(p.includes(String(CHART_WINDOW.approximateMonths)));
+  assert.ok(p.includes('visibleRange'));
 });
 
 test('system prompt names all three indicators and the signal vocabulary', () => {
@@ -37,5 +38,5 @@ test('system prompt names all three indicators and the signal vocabulary', () =>
 test('user instruction upper-cases the ticker and cites the window', () => {
   const i = buildUserInstruction('nvda');
   assert.ok(i.includes('NVDA'));
-  assert.ok(i.includes(CHART_WINDOW.label));
+  assert.ok(i.includes(CHART_WINDOW.interval));
 });

@@ -211,3 +211,17 @@ test('partial readings allowed when requireAllIndicators is false', () => {
 test('rationale of wrong type fails', () => {
   assert.equal(parseVerdict(raw({ rationale: 42 })).ok, false);
 });
+
+test('visibleRange is preserved when the model reports it', () => {
+  const { verdict } = expectOk(parseVerdict(raw({ visibleRange: 'Jan 2026 to Aug 2026' })));
+  assert.equal(verdict.visibleRange, 'Jan 2026 to Aug 2026');
+});
+
+test('visibleRange is optional', () => {
+  const { verdict } = expectOk(parseVerdict(raw()));
+  assert.equal(verdict.visibleRange, undefined);
+});
+
+test('visibleRange of wrong type fails', () => {
+  assert.equal(parseVerdict(raw({ visibleRange: 3 })).ok, false);
+});

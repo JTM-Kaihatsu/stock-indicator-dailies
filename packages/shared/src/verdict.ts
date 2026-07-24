@@ -123,6 +123,16 @@ export function parseVerdict(
     }
   }
 
+  // --- optional visibleRange (model's reading of the date axis) ---
+  let visibleRange: string | undefined;
+  if (input.visibleRange !== undefined) {
+    if (typeof input.visibleRange !== 'string') {
+      errors.push('visibleRange must be a string when present');
+    } else {
+      visibleRange = input.visibleRange;
+    }
+  }
+
   // --- optional capturedAt ---
   let capturedAt: string | undefined;
   if (input.capturedAt !== undefined) {
@@ -156,6 +166,7 @@ export function parseVerdict(
     signal,
     readings,
     ...(rationale !== undefined ? { rationale } : {}),
+    ...(visibleRange !== undefined ? { visibleRange } : {}),
     ...(capturedAt !== undefined ? { capturedAt } : {}),
   };
   return { ok: true, verdict, warnings };
