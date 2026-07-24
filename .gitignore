@@ -21,6 +21,9 @@ dist/
 /playwright/.cache/
 /blob-report/
 
+# Persistent browser profile — holds the signed-in session. Treat as a secret.
+/.agent-profile/
+
 # Screenshots / captured chart assets (may contain account-identifying data)
 /captures/
 /testing/

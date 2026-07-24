@@ -16,7 +16,7 @@ Status legend: ⬜ not started · 🟡 in progress · ✅ done
 Goal: enter a ticker → get a Buy/Sell/Hold Daily Report in under 15 seconds.
 
 - ⬜ **Web** (`apps/web`): Next.js dashboard, single ticker input, Daily Report card
-- ⬜ **Agent** (`packages/agent`): Playwright login → indicator config → screenshot → crop/sanitize
+- 🟡 **Agent** (`packages/agent`): core done — `ChartAgent` interface, typed failure modes, pacing/rate-limiting, TradingView profile, one-time interactive login (persistent profile, no stored passwords), `FakeChartAgent` (13 unit tests). Playwright capture flow still to build.
 - ⬜ **Agent**: structural validation that all three indicators are in-frame before inference
 - ✅ **VLM** (`packages/vlm`): prompt builder, response parser, provider interface, and the Claude provider adapter (`claude-sonnet-5` default) — 21 unit tests, all mocked. Live smoke test pending an API key.
 - ⬜ **DB** (`supabase`): schema for preferences + daily history; history purge

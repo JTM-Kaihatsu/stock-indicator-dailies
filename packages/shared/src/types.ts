@@ -22,6 +22,21 @@ export interface IndicatorReading {
   rationale?: string;
 }
 
+/**
+ * A captured chart screenshot. Produced by the agent, consumed by the VLM —
+ * hence it lives here rather than in either package.
+ *
+ * Capture is expected to be scoped to the chart region only (never a full-page
+ * screenshot), so account chrome never enters the image. See the image
+ * sanitization requirement in the PRD.
+ */
+export interface ChartImage {
+  /** Base64-encoded image bytes (no `data:` prefix). */
+  base64: string;
+  /** MIME type, e.g. `image/png`. */
+  mediaType: string;
+}
+
 /** The full structured verdict produced for one captured chart. */
 export interface Verdict {
   /** Uppercased exchange ticker, e.g. "NVDA". */

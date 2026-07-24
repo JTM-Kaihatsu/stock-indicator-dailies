@@ -1,0 +1,57 @@
+# @stock-indicator-dailies/agent
+
+Agentic chart acquisition — drives a charting provider to produce a sanitized
+`ChartImage` for a ticker, which the VLM package then interprets.
+
+## What's here
+
+- **`agent.ts`** — the `ChartAgent` interface (`acquire(ticker) → ChartImage`) and
+  `ChartAcquisitionError` with typed failure reasons (`not-authenticated`,
+  `chart-not-found`, `unknown-ticker`, `timeout`).
+- **`pacing.ts`** — human-like inter-action delays and a `RateLimiter`. Both pure and
+  injectable (clock/RNG), so they unit-test without sleeping. This is politeness and
+  rate-limiting, not detection evasion.
+- **`session.ts`** — resolves the persistent browser-profile directory.
+- **`login.ts`** — the one-time interactive sign-in (see below).
+- **`profiles/tradingview.ts`** — the TradingView profile: deep-link URL, the `3M`
+  range token, and the three indicator specs, all wired to `INDICATOR_PARAMS` /
+  `CHART_WINDOW` from `shared` so they can't drift.
+- **`fake.ts`** — `FakeChartAgent` for testing the pipeline without a browser.
+
+## Authentication: sign in once, by hand
+
+The agent **never handles a password and never automates a sign-in flow.** You sign in
+yourself in a real browser window; the session is persisted and reused:
+
+```bash
+npm run login -w @stock-indicator-dailies/agent
+```
+
+A headed Chromium opens at TradingView. Sign in however you normally do — **Google SSO
+is fine** (and preferred: automating Google sign-in is both unreliable and a good way to
+get your Google account flagged). When you're signed in, close the window.
+
+The session is saved to `.agent-profile/` (gitignored). **Treat that directory as a
+secret** — it grants access to the signed-in account. Re-run the command whenever the
+session expires; the agent surfaces `not-authenticated` rather than silently capturing a
+logged-out page.
+
+## Image sanitization
+
+Capture is scoped to the **chart element only** — never a full-page screenshot — so
+account chrome (balances, watchlists, account numbers) never enters the image. This is
+the PRD's regional-cropping requirement, enforced by construction rather than by
+post-processing.
+
+## Provider selectors are volatile
+
+The selectors in `profiles/tradingview.ts` target a third-party DOM that changes. When
+they break, the driver fails with `chart-not-found` instead of capturing the wrong
+region. Expect to re-verify them periodically.
+
+## Develop
+
+```bash
+npm test -w @stock-indicator-dailies/agent
+npm run typecheck
+```

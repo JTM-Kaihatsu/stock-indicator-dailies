@@ -1,10 +1,7 @@
-/** A chart screenshot to send to the model. */
-export interface ChartImage {
-  /** Base64-encoded image bytes (no `data:` prefix). */
-  base64: string;
-  /** MIME type, e.g. `image/png`. */
-  mediaType: string;
-}
+import type { ChartImage } from '@stock-indicator-dailies/shared';
+
+/** Re-exported for convenience so VLM consumers don't need a second import. */
+export type { ChartImage };
 
 /** Everything a provider needs to run one chart analysis. */
 export interface VlmRequest {

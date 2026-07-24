@@ -1,0 +1,19 @@
+{
+  "name": "@stock-indicator-dailies/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agentic chart acquisition: drive a charting provider, configure indicators, and capture a sanitized chart image.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "login": "node --env-file-if-exists=../../.env.local src/login.ts"
+  },
+  "dependencies": {
+    "@stock-indicator-dailies/shared": "*",
+    "playwright": "^1.49.0"
+  }
+}
