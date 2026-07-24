@@ -1,0 +1,20 @@
+{
+  "name": "@stock-indicator-dailies/daily",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Orchestration: ticker in, Daily Report out (agent -> VLM -> verdict).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "daily": "node --env-file-if-exists=../../.env.local src/cli.ts"
+  },
+  "dependencies": {
+    "@stock-indicator-dailies/agent": "*",
+    "@stock-indicator-dailies/shared": "*",
+    "@stock-indicator-dailies/vlm": "*"
+  }
+}

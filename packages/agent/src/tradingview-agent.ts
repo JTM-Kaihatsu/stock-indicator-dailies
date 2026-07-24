@@ -139,7 +139,17 @@ export class TradingViewChartAgent implements ChartAgent {
  */
 export async function readLegendTexts(page: Page): Promise<string[]> {
   return page.evaluate(() => {
-    const texts = Array.from(document.querySelectorAll('div,span'))
+    // `document` exists only in the page. We reach it through globalThis rather
+    // than referencing the DOM global directly: this package ships TypeScript
+    // sources, so a bare `document` would force every downstream consumer to add
+    // "DOM" to its tsconfig `lib` just to compile us.
+    const doc = (
+      globalThis as unknown as {
+        document: { querySelectorAll(selector: string): ArrayLike<{ textContent: string | null }> };
+      }
+    ).document;
+
+    const texts = Array.from(doc.querySelectorAll('div,span'))
       .map((el) => (el.textContent ?? '').trim())
       .filter((t) => t.length > 0 && t.length < 80 && /^[A-Za-z]{2,14}/.test(t));
     return Array.from(new Set(texts));

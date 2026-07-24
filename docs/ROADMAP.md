@@ -15,6 +15,7 @@ Status legend: ⬜ not started · 🟡 in progress · ✅ done
 
 Goal: enter a ticker → get a Buy/Sell/Hold Daily Report in under 15 seconds.
 
+- ✅ **Orchestration** (`packages/daily`): `runDaily(ticker)` chains agent → VLM → verdict; staged failure reporting; short-circuits before any billed call on a bad capture (8 unit tests, fully mocked)
 - ⬜ **Web** (`apps/web`): Next.js dashboard, single ticker input, Daily Report card
 - ✅ **Agent** (`packages/agent`): live capture working — pinned daily interval, saved-layout reuse, study + interval validation, sanitized chart-element screenshot in ~5s (29 unit tests). Visible window is ~6M not 3M (see README).
 - ✅ **Agent**: structural validation — studies present with exact params, and bar interval verified as daily, before inference
@@ -22,7 +23,7 @@ Goal: enter a ticker → get a Buy/Sell/Hold Daily Report in under 15 seconds.
 - ⬜ **DB** (`supabase`): schema for preferences + daily history; history purge
 - ⬜ **Security**: OS-vault credential storage; read-only scoping; no trade-execution paths
 - ⬜ **Evals**: `retrieval` (SSIM ≥ 95%) and `interpretation` (100% on labeled set)
-- ⬜ **Metric**: instrument time-to-signal (< 15s target)
+- ✅ **Metric**: time-to-signal instrumented and measured — 11.3s end-to-end on a real run (capture 6.6s + analyze 4.7s), against the 15s target
 
 ## Phase 1.5 — Quality-of-life
 

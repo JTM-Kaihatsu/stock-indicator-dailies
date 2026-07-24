@@ -63,6 +63,19 @@ export const STOCHASTIC_THRESHOLDS = {
  * (`Verdict.visibleRange`) instead of us asserting a number we can't control.
  * Span affects only how much history is visible, never the indicator values.
  */
+/**
+ * Success targets from the PRD, kept next to the domain constants so code can
+ * measure itself against them rather than restating numbers in prose.
+ */
+export const SUCCESS_TARGETS = {
+  /** Acquisition + analysis should complete within 15 seconds. */
+  timeToSignalMs: 15_000,
+  /** Chart retrieval vs. the labeled test set (SSIM). */
+  retrievalSsim: 0.95,
+  /** Buy/sell/hold interpretation vs. labeled ground truth. */
+  interpretationAccuracy: 1.0,
+} as const;
+
 export const CHART_WINDOW = {
   /** Bar interval the indicators are computed on. */
   interval: 'daily',

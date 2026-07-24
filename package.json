@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "test": "node --test \"packages/**/test/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p packages/vlm/tsconfig.json && tsc --noEmit -p packages/agent/tsconfig.json"
+    "typecheck": "tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p packages/vlm/tsconfig.json && tsc --noEmit -p packages/agent/tsconfig.json && tsc --noEmit -p packages/daily/tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
