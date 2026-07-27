@@ -2,49 +2,55 @@
 
 Grades the VLM's chart reading against a **computed oracle**, to measure the
 PRD's interpretation-accuracy target. This is the biggest open risk in the
-system: we have almost no evidence yet that Claude reads these charts correctly.
+system: whether Claude actually reads these charts correctly.
 
-## The oracle
+## The event oracle
 
-Ground truth comes from **TradingView's own legend values** at the last bar,
-read off the chart the model is looking at — each value cell carries a `title`
-attribute (`MACD`, `Signal line`, `%K`, `%D`, `MA`), so there's no positional
-guessing and no formula-parity risk with a separately computed indicator.
+The signal model is event-based (a *clean crossover, N bars ago, qualified*), so
+the oracle needs the indicator **time series**, not a single bar. It:
 
-`oracle.ts` maps those numbers → per-indicator BUY/SELL/NEUTRAL. `score.ts`
-compares the VLM's readings to the oracle and aggregates accuracy per indicator.
+1. Fetches daily OHLC (`ohlc.ts` — keyless Yahoo Finance, behind a `DataSource`
+   interface so the math stays offline-testable).
+2. Computes the series (`compute.ts` — SMA, EMA, MACD, Slow Stochastic; matches
+   TradingView's default formulas).
+3. Detects the most recent crossover as a sign-flip of the difference series
+   (`crossovers.ts`), giving direction + `barsAgo` + the zone/slope `qualified`
+   flag — the exact `{crossover, barsAgo, qualified}` shape the VLM produces
+   (`event-oracle.ts`).
 
-## ⚠️ State vs. event — the key semantic caveat
+### Calibration — the parity check
 
-A single legend snapshot gives the values at the **last bar only**. It cannot
-see the previous bar, so it cannot detect a fresh **crossover event** or a
-**slope direction**. The oracle therefore grades the criteria as current-*state*
-conditions:
+`calibrate.ts` compares the computed last-bar values to **TradingView's own
+legend numbers** (captured alongside the chart). This turns "does my math match
+TradingView's math" from a hope into a checked invariant, and catches data-source
+mismatches too. Validated live on GEV — every value agrees to within 0.003:
 
-| Criterion (literal) | Oracle (state proxy) |
-|---|---|
-| MACD *crosses above* signal below zero | MACD *is above* signal AND below zero |
-| MACD *crosses below* signal above zero | MACD *is below* signal AND above zero |
-| %K *crosses above* %D while oversold | %K *is above* %D AND oversold |
-| %K *crosses below* %D while overbought | %K *is below* %D AND overbought |
-| price closes above SMA *with upward slope* | close *is above* SMA (slope not checked) |
-| price closes below SMA *with downward slope* | close *is below* SMA (slope not checked) |
+```
+node evals/interpretation/calibrate-live.ts GEV
+  ✓ macd.macd   computed -15.357  tv -15.360  Δ 0.003
+  ✓ sma         computed 1040.088 tv 1040.090 Δ 0.002
+  ...  calibration: ✅ PASS
+```
 
-This is looser than the literal wording, and it only grades the VLM **fairly if
-the VLM is judged on the same definition.** The prompt currently says "crosses"
-(event); the oracle measures state. So some disagreements will be definitional,
-not model errors — e.g. the oracle says SELL because MACD is currently below
-signal, while the VLM correctly reports NEUTRAL because no cross happened today.
+## Scoring
 
-**Open decision:** align both on *state* (reword the prompt — makes the product
-a "current configuration" tool that can fire the same signal for many days), or
-both on *event* (needs a second legend read at the previous bar, so the oracle
-can detect the actual cross and slope). The first run will show empirically how
-often this divergence bites.
+`score.ts` compares predicted vs. oracle per-indicator signals and aggregates
+accuracy (overall and per indicator), listing every disagreement.
 
-## Status
+## Superseded
 
-Oracle + scoring are built and unit-tested (against the real captured NVDA
-legend). Still to build: the harness that captures N charts with their legend
-values, runs the VLM on each, and reports the scorecard — that part makes live,
-billed model calls.
+The single-bar legend oracle (`oracle.ts`) only reads *current state*, so it
+cannot see a crossover's age. It's kept for its `IndicatorValues` type (reused by
+calibration) but is not used to grade the event model.
+
+## Still to build
+
+The harness: capture N charts (agent) + fetch their OHLC + run the VLM + score,
+run with thinking on vs off to settle the accuracy/speed tradeoff. That part
+makes live, billed model calls.
+
+## Develop
+
+```bash
+npm test -w @stock-indicator-dailies/eval-interpretation   # pure, offline
+```

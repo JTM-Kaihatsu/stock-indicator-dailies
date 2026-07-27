@@ -22,7 +22,7 @@ Goal: enter a ticker → get a Buy/Sell/Hold Daily Report in under 15 seconds.
 - ✅ **VLM** (`packages/vlm`): prompt builder, response parser, provider interface, and the Claude provider adapter (`claude-sonnet-5` default) — 21 unit tests, all mocked. Live smoke test pending an API key.
 - ⬜ **DB** (`supabase`): schema for preferences + daily history; history purge
 - ⬜ **Security**: OS-vault credential storage; read-only scoping; no trade-execution paths
-- ⬜ **Evals**: `retrieval` (SSIM ≥ 95%) and `interpretation` (100% on labeled set)
+- 🟡 **Evals**: `interpretation` oracle built and CALIBRATED against TradingView live (all values match to <0.003) — event-capable (OHLC → indicator series → crossover facts), scoring done (40 unit tests); harness (capture N + VLM + score) still to run. `retrieval` (SSIM ≥ 95%) not started.
 - ✅ **Metric**: time-to-signal instrumented and measured — 11.3s end-to-end on a real run (capture 6.6s + analyze 4.7s), against the 15s target
 
 ## Phase 1.5 — Quality-of-life

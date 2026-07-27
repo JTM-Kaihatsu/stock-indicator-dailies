@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@stock-indicator-dailies/shared": "*"
+    "@stock-indicator-dailies/shared": "*",
+    "@stock-indicator-dailies/agent": "*"
   }
 }
