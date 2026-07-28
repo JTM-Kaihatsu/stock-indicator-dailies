@@ -6,6 +6,7 @@ import {
 
 import { macdSeries, sma, stochasticSeries, type Bar } from './compute.ts';
 import { detectCrossover } from './crossovers.ts';
+import type { IndicatorValues } from './values.ts';
 
 /** Assemble a fact reading, matching the VLM's `IndicatorReading` shape. */
 function reading(
@@ -28,7 +29,7 @@ function reading(
  * directly. This is the event-capable oracle (it sees history, unlike the
  * single-bar legend oracle).
  */
-export function computeOracleReadings(bars: readonly Bar[]): IndicatorReading[] {
+export function computeReadings(bars: readonly Bar[]): IndicatorReading[] {
   const closes = bars.map((b) => b.close);
   const { macd, sma: smaP, slowStochastic } = INDICATOR_PARAMS;
 
@@ -77,14 +78,7 @@ export function computeOracleReadings(bars: readonly Bar[]): IndicatorReading[] 
 }
 
 /** The indicator values at the last bar — used to calibrate against the legend. */
-export interface ComputedLastBar {
-  macd: { macd: number; signal: number; histogram: number };
-  stochastic: { percentK: number; percentD: number };
-  sma: number;
-  close: number;
-}
-
-export function computeLastBar(bars: readonly Bar[]): ComputedLastBar {
+export function computeLastBar(bars: readonly Bar[]): IndicatorValues {
   const closes = bars.map((b) => b.close);
   const { macd, smaP, stoch } = {
     macd: macdSeries(

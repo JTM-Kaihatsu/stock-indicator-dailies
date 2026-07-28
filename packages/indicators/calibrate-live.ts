@@ -12,9 +12,9 @@ import { chromium } from 'playwright';
 import { resolveProfileDir, TRADINGVIEW } from '@stock-indicator-dailies/agent';
 
 import { yahooDataSource } from './src/ohlc.ts';
-import { computeLastBar, computeOracleReadings } from './src/event-oracle.ts';
+import { computeLastBar, computeReadings } from './src/readings.ts';
 import { calibrate } from './src/calibrate.ts';
-import type { IndicatorValues } from './src/oracle.ts';
+import type { IndicatorValues } from './src/values.ts';
 
 const ticker = (process.argv[2] ?? 'GEV').toUpperCase();
 
@@ -69,7 +69,7 @@ for (const f of result.fields) {
 
 // --- 4. Ground-truth facts ---
 console.log('\noracle facts:');
-for (const r of computeOracleReadings(bars)) {
+for (const r of computeReadings(bars)) {
   const fact = r.crossover === 'NONE' ? 'no crossover' : `${r.crossover} ${r.barsAgo}d ago, qualified=${r.qualified}`;
   console.log(`  ${r.indicator.padEnd(16)} ${fact}`);
 }

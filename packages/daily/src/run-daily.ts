@@ -1,11 +1,37 @@
 import {
+  deriveSignal,
   SUCCESS_TARGETS,
   type ChartImage,
+  type IndicatorReading,
   type ParseVerdictOptions,
+  type Signal,
   type Verdict,
 } from '@stock-indicator-dailies/shared';
 import { ChartAcquisitionError, type ChartAgent } from '@stock-indicator-dailies/agent';
 import { analyzeChart, type VlmProvider } from '@stock-indicator-dailies/vlm';
+import {
+  computeLastBar,
+  computeReadings,
+  yahooDataSource,
+  type DataSource,
+  type IndicatorValues,
+} from '@stock-indicator-dailies/indicators';
+
+/**
+ * The deterministic read — computed from price data, the accurate signal source.
+ * Shown alongside the VLM read as a cross-check, and the headline of the report.
+ */
+export interface DeterministicRead {
+  readings: IndicatorReading[];
+  signal: Signal;
+  /** Last-bar indicator values, for the report's hover details. */
+  values: IndicatorValues;
+  /** Where the OHLC came from, e.g. `yahoo`. */
+  source: string;
+  /** Date of the last bar used. */
+  asOf: string;
+  bars: number;
+}
 
 /** Where a run failed, so callers can react appropriately. */
 export type DailyStage = 'capture' | 'analysis';
@@ -13,19 +39,25 @@ export type DailyStage = 'capture' | 'analysis';
 export interface DailyTimings {
   captureMs: number;
   analyzeMs: number;
+  /** Time spent fetching + computing the deterministic read (network). */
+  deterministicMs: number;
+  /** Capture + analyze, the PRD's time-to-signal metric. */
   totalMs: number;
-  /** Whether the run met the PRD's time-to-signal target. */
+  /** Whether capture + analyze met the PRD's time-to-signal target. */
   withinTarget: boolean;
 }
 
 export interface DailyReport {
   ticker: string;
+  /** The VLM's read — the AI second opinion / cross-check. */
   verdict: Verdict;
-  /** Non-fatal notes, e.g. the model's own signal disagreeing with ours. */
+  /** The computed read from price data — the accurate, headline signal. Absent if the data fetch failed. */
+  deterministic?: DeterministicRead;
+  /** Non-fatal notes, e.g. VLM/derived disagreement, or the data fetch failing. */
   warnings: string[];
   timings: DailyTimings;
   /**
-   * The chart the verdict was derived from. Surfaced so the user can verify the
+   * The chart the reads were derived from. Surfaced so the user can verify the
    * call against the source image — the PRD's human-in-the-loop requirement.
    */
   image: ChartImage;
@@ -48,6 +80,8 @@ export interface RunDailyInput {
   ticker: string;
   agent: ChartAgent;
   provider: VlmProvider;
+  /** OHLC source for the deterministic read. Defaults to Yahoo Finance. */
+  dataSource?: DataSource;
 }
 
 export interface RunDailyOptions extends ParseVerdictOptions {
@@ -70,11 +104,12 @@ export async function runDaily(
   const ticker = input.ticker.toUpperCase();
   const started = now();
 
-  const timings = (captureMs: number, analyzeMs: number): DailyTimings => {
+  const timings = (captureMs: number, analyzeMs: number, deterministicMs = 0): DailyTimings => {
     const totalMs = captureMs + analyzeMs;
     return {
       captureMs,
       analyzeMs,
+      deterministicMs,
       totalMs,
       withinTarget: totalMs <= SUCCESS_TARGETS.timeToSignalMs,
     };
@@ -132,13 +167,38 @@ export async function runDaily(
     };
   }
 
+  const warnings = [...result.warnings];
+
+  // --- 3. Deterministic read (best-effort — a data-fetch failure is non-fatal) ---
+  const detStarted = now();
+  let deterministic: DeterministicRead | undefined;
+  try {
+    const source = input.dataSource ?? yahooDataSource;
+    const bars = await source.fetchDailyBars(ticker, '1y');
+    const readings = computeReadings(bars);
+    deterministic = {
+      readings,
+      signal: deriveSignal(readings, options),
+      values: computeLastBar(bars),
+      source: source.name,
+      asOf: bars.at(-1)?.date ?? 'unknown',
+      bars: bars.length,
+    };
+  } catch (err) {
+    warnings.push(
+      `deterministic read unavailable: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  const deterministicMs = now() - detStarted;
+
   return {
     ok: true,
     report: {
       ticker,
       verdict: result.verdict,
-      warnings: result.warnings,
-      timings: timings(captureMs, analyzeMs),
+      ...(deterministic ? { deterministic } : {}),
+      warnings,
+      timings: timings(captureMs, analyzeMs, deterministicMs),
       image,
       raw: result.raw,
     },

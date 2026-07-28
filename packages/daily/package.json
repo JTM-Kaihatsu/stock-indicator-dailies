@@ -15,6 +15,7 @@
   "dependencies": {
     "@stock-indicator-dailies/agent": "*",
     "@stock-indicator-dailies/shared": "*",
-    "@stock-indicator-dailies/vlm": "*"
+    "@stock-indicator-dailies/vlm": "*",
+    "@stock-indicator-dailies/indicators": "*"
   }
 }

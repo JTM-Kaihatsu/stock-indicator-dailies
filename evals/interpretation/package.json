@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@stock-indicator-dailies/shared": "*",
-    "@stock-indicator-dailies/agent": "*"
+    "@stock-indicator-dailies/agent": "*",
+    "@stock-indicator-dailies/indicators": "*"
   }
 }

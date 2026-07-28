@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { detectCrossover } from '../src/crossovers.ts';
-import { computeOracleReadings, computeLastBar } from '../src/event-oracle.ts';
+import { computeReadings, computeLastBar } from '../src/readings.ts';
 import { calibrate } from '../src/calibrate.ts';
 import type { Bar } from '../src/compute.ts';
 
@@ -44,14 +44,14 @@ function vShape(): Bar[] {
 }
 
 test('a V-shaped recovery yields a recent bullish SMA crossover', () => {
-  const readings = computeOracleReadings(vShape());
+  const readings = computeReadings(vShape());
   const smaReading = readings.find((r) => r.indicator === 'sma')!;
   assert.equal(smaReading.crossover, 'BULLISH');
   assert.ok(smaReading.barsAgo !== undefined && smaReading.barsAgo < 15);
 });
 
 test('oracle readings have the VLM fact shape', () => {
-  const readings = computeOracleReadings(vShape());
+  const readings = computeReadings(vShape());
   assert.equal(readings.length, 3);
   for (const r of readings) {
     assert.ok(['macd', 'slowStochastic', 'sma'].includes(r.indicator));

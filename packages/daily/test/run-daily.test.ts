@@ -5,6 +5,8 @@ import { SUCCESS_TARGETS } from '@stock-indicator-dailies/shared';
 import { FakeChartAgent } from '@stock-indicator-dailies/agent';
 import type { VlmProvider, VlmRequest } from '@stock-indicator-dailies/vlm';
 
+import type { DataSource } from '@stock-indicator-dailies/indicators';
+
 import { runDaily } from '../src/run-daily.ts';
 
 /** VLM provider returning a canned response — no network, no key. */
@@ -18,6 +20,13 @@ class FakeProvider implements VlmProvider {
     return this.#response;
   }
 }
+
+/** Fake OHLC source so tests never hit the network. */
+const fakeBars = Array.from({ length: 60 }, (_, i) => {
+  const c = 100 + (i % 7);
+  return { date: `2026-01-${String((i % 28) + 1).padStart(2, '0')}`, open: c, high: c + 1, low: c - 1, close: c };
+});
+const fakeSource = { name: 'fake', async fetchDailyBars() { return fakeBars; } };
 
 const sellJson = JSON.stringify({
   ticker: 'GEV',
@@ -42,7 +51,7 @@ function stepClock(stepMs: number) {
 
 test('happy path returns a verdict, the source image, and timings', async () => {
   const result = await runDaily(
-    { ticker: 'gev', agent: new FakeChartAgent(), provider: new FakeProvider(sellJson) },
+    { ticker: 'gev', agent: new FakeChartAgent(), provider: new FakeProvider(sellJson), dataSource: fakeSource as DataSource },
     { now: stepClock(1000) },
   );
 
@@ -56,6 +65,9 @@ test('happy path returns a verdict, the source image, and timings', async () => 
   assert.deepEqual(report.warnings, []);
   assert.ok(report.timings.totalMs > 0);
   assert.equal(report.timings.withinTarget, true);
+  assert.ok(report.deterministic, 'deterministic read present');
+  assert.equal(report.deterministic!.source, 'fake');
+  assert.equal(report.deterministic!.readings.length, 3);
 });
 
 test('ticker is upper-cased and passed to the agent', async () => {
@@ -69,6 +81,7 @@ test('capture failure is reported with its reason, not thrown', async () => {
     ticker: 'GEV',
     agent: new FakeChartAgent({ failWith: 'not-authenticated' }),
     provider: new FakeProvider(sellJson),
+    dataSource: fakeSource as DataSource,
   });
 
   assert.equal(result.ok, false);
@@ -91,6 +104,7 @@ test('a wrong-interval capture fails before any model call', async () => {
     ticker: 'GEV',
     agent: new FakeChartAgent({ failWith: 'wrong-interval' }),
     provider,
+    dataSource: fakeSource as DataSource,
   });
 
   assert.equal(result.ok, false);
@@ -104,6 +118,7 @@ test('unparseable model output is reported as an analysis failure', async () => 
     ticker: 'GEV',
     agent: new FakeChartAgent(),
     provider: new FakeProvider('I could not read the chart.'),
+    dataSource: fakeSource as DataSource,
   });
 
   assert.equal(result.ok, false);
@@ -127,6 +142,7 @@ test('model disagreement surfaces as a warning, derived signal wins', async () =
     ticker: 'GEV',
     agent: new FakeChartAgent(),
     provider: new FakeProvider(disagrees),
+    dataSource: fakeSource as DataSource,
   });
 
   assert.equal(result.ok, true);
@@ -138,7 +154,7 @@ test('model disagreement surfaces as a warning, derived signal wins', async () =
 test('a slow run is flagged against the time-to-signal target', async () => {
   const slow = stepClock(SUCCESS_TARGETS.timeToSignalMs);
   const result = await runDaily(
-    { ticker: 'GEV', agent: new FakeChartAgent(), provider: new FakeProvider(sellJson) },
+    { ticker: 'GEV', agent: new FakeChartAgent(), provider: new FakeProvider(sellJson), dataSource: fakeSource as DataSource },
     { now: slow },
   );
   assert.equal(result.ok, true);
@@ -159,11 +175,12 @@ test('consensus options flow through to the derived signal', async () => {
     ticker: 'GEV',
     agent: new FakeChartAgent(),
     provider: new FakeProvider(twoBuys),
+    dataSource: fakeSource as DataSource,
   });
   assert.equal(strict.ok && strict.report.verdict.signal, 'HOLD');
 
   const loose = await runDaily(
-    { ticker: 'GEV', agent: new FakeChartAgent(), provider: new FakeProvider(twoBuys) },
+    { ticker: 'GEV', agent: new FakeChartAgent(), provider: new FakeProvider(twoBuys), dataSource: fakeSource as DataSource },
     { buyConsensus: 2 },
   );
   assert.equal(loose.ok && loose.report.verdict.signal, 'BUY');

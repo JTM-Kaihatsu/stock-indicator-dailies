@@ -1,5 +1,4 @@
-import type { ComputedLastBar } from './event-oracle.ts';
-import type { IndicatorValues } from './oracle.ts';
+import type { IndicatorValues } from './values.ts';
 
 /**
  * Confirm the computed indicator series matches TradingView's rendering by
@@ -38,7 +37,7 @@ const DEFAULTS: Required<CalibrationTolerances> = {
 };
 
 export function calibrate(
-  computed: ComputedLastBar,
+  computed: IndicatorValues,
   legend: IndicatorValues,
   tolerances: CalibrationTolerances = {},
 ): CalibrationResult {
