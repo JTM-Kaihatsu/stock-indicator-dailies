@@ -49,3 +49,6 @@ Thumbs.db
 
 # Testing / coverage
 /coverage/
+
+# Generated Daily Report HTML (per-run artifacts, embed chart images)
+/report-*.html
