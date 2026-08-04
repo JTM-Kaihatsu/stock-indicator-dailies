@@ -12,6 +12,14 @@ export interface ExpectedStudy {
   key: IndicatorKey;
   label: string;
   legendPattern: RegExp;
+  /**
+   * Legend value titles (the `title` on TradingView's `valueValue` spans) that
+   * must have rendered a live number before the chart is considered ready. This
+   * is what distinguishes a painted study from one whose name is present but
+   * whose plots are still blank. Kept in sync with `calibrate-live.ts`, which
+   * reads the same titles.
+   */
+  valueTitles: readonly string[];
 }
 
 const { macd, slowStochastic, sma } = INDICATOR_PARAMS;
@@ -36,6 +44,7 @@ export const TRADINGVIEW_EXPECTED_STUDIES: readonly ExpectedStudy[] = [
     legendPattern: new RegExp(
       `^MACD(close)?${macd.fastLength}${macd.slowLength}${macd.signalSmoothing}`,
     ),
+    valueTitles: ['MACD', 'Signal line', 'Histogram'],
   },
   {
     key: 'slowStochastic',
@@ -43,11 +52,13 @@ export const TRADINGVIEW_EXPECTED_STUDIES: readonly ExpectedStudy[] = [
     legendPattern: new RegExp(
       `^Stoch${slowStochastic.percentKLength}${slowStochastic.percentKSmoothing}${slowStochastic.percentDSmoothing}`,
     ),
+    valueTitles: ['%K', '%D'],
   },
   {
     key: 'sma',
     label: `SMA (${sma.period})`,
     legendPattern: new RegExp(`^SMA${sma.period}(?!\\d)`),
+    valueTitles: ['MA'],
   },
 ];
 

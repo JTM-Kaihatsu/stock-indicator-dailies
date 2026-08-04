@@ -52,3 +52,6 @@ Thumbs.db
 
 # Generated Daily Report HTML (per-run artifacts, embed chart images)
 /report-*.html
+
+# Handoff / working documents
+*.docx

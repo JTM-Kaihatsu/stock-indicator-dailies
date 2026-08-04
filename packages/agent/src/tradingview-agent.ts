@@ -1,4 +1,4 @@
-import { chromium, type BrowserContext, type Page } from 'playwright';
+import { chromium, type BrowserContext, type Locator, type Page } from 'playwright';
 
 import type { ChartImage } from '@stock-indicator-dailies/shared';
 
@@ -17,6 +17,12 @@ export interface TradingViewChartAgentOptions {
   pacing?: PacingOptions;
   /** Max time to wait for the chart + studies to render. Default 45s. */
   renderTimeoutMs?: number;
+  /**
+   * Raster oversampling for the screenshot. 2 renders at 2× device pixels, so the
+   * tiny oscillator panes (Stochastic especially) carry twice the resolution for
+   * the VLM's fine read — the same chart, sharper. Default 2.
+   */
+  deviceScaleFactor?: number;
 }
 
 /**
@@ -36,6 +42,7 @@ export class TradingViewChartAgent implements ChartAgent {
   readonly #profile: ChartProviderProfile;
   readonly #pacing: PacingOptions;
   readonly #renderTimeoutMs: number;
+  readonly #deviceScaleFactor: number;
 
   constructor(options: TradingViewChartAgentOptions = {}) {
     this.#profileDir = options.profileDir ?? resolveProfileDir();
@@ -43,12 +50,14 @@ export class TradingViewChartAgent implements ChartAgent {
     this.#profile = options.profile ?? TRADINGVIEW;
     this.#pacing = options.pacing ?? pacingFromEnv();
     this.#renderTimeoutMs = options.renderTimeoutMs ?? 45_000;
+    this.#deviceScaleFactor = options.deviceScaleFactor ?? 2;
   }
 
   async acquire(ticker: string): Promise<ChartImage> {
     const context = await chromium.launchPersistentContext(this.#profileDir, {
       headless: this.#headless,
       viewport: { width: 1600, height: 1000 },
+      deviceScaleFactor: this.#deviceScaleFactor,
     });
     try {
       return await this.#capture(context, ticker.toUpperCase());
@@ -90,13 +99,28 @@ export class TradingViewChartAgent implements ChartAgent {
     await pause(this.#pacing);
 
     // Structural validation: every required study must be on the chart with the
-    // expected parameters before the image is allowed anywhere near the VLM.
+    // expected parameters AND have actually rendered its plotted values before the
+    // image is allowed anywhere near the VLM. The name check alone is a prefix
+    // match, so it passes even when the pane is still blank — the value check is
+    // what proves the study painted. On failure we still screenshot, so the
+    // caller can *see* the blank chart that was rejected.
     const validation = await this.#waitForStudies(page);
     if (!validation.ok) {
+      const image = await screenshotChart(chart);
+      if (validation.notRendered.length > 0) {
+        throw new ChartAcquisitionError(
+          'studies-not-rendered',
+          `studies are on the layout but did not finish rendering before the deadline: ` +
+            `${validation.notRendered.join(', ')}. The chart would be captured with blank panes ` +
+            `(the saved image shows the empty state).`,
+          image,
+        );
+      }
       throw new ChartAcquisitionError(
         'chart-not-found',
         `expected studies missing from the layout: ${validation.missing.join(', ')}. ` +
           `Check that your saved layout still has them with the right parameters.`,
+        image,
       );
     }
 
@@ -105,10 +129,12 @@ export class TradingViewChartAgent implements ChartAgent {
     const texts = await readLegendTexts(page);
     const interval = extractIntervalToken(texts);
     if (interval !== this.#profile.interval.displayToken) {
+      const image = await screenshotChart(chart);
       throw new ChartAcquisitionError(
         'wrong-interval',
         `chart is on "${interval ?? 'unknown'}" bars, expected "${this.#profile.interval.displayToken}" — ` +
           `indicators would be computed over the wrong timeframe`,
+        image,
       );
     }
 
@@ -116,17 +142,32 @@ export class TradingViewChartAgent implements ChartAgent {
     return { base64: buffer.toString('base64'), mediaType: 'image/png' };
   }
 
-  /** Poll the legend until every expected study renders (or we give up). */
+  /**
+   * Poll the legend until every expected study is present AND has rendered its
+   * plotted values (or we give up). Both signals are read each tick: the name
+   * strings, and the live per-plot values.
+   */
   async #waitForStudies(page: Page) {
     const deadline = Date.now() + this.#renderTimeoutMs;
     let last = validateStudies([], this.#profile.expectedStudies);
 
     while (Date.now() < deadline) {
-      last = validateStudies(await readLegendTexts(page), this.#profile.expectedStudies);
+      const [texts, values] = await Promise.all([readLegendTexts(page), readLegendValues(page)]);
+      last = validateStudies(texts, this.#profile.expectedStudies, values);
       if (last.ok) return last;
       await page.waitForTimeout(1000);
     }
     return last;
+  }
+}
+
+/** Screenshot the chart element, swallowing failures — for diagnostic capture. */
+async function screenshotChart(chart: Locator): Promise<ChartImage | undefined> {
+  try {
+    const buffer = await chart.screenshot({ type: 'png' });
+    return { base64: buffer.toString('base64'), mediaType: 'image/png' };
+  } catch {
+    return undefined;
   }
 }
 
@@ -153,5 +194,36 @@ export async function readLegendTexts(page: Page): Promise<string[]> {
       .map((el) => (el.textContent ?? '').trim())
       .filter((t) => t.length > 0 && t.length < 80 && /^[A-Za-z]{2,14}/.test(t));
     return Array.from(new Set(texts));
+  });
+}
+
+/**
+ * Read each study's live legend VALUES, keyed by the plot's `title` (e.g.
+ * `MACD`, `Signal line`, `Histogram`, `%K`, `%D`, `MA`). A study that is on the
+ * layout but has not painted yet shows no value here — which is how we tell a
+ * rendered chart from a blank one. Mirrors `calibrate-live.ts`'s extraction.
+ */
+export async function readLegendValues(page: Page): Promise<Record<string, number>> {
+  return page.evaluate(() => {
+    const doc = (
+      globalThis as unknown as {
+        document: {
+          querySelectorAll(selector: string): ArrayLike<{
+            getAttribute(name: string): string | null;
+            textContent: string | null;
+          }>;
+        };
+      }
+    ).document;
+
+    // TradingView renders negatives with the Unicode minus U+2212; normalize it.
+    const parse = (s: string) => Number(s.replace(/−/g, '-').replace(/[^0-9.\-]/g, ''));
+    const values: Record<string, number> = {};
+    for (const el of Array.from(doc.querySelectorAll('[class*="valueValue"]'))) {
+      const title = el.getAttribute('title');
+      const num = parse(el.textContent ?? '');
+      if (title && Number.isFinite(num)) values[title] = num;
+    }
+    return values;
   });
 }

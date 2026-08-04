@@ -50,6 +50,13 @@ export const STOCHASTIC_THRESHOLDS = {
 } as const;
 
 /**
+ * When a MACD cross happens within this fraction of the recent MACD range
+ * from zero, treat it as qualified regardless of which side of zero it lands
+ * on. Near-zero crosses are momentum-neutral — gating on sign is noise.
+ */
+export const MACD_ZERO_DEADZONE_PCT = 0.05;
+
+/**
  * How the chart is framed.
  *
  * `interval` is the load-bearing part: every indicator parameter above is
