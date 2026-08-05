@@ -1,0 +1,23 @@
+{
+  "name": "@stock-indicator-dailies/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Next.js frontend for the Stock Indicator Dailies report.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "next": "^15.3.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "@stock-indicator-dailies/shared": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0"
+  }
+}

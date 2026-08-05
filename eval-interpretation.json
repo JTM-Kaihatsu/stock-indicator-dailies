@@ -1,0 +1,1206 @@
+{
+  "results": [
+    {
+      "ticker": "NVDA",
+      "ok": true,
+      "comparisons": [
+        {
+          "ticker": "NVDA",
+          "indicator": "macd",
+          "vlm": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 3,
+            "rationale": "MACD crossed below signal above zero line recently, histogram turning red"
+          },
+          "fetched": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 2
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 1,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "NVDA",
+          "indicator": "slowStochastic",
+          "vlm": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 3,
+            "rationale": "%K crossed below %D near 60-70 zone, not overbought >80"
+          },
+          "fetched": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 2
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 1,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "NVDA",
+          "indicator": "sma",
+          "vlm": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 2,
+            "rationale": "Price dropped sharply below 10-day SMA, SMA now rolling over/flattening down"
+          },
+          "fetched": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 3
+          },
+          "directionMatch": true,
+          "vlmSignal": "SELL",
+          "fetchedSignal": "SELL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 1,
+          "qualifiedMatch": true
+        }
+      ],
+      "vlm": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 3,
+          "rationale": "MACD crossed below signal above zero line recently, histogram turning red"
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 3,
+          "rationale": "%K crossed below %D near 60-70 zone, not overbought >80"
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 2,
+          "rationale": "Price dropped sharply below 10-day SMA, SMA now rolling over/flattening down"
+        }
+      ],
+      "fetched": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 2
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 2
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 3
+        }
+      ],
+      "visibleRange": "Jan 2026 to Aug 2026",
+      "captureMs": 5651,
+      "analyzeMs": 9709,
+      "totalMs": 15360,
+      "withinTarget": false
+    },
+    {
+      "ticker": "AAPL",
+      "ok": true,
+      "comparisons": [
+        {
+          "ticker": "AAPL",
+          "indicator": "macd",
+          "vlm": {
+            "indicator": "macd",
+            "crossover": "BULLISH",
+            "qualified": false,
+            "barsAgo": 8,
+            "rationale": "MACD crossed above signal in early July while already above zero line"
+          },
+          "fetched": {
+            "indicator": "macd",
+            "crossover": "BULLISH",
+            "qualified": false,
+            "barsAgo": 2
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 6,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "AAPL",
+          "indicator": "slowStochastic",
+          "vlm": {
+            "indicator": "slowStochastic",
+            "crossover": "BULLISH",
+            "qualified": false,
+            "barsAgo": 10,
+            "rationale": "%K crossed above %D from deep oversold near 20 in late June/early July, now 81.9 vs 81.06"
+          },
+          "fetched": {
+            "indicator": "slowStochastic",
+            "crossover": "BULLISH",
+            "qualified": false,
+            "barsAgo": 2
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 8,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "AAPL",
+          "indicator": "sma",
+          "vlm": {
+            "indicator": "sma",
+            "crossover": "BULLISH",
+            "qualified": true,
+            "barsAgo": 9,
+            "rationale": "Price crossed above rising 10-day SMA in early July after dip, continuing higher"
+          },
+          "fetched": {
+            "indicator": "sma",
+            "crossover": "BULLISH",
+            "qualified": true,
+            "barsAgo": 3
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "BUY",
+          "signalMatch": false,
+          "bothCrossed": true,
+          "barsAgoGap": 6,
+          "qualifiedMatch": true
+        }
+      ],
+      "vlm": [
+        {
+          "indicator": "macd",
+          "crossover": "BULLISH",
+          "qualified": false,
+          "barsAgo": 8,
+          "rationale": "MACD crossed above signal in early July while already above zero line"
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BULLISH",
+          "qualified": false,
+          "barsAgo": 10,
+          "rationale": "%K crossed above %D from deep oversold near 20 in late June/early July, now 81.9 vs 81.06"
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BULLISH",
+          "qualified": true,
+          "barsAgo": 9,
+          "rationale": "Price crossed above rising 10-day SMA in early July after dip, continuing higher"
+        }
+      ],
+      "fetched": [
+        {
+          "indicator": "macd",
+          "crossover": "BULLISH",
+          "qualified": false,
+          "barsAgo": 2
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BULLISH",
+          "qualified": false,
+          "barsAgo": 2
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BULLISH",
+          "qualified": true,
+          "barsAgo": 3
+        }
+      ],
+      "visibleRange": "Jan 2026 to Aug 2026",
+      "captureMs": 2659,
+      "analyzeMs": 4301,
+      "totalMs": 6960,
+      "withinTarget": true
+    },
+    {
+      "ticker": "GOOG",
+      "ok": true,
+      "comparisons": [
+        {
+          "ticker": "GOOG",
+          "indicator": "macd",
+          "vlm": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 12,
+            "rationale": "MACD crossed below signal while both above zero line, still below signal now (-6.92 vs -5.60)"
+          },
+          "fetched": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 8
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 4,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "GOOG",
+          "indicator": "slowStochastic",
+          "vlm": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 3,
+            "rationale": "%K crossed below %D around mid-range, not from overbought >80, K=19.48 D=14.14"
+          },
+          "fetched": {
+            "indicator": "slowStochastic",
+            "crossover": "BULLISH",
+            "qualified": true,
+            "barsAgo": 1
+          },
+          "directionMatch": false,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "BUY",
+          "signalMatch": false,
+          "bothCrossed": true,
+          "barsAgoGap": 2,
+          "qualifiedMatch": false
+        },
+        {
+          "ticker": "GOOG",
+          "indicator": "sma",
+          "vlm": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 2,
+            "rationale": "Price dropped below the 10-day SMA recently, SMA slope turning down"
+          },
+          "fetched": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 9
+          },
+          "directionMatch": true,
+          "vlmSignal": "SELL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": false,
+          "bothCrossed": true,
+          "barsAgoGap": 7,
+          "qualifiedMatch": true
+        }
+      ],
+      "vlm": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 12,
+          "rationale": "MACD crossed below signal while both above zero line, still below signal now (-6.92 vs -5.60)"
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 3,
+          "rationale": "%K crossed below %D around mid-range, not from overbought >80, K=19.48 D=14.14"
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 2,
+          "rationale": "Price dropped below the 10-day SMA recently, SMA slope turning down"
+        }
+      ],
+      "fetched": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 8
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BULLISH",
+          "qualified": true,
+          "barsAgo": 1
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 9
+        }
+      ],
+      "visibleRange": "Jan 2026 to Aug 2026",
+      "captureMs": 2800,
+      "analyzeMs": 4688,
+      "totalMs": 7488,
+      "withinTarget": true
+    },
+    {
+      "ticker": "META",
+      "ok": false,
+      "error": "capture: wrong-interval — chart is on \"M\" bars, expected \"1D\" — indicators would be computed over the wrong timeframe",
+      "captureMs": 2290,
+      "analyzeMs": 0,
+      "totalMs": 2290,
+      "withinTarget": false
+    },
+    {
+      "ticker": "AVGO",
+      "ok": true,
+      "comparisons": [
+        {
+          "ticker": "AVGO",
+          "indicator": "macd",
+          "vlm": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 2,
+            "rationale": "MACD crossed below signal recently, both still above zero"
+          },
+          "fetched": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 0
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 2,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "AVGO",
+          "indicator": "slowStochastic",
+          "vlm": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 2,
+            "rationale": "%K crossed below %D near 56/48, not in overbought zone"
+          },
+          "fetched": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 1
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 1,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "AVGO",
+          "indicator": "sma",
+          "vlm": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 1,
+            "rationale": "Price dropped sharply below the 10-day SMA, which is turning down"
+          },
+          "fetched": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 3
+          },
+          "directionMatch": true,
+          "vlmSignal": "SELL",
+          "fetchedSignal": "SELL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 2,
+          "qualifiedMatch": true
+        }
+      ],
+      "vlm": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 2,
+          "rationale": "MACD crossed below signal recently, both still above zero"
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 2,
+          "rationale": "%K crossed below %D near 56/48, not in overbought zone"
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 1,
+          "rationale": "Price dropped sharply below the 10-day SMA, which is turning down"
+        }
+      ],
+      "fetched": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 0
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 1
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 3
+        }
+      ],
+      "visibleRange": "Dec 2025 to Aug 2026",
+      "captureMs": 2203,
+      "analyzeMs": 4357,
+      "totalMs": 6560,
+      "withinTarget": true
+    },
+    {
+      "ticker": "INTC",
+      "ok": true,
+      "comparisons": [
+        {
+          "ticker": "INTC",
+          "indicator": "macd",
+          "vlm": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 18,
+            "rationale": "MACD crossed below signal above zero line in late June, both now negative and declining"
+          },
+          "fetched": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 19
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 1,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "INTC",
+          "indicator": "slowStochastic",
+          "vlm": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 3,
+            "rationale": "%K crossed below %D near 80 from overbought peak, now falling toward 13, cross itself occurred below 80 not qualifying as overbought cross"
+          },
+          "fetched": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 1
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 2,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "INTC",
+          "indicator": "sma",
+          "vlm": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 12,
+            "rationale": "Price crossed below the 10-day SMA in mid-July with SMA now sloping down"
+          },
+          "fetched": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 5
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 7,
+          "qualifiedMatch": true
+        }
+      ],
+      "vlm": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 18,
+          "rationale": "MACD crossed below signal above zero line in late June, both now negative and declining"
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 3,
+          "rationale": "%K crossed below %D near 80 from overbought peak, now falling toward 13, cross itself occurred below 80 not qualifying as overbought cross"
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 12,
+          "rationale": "Price crossed below the 10-day SMA in mid-July with SMA now sloping down"
+        }
+      ],
+      "fetched": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 19
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 1
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 5
+        }
+      ],
+      "visibleRange": "Jan 2026 to Aug 2026",
+      "captureMs": 2243,
+      "analyzeMs": 4711,
+      "totalMs": 6954,
+      "withinTarget": true
+    },
+    {
+      "ticker": "NFLX",
+      "ok": true,
+      "comparisons": [
+        {
+          "ticker": "NFLX",
+          "indicator": "macd",
+          "vlm": {
+            "indicator": "macd",
+            "crossover": "BULLISH",
+            "qualified": true,
+            "barsAgo": 3,
+            "rationale": "MACD line crossed above signal below the zero line recently"
+          },
+          "fetched": {
+            "indicator": "macd",
+            "crossover": "BULLISH",
+            "qualified": true,
+            "barsAgo": 2
+          },
+          "directionMatch": true,
+          "vlmSignal": "BUY",
+          "fetchedSignal": "BUY",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 1,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "NFLX",
+          "indicator": "slowStochastic",
+          "vlm": {
+            "indicator": "slowStochastic",
+            "crossover": "BULLISH",
+            "qualified": false,
+            "barsAgo": 2,
+            "rationale": "%K crossed above %D but from mid-range (~40s), not oversold"
+          },
+          "fetched": {
+            "indicator": "slowStochastic",
+            "crossover": "BULLISH",
+            "qualified": false,
+            "barsAgo": 3
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 1,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "NFLX",
+          "indicator": "sma",
+          "vlm": {
+            "indicator": "sma",
+            "crossover": "BULLISH",
+            "qualified": false,
+            "barsAgo": 2,
+            "rationale": "Price crossed above SMA but SMA still sloping down"
+          },
+          "fetched": {
+            "indicator": "sma",
+            "crossover": "BULLISH",
+            "qualified": false,
+            "barsAgo": 1
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 1,
+          "qualifiedMatch": true
+        }
+      ],
+      "vlm": [
+        {
+          "indicator": "macd",
+          "crossover": "BULLISH",
+          "qualified": true,
+          "barsAgo": 3,
+          "rationale": "MACD line crossed above signal below the zero line recently"
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BULLISH",
+          "qualified": false,
+          "barsAgo": 2,
+          "rationale": "%K crossed above %D but from mid-range (~40s), not oversold"
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BULLISH",
+          "qualified": false,
+          "barsAgo": 2,
+          "rationale": "Price crossed above SMA but SMA still sloping down"
+        }
+      ],
+      "fetched": [
+        {
+          "indicator": "macd",
+          "crossover": "BULLISH",
+          "qualified": true,
+          "barsAgo": 2
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BULLISH",
+          "qualified": false,
+          "barsAgo": 3
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BULLISH",
+          "qualified": false,
+          "barsAgo": 1
+        }
+      ],
+      "visibleRange": "Jan 2026 to Aug 2026",
+      "captureMs": 3068,
+      "analyzeMs": 4045,
+      "totalMs": 7113,
+      "withinTarget": true
+    },
+    {
+      "ticker": "GEV",
+      "ok": true,
+      "comparisons": [
+        {
+          "ticker": "GEV",
+          "indicator": "macd",
+          "vlm": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 8,
+            "rationale": "MACD crossed below signal above zero line around mid-July, now -13.3 vs -19.6, both extending down"
+          },
+          "fetched": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 15
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 7,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "GEV",
+          "indicator": "slowStochastic",
+          "vlm": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 5,
+            "rationale": "%K crossed below %D from overbought region near 90, now at 17.7 vs 19.9, cross occurred above 80 zone not in oversold"
+          },
+          "fetched": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 5
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 0,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "GEV",
+          "indicator": "sma",
+          "vlm": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 3,
+            "rationale": "Price fell sharply through the 10-day SMA, SMA now sloping downward, close 900 vs MA 1012"
+          },
+          "fetched": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 5
+          },
+          "directionMatch": true,
+          "vlmSignal": "SELL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": false,
+          "bothCrossed": true,
+          "barsAgoGap": 2,
+          "qualifiedMatch": true
+        }
+      ],
+      "vlm": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 8,
+          "rationale": "MACD crossed below signal above zero line around mid-July, now -13.3 vs -19.6, both extending down"
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 5,
+          "rationale": "%K crossed below %D from overbought region near 90, now at 17.7 vs 19.9, cross occurred above 80 zone not in oversold"
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 3,
+          "rationale": "Price fell sharply through the 10-day SMA, SMA now sloping downward, close 900 vs MA 1012"
+        }
+      ],
+      "fetched": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 15
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 5
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 5
+        }
+      ],
+      "visibleRange": "Jan 2026 to Aug 2026",
+      "captureMs": 3030,
+      "analyzeMs": 5697,
+      "totalMs": 8727,
+      "withinTarget": true
+    },
+    {
+      "ticker": "CEG",
+      "ok": true,
+      "comparisons": [
+        {
+          "ticker": "CEG",
+          "indicator": "macd",
+          "vlm": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 3,
+            "rationale": "MACD line crossed below signal near recent peak above zero line"
+          },
+          "fetched": {
+            "indicator": "macd",
+            "crossover": "BULLISH",
+            "qualified": true,
+            "barsAgo": 13
+          },
+          "directionMatch": false,
+          "vlmSignal": "SELL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": false,
+          "bothCrossed": true,
+          "barsAgoGap": 10,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "CEG",
+          "indicator": "slowStochastic",
+          "vlm": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 2,
+            "rationale": "%K crossed below %D from overbought region above 80"
+          },
+          "fetched": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 1
+          },
+          "directionMatch": true,
+          "vlmSignal": "SELL",
+          "fetchedSignal": "SELL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 1,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "CEG",
+          "indicator": "sma",
+          "vlm": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 1,
+            "rationale": "Close crossed below 10-day SMA which is sloping down"
+          },
+          "fetched": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 1
+          },
+          "directionMatch": true,
+          "vlmSignal": "SELL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": false,
+          "bothCrossed": true,
+          "barsAgoGap": 0,
+          "qualifiedMatch": false
+        }
+      ],
+      "vlm": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 3,
+          "rationale": "MACD line crossed below signal near recent peak above zero line"
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 2,
+          "rationale": "%K crossed below %D from overbought region above 80"
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 1,
+          "rationale": "Close crossed below 10-day SMA which is sloping down"
+        }
+      ],
+      "fetched": [
+        {
+          "indicator": "macd",
+          "crossover": "BULLISH",
+          "qualified": true,
+          "barsAgo": 13
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 1
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 1
+        }
+      ],
+      "visibleRange": "Jan 2026 to Aug 2026",
+      "captureMs": 3379,
+      "analyzeMs": 4498,
+      "totalMs": 7877,
+      "withinTarget": true
+    },
+    {
+      "ticker": "VST",
+      "ok": true,
+      "comparisons": [
+        {
+          "ticker": "VST",
+          "indicator": "macd",
+          "vlm": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 2,
+            "rationale": "MACD (-1.95) crossed below Signal (-2.22) recently but still near zero/slightly positive territory, not clearly above zero"
+          },
+          "fetched": {
+            "indicator": "macd",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 1
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 1,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "VST",
+          "indicator": "slowStochastic",
+          "vlm": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 1,
+            "rationale": "%K (44.83) crossed below %D (60.90) from mid-range, not overbought >80 at cross point"
+          },
+          "fetched": {
+            "indicator": "slowStochastic",
+            "crossover": "BEARISH",
+            "qualified": false,
+            "barsAgo": 1
+          },
+          "directionMatch": true,
+          "vlmSignal": "NEUTRAL",
+          "fetchedSignal": "NEUTRAL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 0,
+          "qualifiedMatch": true
+        },
+        {
+          "ticker": "VST",
+          "indicator": "sma",
+          "vlm": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 0,
+            "rationale": "Price plunged sharply below the 10-day SMA on the last bar, SMA now sloping down"
+          },
+          "fetched": {
+            "indicator": "sma",
+            "crossover": "BEARISH",
+            "qualified": true,
+            "barsAgo": 2
+          },
+          "directionMatch": true,
+          "vlmSignal": "SELL",
+          "fetchedSignal": "SELL",
+          "signalMatch": true,
+          "bothCrossed": true,
+          "barsAgoGap": 2,
+          "qualifiedMatch": true
+        }
+      ],
+      "vlm": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 2,
+          "rationale": "MACD (-1.95) crossed below Signal (-2.22) recently but still near zero/slightly positive territory, not clearly above zero"
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 1,
+          "rationale": "%K (44.83) crossed below %D (60.90) from mid-range, not overbought >80 at cross point"
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 0,
+          "rationale": "Price plunged sharply below the 10-day SMA on the last bar, SMA now sloping down"
+        }
+      ],
+      "fetched": [
+        {
+          "indicator": "macd",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 1
+        },
+        {
+          "indicator": "slowStochastic",
+          "crossover": "BEARISH",
+          "qualified": false,
+          "barsAgo": 1
+        },
+        {
+          "indicator": "sma",
+          "crossover": "BEARISH",
+          "qualified": true,
+          "barsAgo": 2
+        }
+      ],
+      "visibleRange": "Jan 2026 to Aug 2026",
+      "captureMs": 2668,
+      "analyzeMs": 5707,
+      "totalMs": 8375,
+      "withinTarget": true
+    }
+  ],
+  "summary": {
+    "comparisons": 27,
+    "directionAgreement": 0.9259259259259259,
+    "signalAgreement": 0.7777777777777778,
+    "bothCrossed": 27,
+    "qualifiedAgreement": 0.9259259259259259,
+    "barsAgo": {
+      "n": 27,
+      "mean": 2.8518518518518516,
+      "median": 2,
+      "max": 10
+    },
+    "perIndicator": {
+      "macd": {
+        "comparisons": 9,
+        "directionAgreement": 0.8888888888888888,
+        "signalAgreement": 0.8888888888888888,
+        "bothCrossed": 9,
+        "qualifiedAgreement": 1,
+        "barsAgo": {
+          "n": 9,
+          "mean": 3.6666666666666665,
+          "median": 2,
+          "max": 10
+        }
+      },
+      "slowStochastic": {
+        "comparisons": 9,
+        "directionAgreement": 0.8888888888888888,
+        "signalAgreement": 0.8888888888888888,
+        "bothCrossed": 9,
+        "qualifiedAgreement": 0.8888888888888888,
+        "barsAgo": {
+          "n": 9,
+          "mean": 1.7777777777777777,
+          "median": 1,
+          "max": 8
+        }
+      },
+      "sma": {
+        "comparisons": 9,
+        "directionAgreement": 1,
+        "signalAgreement": 0.5555555555555556,
+        "bothCrossed": 9,
+        "qualifiedAgreement": 0.8888888888888888,
+        "barsAgo": {
+          "n": 9,
+          "mean": 3.111111111111111,
+          "median": 2,
+          "max": 7
+        }
+      }
+    }
+  },
+  "timing": {
+    "medianTotalMs": 7488,
+    "maxTotalMs": 15360,
+    "withinTarget": 8
+  }
+}

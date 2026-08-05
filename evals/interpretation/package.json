@@ -9,11 +9,16 @@
   },
   "scripts": {
     "test": "node --test \"test/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "eval": "node --env-file-if-exists=../../.env.local run-eval.ts",
+    "capture-images": "node capture-images.ts",
+    "analyze-saved": "node --env-file-if-exists=../../.env.local analyze-saved.ts",
+    "score-truth": "node score-truth.ts"
   },
   "dependencies": {
     "@stock-indicator-dailies/shared": "*",
     "@stock-indicator-dailies/agent": "*",
-    "@stock-indicator-dailies/indicators": "*"
+    "@stock-indicator-dailies/indicators": "*",
+    "@stock-indicator-dailies/vlm": "*"
   }
 }

@@ -41,6 +41,33 @@ test('system prompt tells the model to treat whipsaws as NONE', () => {
   assert.match(p, /whipsaw|chopping|noise/i);
 });
 
+test('system prompt grounds the read in the on-chart legend numbers', () => {
+  const p = buildSystemPrompt();
+  // It must tell the model to read the labeled values first...
+  assert.match(p, /legend numbers first/i);
+  // ...and name the labels it should compare, so %K-vs-%D posture anchors direction.
+  for (const label of ['%K', '%D', 'MACD', 'Signal line', 'MA']) {
+    assert.ok(p.includes(label), `missing legend label ${label}`);
+  }
+});
+
+test('system prompt maps blue to the faster line and orange to the signal line', () => {
+  const p = buildSystemPrompt();
+  assert.match(p, /BLUE line is always the FASTER line/i);
+  assert.match(p, /ORANGE line is always the SLOWER signal line/i);
+});
+
+test('system prompt forbids anticipating an incomplete cross', () => {
+  const p = buildSystemPrompt();
+  assert.match(p, /approaching|converging|not yet happened|imminent/i);
+});
+
+test('system prompt states the price pane is a close line, not candlesticks', () => {
+  const p = buildSystemPrompt();
+  assert.match(p, /close line/i);
+  assert.match(p, /not candlesticks/i);
+});
+
 test('user instruction upper-cases the ticker and cites the window', () => {
   const i = buildUserInstruction('nvda');
   assert.ok(i.includes('NVDA'));

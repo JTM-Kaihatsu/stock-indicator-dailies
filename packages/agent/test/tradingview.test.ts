@@ -100,6 +100,45 @@ test('normalizeLegend strips whitespace', () => {
   assert.equal(normalizeLegend('  Stoch 14 5 3  70.13 '), 'Stoch145370.13');
 });
 
+/** The value titles TradingView renders per study once the plots have painted. */
+const RENDERED_VALUES = {
+  MACD: 0.2454,
+  'Signal line': 1.1,
+  Histogram: -0.85,
+  '%K': 70.13,
+  '%D': 69.18,
+  MA: 207.45,
+};
+
+test('with a values map, fully rendered studies validate', () => {
+  const result = validateStudies(REAL_LEGEND, TRADINGVIEW_EXPECTED_STUDIES, RENDERED_VALUES);
+  assert.equal(result.ok, true, `missing: ${result.missing.join(', ')} notRendered: ${result.notRendered.join(', ')}`);
+  assert.deepEqual(result.notRendered, []);
+});
+
+test('named-but-unrendered studies are notRendered, not missing (the blank-pane bug)', () => {
+  // Names present (prefix match passes) but NO plotted values yet — this is the
+  // VST/GOOG blank-oscillator failure the name-only check used to wave through.
+  const result = validateStudies(REAL_LEGEND, TRADINGVIEW_EXPECTED_STUDIES, {});
+  assert.equal(result.ok, false);
+  assert.equal(result.missing.length, 0, 'names were found');
+  assert.equal(result.notRendered.length, 3, 'all three have no rendered values');
+});
+
+test('a study missing just one plotted value is notRendered', () => {
+  const partial = { ...RENDERED_VALUES } as Record<string, number>;
+  delete partial['%D']; // Stochastic half-painted
+  const result = validateStudies(REAL_LEGEND, TRADINGVIEW_EXPECTED_STUDIES, partial);
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.notRendered.map((l) => l.slice(0, 5)), ['Stoch']);
+});
+
+test('without a values map, validation is name-only (backward compatible)', () => {
+  const result = validateStudies(REAL_LEGEND, TRADINGVIEW_EXPECTED_STUDIES);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.notRendered, []);
+});
+
 test('whitespace-separated legends still validate', () => {
   const result = validateStudies(
     ['SMA 10 close 207.45', 'MACD close 8 17 9 0.24', 'Stoch 14 5 3 70.13'],

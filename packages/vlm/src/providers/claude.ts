@@ -10,6 +10,16 @@ export const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5';
  * verdict; 1024 truncated the JSON once thinking + three fuller rationales grew.
  */
 export const DEFAULT_MAX_TOKENS = 4096;
+/**
+ * Effort caps how deep adaptive thinking (and overall token spend) goes. Sonnet 5
+ * defaults to `high`, which ran its adaptive thinking nearly unbounded and pushed
+ * time-to-signal to ~30s in the first eval. `budget_tokens` is rejected on Sonnet
+ * 5 (400) — effort is the supported lever. We keep thinking ON (an independent
+ * read still benefits from some reasoning) but bound it. `low` is the default; the
+ * eval measures the accuracy cost against the calibrated fetched read.
+ */
+export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export const DEFAULT_EFFORT: EffortLevel = 'low';
 
 /**
  * The slice of the Anthropic SDK this provider depends on. Declaring it as an
@@ -26,6 +36,9 @@ interface AnthropicCreateBody {
   max_tokens: number;
   system?: string;
   messages: Array<{ role: 'user'; content: AnthropicRequestBlock[] }>;
+  /** Adaptive thinking, kept on but bounded by `output_config.effort`. */
+  thinking?: { type: 'adaptive' | 'disabled' };
+  output_config?: { effort: EffortLevel };
 }
 
 type AnthropicRequestBlock =
@@ -44,6 +57,15 @@ export interface ClaudeVlmProviderOptions {
   model?: string;
   /** Defaults to {@link DEFAULT_MAX_TOKENS}. */
   maxTokens?: number;
+  /** Adaptive-thinking / spend cap. Defaults to {@link DEFAULT_EFFORT} (`low`). */
+  effort?: EffortLevel;
+  /**
+   * Whether adaptive thinking runs at all. Defaults to `adaptive` — we cap it
+   * with `effort` rather than turning it off, since a chart read still benefits
+   * from some reasoning and disabling thinking on Sonnet 5 has known failure
+   * modes (reasoning leaking into the response text).
+   */
+  thinking?: 'adaptive' | 'disabled';
   /** Inject a client (or fake) instead of constructing a real SDK instance. */
   client?: AnthropicLike;
 }
@@ -58,10 +80,14 @@ export class ClaudeVlmProvider implements VlmProvider {
   readonly #client: AnthropicLike;
   readonly #model: string;
   readonly #maxTokens: number;
+  readonly #effort: EffortLevel;
+  readonly #thinking: 'adaptive' | 'disabled';
 
   constructor(options: ClaudeVlmProviderOptions = {}) {
     this.#model = options.model ?? DEFAULT_CLAUDE_MODEL;
     this.#maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
+    this.#effort = options.effort ?? DEFAULT_EFFORT;
+    this.#thinking = options.thinking ?? 'adaptive';
     this.#client =
       options.client ??
       (new Anthropic({ apiKey: options.apiKey ?? process.env.VLM_API_KEY }) as unknown as AnthropicLike);
@@ -71,6 +97,8 @@ export class ClaudeVlmProvider implements VlmProvider {
     const response = await this.#client.messages.create({
       model: this.#model,
       max_tokens: this.#maxTokens,
+      thinking: { type: this.#thinking },
+      output_config: { effort: this.#effort },
       system: request.systemPrompt,
       messages: [
         {
