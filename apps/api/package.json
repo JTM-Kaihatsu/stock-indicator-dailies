@@ -1,0 +1,20 @@
+{
+  "name": "@stock-indicator-dailies/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Hono API wrapping the runDaily pipeline for the web frontend.",
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env.local src/server.ts",
+    "dev": "node --watch --env-file-if-exists=../../.env.local src/server.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "hono": "^4.7.0",
+    "@hono/node-server": "^1.14.0",
+    "@stock-indicator-dailies/daily": "*",
+    "@stock-indicator-dailies/shared": "*",
+    "@stock-indicator-dailies/agent": "*",
+    "@stock-indicator-dailies/vlm": "*"
+  }
+}

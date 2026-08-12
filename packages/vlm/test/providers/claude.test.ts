@@ -70,6 +70,22 @@ test('model is overridable', async () => {
   assert.equal((lastBody() as any).model, 'claude-opus-4-8');
 });
 
+test('caps adaptive thinking with a low effort by default', async () => {
+  const { client, lastBody } = fakeClient([{ type: 'text', text: '{}' }]);
+  await new ClaudeVlmProvider({ client }).complete(REQUEST);
+  const body = lastBody() as any;
+  assert.deepEqual(body.thinking, { type: 'adaptive' });
+  assert.deepEqual(body.output_config, { effort: 'low' });
+});
+
+test('effort and thinking are overridable', async () => {
+  const { client, lastBody } = fakeClient([{ type: 'text', text: '{}' }]);
+  await new ClaudeVlmProvider({ client, effort: 'medium', thinking: 'disabled' }).complete(REQUEST);
+  const body = lastBody() as any;
+  assert.equal(body.thinking.type, 'disabled');
+  assert.equal(body.output_config.effort, 'medium');
+});
+
 test('plugs into analyzeChart end-to-end', async () => {
   const verdictJson = JSON.stringify({
     ticker: 'NVDA',

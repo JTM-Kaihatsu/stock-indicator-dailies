@@ -32,10 +32,47 @@ node evals/interpretation/calibrate-live.ts GEV
   ...  calibration: ✅ PASS
 ```
 
-## Scoring
+## Two independent reads — neither is ground truth
 
-`score.ts` compares predicted vs. oracle per-indicator signals and aggregates
-accuracy (overall and per indicator), listing every disagreement.
+The eval surfaces **two reads per chart** and does NOT declare a winner:
+
+- the **VLM** read (the AI second opinion), and
+- the **fetched** read, computed from Yahoo price data (calibrated to
+  TradingView to <0.003 — see calibration above).
+
+Both are shown to the user (and to the FE); the human labels the real answer.
+So the eval reports **agreement** between the two reads, not accuracy against a
+reference.
+
+## Comparing the reads
+
+`score.ts` compares per-indicator **signals** (BUY/SELL/NEUTRAL) and aggregates.
+
+`fact-score.ts` compares one level deeper — the raw **facts** each read carries:
+crossover *direction*, *barsAgo*, and the *qualified* flag, plus the derived
+signal. This attributes a disagreement to perception (direction), timing
+(barsAgo gap), or the judgment layer (recency). It exists because the GEV
+disagreement was a pure barsAgo gap (VLM 2d vs fetched 5d) that straddled the
+3-bar recency window — invisible to signal-only comparison.
+
+## The harness
+
+`harness.ts` (`runEval`) is the batch runner: for each ticker it captures the
+chart, runs the VLM, computes the fetched read, and records both plus their
+agreement. Every dependency is injected, so it runs offline in tests with the
+fake agent + a stub provider. `report.ts` renders a terminal summary;
+`csv.ts` exports a per-(ticker, indicator) sheet with both reads side by side
+and blank `truth_*` columns for hand-labeling.
+
+Live run (drives a real browser, one billed model call per ticker):
+
+```bash
+npm run eval -w @stock-indicator-dailies/eval-interpretation -- GEV NVDA AAPL
+```
+
+Tickers are required — a bare run refuses rather than silently billing. Writes
+`eval-interpretation.json` (full record) and `eval-interpretation.csv` (open in
+Excel, fill the `truth_*` columns to label ground truth).
 
 ## Superseded
 
@@ -45,9 +82,10 @@ calibration) but is not used to grade the event model.
 
 ## Still to build
 
-The harness: capture N charts (agent) + fetch their OHLC + run the VLM + score,
-run with thinking on vs off to settle the accuracy/speed tradeoff. That part
-makes live, billed model calls.
+- A curated ticker set to run against (currently the caller passes them on the
+  command line).
+- A thinking-on vs. thinking-off comparison mode, to settle the accuracy/speed
+  tradeoff from the same harness.
 
 ## Develop
 

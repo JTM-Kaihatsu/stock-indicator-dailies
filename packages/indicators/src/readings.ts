@@ -1,5 +1,6 @@
 import {
   INDICATOR_PARAMS,
+  MACD_ZERO_DEADZONE_PCT,
   STOCHASTIC_THRESHOLDS,
   type IndicatorReading,
 } from '@stock-indicator-dailies/shared';
@@ -34,14 +35,22 @@ export function computeReadings(bars: readonly Bar[]): IndicatorReading[] {
   const { macd, sma: smaP, slowStochastic } = INDICATOR_PARAMS;
 
   // --- MACD: qualified if the cross was below zero (bullish) / above zero (bearish) ---
+  // Dead zone: if the cross is within MACD_ZERO_DEADZONE_PCT of the recent
+  // range from zero, it's too close to call — treat as qualified either way.
   const macdS = macdSeries(closes, macd.fastLength, macd.slowLength, macd.signalSmoothing);
   const macdX = detectCrossover(macdS.macd, macdS.signal);
+  const macdValAtCross = macdX.direction !== 'NONE' ? macdS.macd[macdX.atIndex]! : 0;
+  const macdRange = Math.max(...macdS.macd.filter((v) => !Number.isNaN(v))) -
+    Math.min(...macdS.macd.filter((v) => !Number.isNaN(v)));
+  const inDeadZone = macdRange > 0 && Math.abs(macdValAtCross) / macdRange < MACD_ZERO_DEADZONE_PCT;
   const macdQualified =
-    macdX.direction === 'BULLISH'
-      ? macdS.macd[macdX.atIndex]! < 0
-      : macdX.direction === 'BEARISH'
-        ? macdS.macd[macdX.atIndex]! > 0
-        : false;
+    macdX.direction === 'NONE'
+      ? false
+      : inDeadZone
+        ? true
+        : macdX.direction === 'BULLISH'
+          ? macdValAtCross < 0
+          : macdValAtCross > 0;
 
   // --- Slow Stochastic: qualified if the cross was in oversold / overbought ---
   const stoch = stochasticSeries(

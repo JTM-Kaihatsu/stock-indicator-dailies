@@ -61,4 +61,11 @@ for (const w of report.warnings) console.log(`  ⚠️  ${w}`);
 const outBase = path.resolve(process.env.INIT_CWD ?? process.cwd(), saveTo ?? `report-${ticker.toLowerCase()}.html`);
 writeFileSync(outBase, renderDailyReportHtml(report));
 console.log(`\n  report -> ${outBase}`);
+
+// Save the source chart alongside the report. The capture is scoped to the chart
+// container (no watchlist / account chrome), so it carries no account PII — this
+// is the exact image the reads were derived from, kept as evidence.
+const imgPath = outBase.replace(/\.html?$/i, '') + '.png';
+writeFileSync(imgPath, Buffer.from(report.image.base64, 'base64'));
+console.log(`  chart  -> ${imgPath}`);
 console.log();

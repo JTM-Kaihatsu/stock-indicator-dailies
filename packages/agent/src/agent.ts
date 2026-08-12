@@ -7,6 +7,12 @@ export type ChartAcquisitionFailure =
   /** Expected chart elements missing — DOM likely shifted (see PRD: DOM volatility). */
   | 'chart-not-found'
   /**
+   * The studies are on the layout (their legend names match) but their plotted
+   * values never rendered before the deadline — the chart would be captured with
+   * blank oscillator panes. A rendering/timing failure, distinct from missing.
+   */
+  | 'studies-not-rendered'
+  /**
    * Chart loaded on the wrong bar interval (e.g. hourly instead of daily), which
    * would compute every indicator over the wrong timeframe.
    */
@@ -20,10 +26,17 @@ export type ChartAcquisitionFailure =
 
 export class ChartAcquisitionError extends Error {
   readonly reason: ChartAcquisitionFailure;
-  constructor(reason: ChartAcquisitionFailure, message: string) {
+  /**
+   * The chart image at the moment of failure, when one could still be captured
+   * (e.g. studies didn't render, or the interval was wrong) — so callers can save
+   * it and *see* why the chart was rejected instead of guessing.
+   */
+  readonly image?: ChartImage;
+  constructor(reason: ChartAcquisitionFailure, message: string, image?: ChartImage) {
     super(message);
     this.name = 'ChartAcquisitionError';
     this.reason = reason;
+    if (image) this.image = image;
   }
 }
 
