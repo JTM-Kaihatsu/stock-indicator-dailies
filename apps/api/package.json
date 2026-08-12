@@ -5,8 +5,8 @@
   "type": "module",
   "description": "Hono API wrapping the runDaily pipeline for the web frontend.",
   "scripts": {
-    "start": "node --env-file-if-exists=../../.env.local src/server.ts",
-    "dev": "node --watch --env-file-if-exists=../../.env.local src/server.ts",
+    "start": "node --experimental-strip-types --env-file-if-exists=../../.env.local src/server.ts",
+    "dev": "node --watch --experimental-strip-types --env-file-if-exists=../../.env.local src/server.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
