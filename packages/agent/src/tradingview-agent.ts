@@ -96,6 +96,7 @@ export class TradingViewChartAgent implements ChartAgent {
       );
     }
 
+    await dismissPopups(page);
     await pause(this.#pacing);
 
     // Structural validation: every required study must be on the chart with the
@@ -138,6 +139,7 @@ export class TradingViewChartAgent implements ChartAgent {
       );
     }
 
+    await dismissPopups(page);
     const buffer = await chart.screenshot({ type: 'png' });
     return { base64: buffer.toString('base64'), mediaType: 'image/png' };
   }
@@ -158,6 +160,49 @@ export class TradingViewChartAgent implements ChartAgent {
       await page.waitForTimeout(1000);
     }
     return last;
+  }
+}
+
+/**
+ * Dismiss TradingView popups/modals that can appear over the chart (upsell
+ * offers, feature announcements, cookie banners). Clicks known dismiss buttons
+ * and falls back to pressing Escape. Swallows all failures — a popup that isn't
+ * there is not an error.
+ */
+async function dismissPopups(page: Page): Promise<void> {
+  const dismissSelectors = [
+    // "Decline offer" on upsell modals
+    'button:has-text("Decline offer")',
+    'button:has-text("No, thanks")',
+    'button:has-text("Maybe later")',
+    'button:has-text("Not now")',
+    // Generic modal close buttons
+    '[data-name="close"]',
+    '[aria-label="Close"]',
+    'button[class*="close"][class*="dialog"]',
+  ];
+
+  for (const selector of dismissSelectors) {
+    try {
+      const btn = page.locator(selector).first();
+      if (await btn.isVisible({ timeout: 200 })) {
+        await btn.click();
+        await page.waitForTimeout(300);
+      }
+    } catch {
+      // not present or already gone
+    }
+  }
+
+  // Fallback: Escape key closes most overlay dialogs
+  try {
+    const overlay = page.locator('[class*="overlay"], [class*="modal"], [role="dialog"]').first();
+    if (await overlay.isVisible({ timeout: 200 })) {
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+    }
+  } catch {
+    // nothing to dismiss
   }
 }
 

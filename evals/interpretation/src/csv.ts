@@ -1,4 +1,7 @@
-import type { IndicatorReading } from '@stock-indicator-dailies/shared';
+import {
+  deriveSignal,
+  type IndicatorReading,
+} from '@stock-indicator-dailies/shared';
 
 import type { FactComparison } from './fact-score.ts';
 import type { ChartEvalResult, EvalRun } from './harness.ts';
@@ -35,6 +38,10 @@ const COLUMNS = [
   'truth_barsAgo',
   'truth_qualified',
   'notes',
+  // --- overall suggestion (per-ticker, populated on first indicator row) ---
+  'vlm_suggestion',
+  'fetched_suggestion',
+  'truth_suggestion',
 ] as const;
 
 /** Quote a cell if it contains a comma, quote, or newline; escape inner quotes. */
@@ -45,7 +52,13 @@ function cell(value: unknown): string {
 
 const barsAgo = (r: IndicatorReading) => (r.crossover === 'NONE' ? '' : (r.barsAgo ?? ''));
 
-function comparisonRow(ticker: string, c: FactComparison): string {
+interface SuggestionCells {
+  vlm: string;
+  fetched: string;
+  truth: string;
+}
+
+function comparisonRow(ticker: string, c: FactComparison, suggestion?: SuggestionCells): string {
   return [
     ticker,
     `${IMAGE_DIR}/${ticker}.png`,
@@ -66,6 +79,9 @@ function comparisonRow(ticker: string, c: FactComparison): string {
     '', // truth_barsAgo — user fills
     '', // truth_qualified — user fills
     '', // notes — user fills
+    suggestion?.vlm ?? '',
+    suggestion?.fetched ?? '',
+    suggestion?.truth ?? '',
   ]
     .map(cell)
     .join(',');
@@ -89,7 +105,14 @@ export function toCsv(run: EvalRun): string {
       rows.push(failureRow(r));
       continue;
     }
-    for (const c of r.comparisons) rows.push(comparisonRow(r.ticker, c));
+    const vlmSuggestion = deriveSignal(r.comparisons.map((c) => c.vlm));
+    const fetchedSuggestion = deriveSignal(r.comparisons.map((c) => c.fetched));
+    for (let i = 0; i < r.comparisons.length; i++) {
+      const suggestion = i === 0
+        ? { vlm: vlmSuggestion, fetched: fetchedSuggestion, truth: '' }
+        : undefined;
+      rows.push(comparisonRow(r.ticker, r.comparisons[i]!, suggestion));
+    }
   }
   return rows.join('\n') + '\n';
 }

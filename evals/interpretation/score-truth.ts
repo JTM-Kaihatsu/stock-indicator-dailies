@@ -13,10 +13,12 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import type {
-  CrossoverDirection,
-  IndicatorKey,
-  IndicatorReading,
+import {
+  deriveSignal,
+  type CrossoverDirection,
+  type IndicatorKey,
+  type IndicatorReading,
+  type Signal,
 } from '@stock-indicator-dailies/shared';
 
 import { compareReadings, summarize } from './src/fact-score.ts';
@@ -93,6 +95,25 @@ for (const [ticker, r] of byTicker) {
 const vlm = summarize(vlmVsTruth);
 const fetched = summarize(fetchedVsTruth);
 
+// --- Overall suggestion per ticker -------------------------------------------
+interface TickerSuggestion {
+  ticker: string;
+  vlm: Signal;
+  fetched: Signal;
+  truth: Signal;
+}
+const suggestions: TickerSuggestion[] = [];
+for (const [ticker, r] of byTicker) {
+  suggestions.push({
+    ticker,
+    vlm: deriveSignal(r.vlm),
+    fetched: deriveSignal(r.fetched),
+    truth: deriveSignal(r.truth),
+  });
+}
+const vlmSuggestionAcc = suggestions.filter((s) => s.vlm === s.truth).length / suggestions.length;
+const fetchedSuggestionAcc = suggestions.filter((s) => s.fetched === s.truth).length / suggestions.length;
+
 // --- Report ------------------------------------------------------------------
 const pct = (n: number) => `${(n * 100).toFixed(0)}%`.padStart(5);
 const mae = (n: number) => `${n.toFixed(2)}`.padStart(5);
@@ -105,6 +126,7 @@ line('direction acc', pct(vlm.directionAgreement), pct(fetched.directionAgreemen
 line('signal acc', pct(vlm.signalAgreement), pct(fetched.signalAgreement));
 line('qualified acc', pct(vlm.qualifiedAgreement), pct(fetched.qualifiedAgreement));
 line('barsAgo MAE', mae(vlm.barsAgo.mean), mae(fetched.barsAgo.mean));
+line('suggestion acc', pct(vlmSuggestionAcc), pct(fetchedSuggestionAcc));
 
 console.log('\nper-indicator direction / signal accuracy (VLM | Fetched):');
 for (const key of ['macd', 'slowStochastic', 'sma'] as const) {
@@ -115,6 +137,13 @@ for (const key of ['macd', 'slowStochastic', 'sma'] as const) {
       `sig ${pct(v.signalAgreement)}|${pct(f.signalAgreement)}   ` +
       `barsAgo MAE ${mae(v.barsAgo.mean)}|${mae(f.barsAgo.mean)}`,
   );
+}
+
+console.log('\noverall suggestion per ticker:');
+console.log(`  ${'ticker'.padEnd(8)} VLM        Fetched    Truth`);
+for (const s of suggestions) {
+  const mark = (v: Signal) => v === s.truth ? v.padEnd(10) : `${v} ✗`.padEnd(10);
+  console.log(`  ${s.ticker.padEnd(8)} ${mark(s.vlm)} ${mark(s.fetched)} ${s.truth}`);
 }
 
 // Where each read's derived SIGNAL disagrees with truth (candidate vs truth).

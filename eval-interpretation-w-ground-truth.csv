@@ -1,31 +1,31 @@
-ticker,image,indicator,vlm_crossover,vlm_barsAgo,vlm_qualified,vlm_signal,vlm_rationale,fetched_crossover,fetched_barsAgo,fetched_qualified,fetched_signal,direction_match,barsAgo_gap,signal_match,truth_crossover,truth_barsAgo,truth_qualified,notes
-NVDA,eval-images/NVDA.png,macd,BEARISH,3,FALSE,NEUTRAL,"MACD crossed below signal above zero line recently, histogram turning red",BEARISH,2,TRUE,SELL,TRUE,1,TRUE,BEARISH,3,TRUE,
-NVDA,eval-images/NVDA.png,slowStochastic,BEARISH,3,FALSE,NEUTRAL,"%K crossed below %D near 60-70 zone, not overbought >80",BEARISH,2,FALSE,NEUTRAL,TRUE,1,TRUE,BEARISH,3,FALSE,
-NVDA,eval-images/NVDA.png,sma,BEARISH,2,TRUE,SELL,"Price dropped sharply below 10-day SMA, SMA now rolling over/flattening down",BEARISH,3,TRUE,SELL,TRUE,1,TRUE,BEARISH,3,TRUE,
-AAPL,eval-images/AAPL.png,macd,BULLISH,8,FALSE,NEUTRAL,MACD crossed above signal in early July while already above zero line,BULLISH,2,FALSE,NEUTRAL,TRUE,6,TRUE,BULLISH,2,FALSE,
-AAPL,eval-images/AAPL.png,slowStochastic,BULLISH,10,FALSE,NEUTRAL,"%K crossed above %D from deep oversold near 20 in late June/early July, now 81.9 vs 81.06",BULLISH,2,FALSE,NEUTRAL,TRUE,8,TRUE,BULLISH,2,FALSE,
-AAPL,eval-images/AAPL.png,sma,BULLISH,9,TRUE,NEUTRAL,"Price crossed above rising 10-day SMA in early July after dip, continuing higher",BULLISH,3,TRUE,BUY,TRUE,6,FALSE,BULLISH,3,TRUE,
-GOOG,eval-images/GOOG.png,macd,BULLISH,1,TRUE,BUY,MACD crossed above signal below zero line at right edge,BULLISH,1,TRUE,BUY,TRUE,0,TRUE,BULLISH,2,TRUE,
-GOOG,eval-images/GOOG.png,slowStochastic,BULLISH,2,TRUE,BUY,%K crossed above %D from oversold region near 20,BULLISH,4,TRUE,NEUTRAL,TRUE,2,FALSE,BULLISH,3,TRUE,
-GOOG,eval-images/GOOG.png,sma,BULLISH,1,FALSE,NEUTRAL,Price spiked sharply above SMA but SMA still sloping down,BULLISH,1,TRUE,BUY,TRUE,0,FALSE,BULLISH,2,TRUE,
-META,,,,,,,,,,,,,,,,,,"FAILED — capture: wrong-interval — chart is on ""M"" bars, expected ""1D"" — indicators would be computed over the wrong timeframe"
-META,,,,,,,,,,,,,,,,,,
-META,,,,,,,,,,,,,,,,,,
-AVGO,eval-images/AVGO.png,macd,BEARISH,2,FALSE,NEUTRAL,"MACD crossed below signal recently, both still above zero",BEARISH,0,FALSE,NEUTRAL,TRUE,2,TRUE,BEARISH,0,FALSE,
-AVGO,eval-images/AVGO.png,slowStochastic,BEARISH,2,FALSE,NEUTRAL,"%K crossed below %D near 56/48, not in overbought zone",BEARISH,1,FALSE,NEUTRAL,TRUE,1,TRUE,BEARISH,1,FALSE,
-AVGO,eval-images/AVGO.png,sma,BEARISH,1,TRUE,SELL,"Price dropped sharply below the 10-day SMA, which is turning down",BEARISH,3,TRUE,SELL,TRUE,2,TRUE,BEARISH,3,TRUE,
-INTC,eval-images/INTC.png,macd,BEARISH,18,TRUE,NEUTRAL,"MACD crossed below signal above zero line in late June, both now negative and declining",BEARISH,19,TRUE,NEUTRAL,TRUE,1,TRUE,BEARISH,19,TRUE,
-INTC,eval-images/INTC.png,slowStochastic,BEARISH,3,FALSE,NEUTRAL,"%K crossed below %D near 80 from overbought peak, now falling toward 13, cross itself occurred below 80 not qualifying as overbought cross",BEARISH,1,FALSE,NEUTRAL,TRUE,2,TRUE,BEARISH,1,FALSE,
-INTC,eval-images/INTC.png,sma,BEARISH,12,TRUE,NEUTRAL,Price crossed below the 10-day SMA in mid-July with SMA now sloping down,BEARISH,5,TRUE,NEUTRAL,TRUE,7,TRUE,BEARISH,5,TRUE,
-NFLX,eval-images/NFLX.png,macd,BULLISH,3,TRUE,BUY,MACD line crossed above signal below the zero line recently,BULLISH,2,TRUE,BUY,TRUE,1,TRUE,BULLISH,3,TRUE,
-NFLX,eval-images/NFLX.png,slowStochastic,BULLISH,2,FALSE,NEUTRAL,"%K crossed above %D but from mid-range (~40s), not oversold",BULLISH,3,FALSE,NEUTRAL,TRUE,1,TRUE,BULLISH,4,FALSE,
-NFLX,eval-images/NFLX.png,sma,BULLISH,2,FALSE,NEUTRAL,Price crossed above SMA but SMA still sloping down,BULLISH,1,FALSE,NEUTRAL,TRUE,1,TRUE,BULLISH,2,FALSE,
-GEV,eval-images/GEV.png,macd,BEARISH,8,TRUE,NEUTRAL,"MACD crossed below signal above zero line around mid-July, now -13.3 vs -19.6, both extending down",BEARISH,15,TRUE,NEUTRAL,TRUE,7,TRUE,BEARISH,16,TRUE,
-GEV,eval-images/GEV.png,slowStochastic,BEARISH,5,FALSE,NEUTRAL,"%K crossed below %D from overbought region near 90, now at 17.7 vs 19.9, cross occurred above 80 zone not in oversold",BEARISH,5,FALSE,NEUTRAL,TRUE,0,TRUE,BEARISH,6,FALSE,
-GEV,eval-images/GEV.png,sma,BEARISH,3,TRUE,SELL,"Price fell sharply through the 10-day SMA, SMA now sloping downward, close 900 vs MA 1012",BEARISH,5,TRUE,NEUTRAL,TRUE,2,FALSE,BEARISH,6,TRUE,
-CEG,eval-images/CEG.png,macd,BEARISH,3,TRUE,SELL,MACD line crossed below signal near recent peak above zero line,BULLISH,13,TRUE,NEUTRAL,FALSE,10,FALSE,BULLISH,14,TRUE,
-CEG,eval-images/CEG.png,slowStochastic,BEARISH,2,TRUE,SELL,%K crossed below %D from overbought region above 80,BEARISH,1,TRUE,SELL,TRUE,1,TRUE,BEARISH,3,TRUE,
-CEG,eval-images/CEG.png,sma,BEARISH,1,TRUE,SELL,Close crossed below 10-day SMA which is sloping down,BEARISH,1,FALSE,NEUTRAL,TRUE,0,FALSE,BEARISH,2,FALSE,
-VST,eval-images/VST.png,macd,BEARISH,3,FALSE,NEUTRAL,"MACD line crossed below signal line a few bars ago, still above zero line",BEARISH,4,FALSE,NEUTRAL,TRUE,1,TRUE,BEARISH,5,TRUE,
-VST,eval-images/VST.png,slowStochastic,BEARISH,2,FALSE,NEUTRAL,"%K crossed below %D near 40, not in overbought zone (>80)",BEARISH,4,FALSE,NEUTRAL,TRUE,2,TRUE,BEARISH,5,FALSE,
-VST,eval-images/VST.png,sma,BEARISH,1,TRUE,SELL,Price crossed below the 10-day SMA with SMA now sloping down,BEARISH,5,TRUE,NEUTRAL,TRUE,4,FALSE,BEARISH,5,TRUE,
+ticker,image,indicator,vlm_crossover,vlm_barsAgo,vlm_qualified,vlm_signal,vlm_rationale,fetched_crossover,fetched_barsAgo,fetched_qualified,fetched_signal,direction_match,barsAgo_gap,signal_match,truth_crossover,truth_barsAgo,truth_qualified,notes,vlm_suggestion,fetched_suggestion,truth_suggestion
+NVDA,eval-images/NVDA.png,macd,BEARISH,3,FALSE,NEUTRAL,"MACD crossed below signal above zero line recently, histogram turning red",BEARISH,2,TRUE,SELL,TRUE,1,TRUE,BEARISH,3,TRUE,,HOLD,SELL,SELL
+NVDA,eval-images/NVDA.png,slowStochastic,BEARISH,3,FALSE,NEUTRAL,"%K crossed below %D near 60-70 zone, not overbought >80",BEARISH,2,FALSE,NEUTRAL,TRUE,1,TRUE,BEARISH,3,FALSE,,,,
+NVDA,eval-images/NVDA.png,sma,BEARISH,2,TRUE,SELL,"Price dropped sharply below 10-day SMA, SMA now rolling over/flattening down",BEARISH,3,TRUE,SELL,TRUE,1,TRUE,BEARISH,3,TRUE,,,,
+AAPL,eval-images/AAPL.png,macd,BULLISH,8,FALSE,NEUTRAL,MACD crossed above signal in early July while already above zero line,BULLISH,2,FALSE,NEUTRAL,TRUE,6,TRUE,BULLISH,2,FALSE,,HOLD,HOLD,HOLD
+AAPL,eval-images/AAPL.png,slowStochastic,BULLISH,10,FALSE,NEUTRAL,"%K crossed above %D from deep oversold near 20 in late June/early July, now 81.9 vs 81.06",BULLISH,2,FALSE,NEUTRAL,TRUE,8,TRUE,BULLISH,2,FALSE,,,,
+AAPL,eval-images/AAPL.png,sma,BULLISH,9,TRUE,NEUTRAL,"Price crossed above rising 10-day SMA in early July after dip, continuing higher",BULLISH,3,TRUE,BUY,TRUE,6,FALSE,BULLISH,3,TRUE,,,,
+GOOG,eval-images/GOOG.png,macd,BULLISH,1,TRUE,BUY,MACD crossed above signal below zero line at right edge,BULLISH,1,TRUE,BUY,TRUE,0,TRUE,BULLISH,2,TRUE,,HOLD,HOLD,BUY
+GOOG,eval-images/GOOG.png,slowStochastic,BULLISH,2,TRUE,BUY,%K crossed above %D from oversold region near 20,BULLISH,4,TRUE,NEUTRAL,TRUE,2,FALSE,BULLISH,3,TRUE,,,,
+GOOG,eval-images/GOOG.png,sma,BULLISH,1,FALSE,NEUTRAL,Price spiked sharply above SMA but SMA still sloping down,BULLISH,1,TRUE,BUY,TRUE,0,FALSE,BULLISH,2,TRUE,,,,
+META,,,,,,,,,,,,,,,,,,"FAILED — capture: wrong-interval — chart is on ""M"" bars, expected ""1D"" — indicators would be computed over the wrong timeframe",,,
+META,,,,,,,,,,,,,,,,,,,,,
+META,,,,,,,,,,,,,,,,,,,,,
+AVGO,eval-images/AVGO.png,macd,BEARISH,2,FALSE,NEUTRAL,"MACD crossed below signal recently, both still above zero",BEARISH,0,FALSE,NEUTRAL,TRUE,2,TRUE,BEARISH,0,FALSE,,HOLD,HOLD,HOLD
+AVGO,eval-images/AVGO.png,slowStochastic,BEARISH,2,FALSE,NEUTRAL,"%K crossed below %D near 56/48, not in overbought zone",BEARISH,1,FALSE,NEUTRAL,TRUE,1,TRUE,BEARISH,1,FALSE,,,,
+AVGO,eval-images/AVGO.png,sma,BEARISH,1,TRUE,SELL,"Price dropped sharply below the 10-day SMA, which is turning down",BEARISH,3,TRUE,SELL,TRUE,2,TRUE,BEARISH,3,TRUE,,,,
+INTC,eval-images/INTC.png,macd,BEARISH,18,TRUE,NEUTRAL,"MACD crossed below signal above zero line in late June, both now negative and declining",BEARISH,19,TRUE,NEUTRAL,TRUE,1,TRUE,BEARISH,19,TRUE,,HOLD,HOLD,HOLD
+INTC,eval-images/INTC.png,slowStochastic,BEARISH,3,FALSE,NEUTRAL,"%K crossed below %D near 80 from overbought peak, now falling toward 13, cross itself occurred below 80 not qualifying as overbought cross",BEARISH,1,FALSE,NEUTRAL,TRUE,2,TRUE,BEARISH,1,FALSE,,,,
+INTC,eval-images/INTC.png,sma,BEARISH,12,TRUE,NEUTRAL,Price crossed below the 10-day SMA in mid-July with SMA now sloping down,BEARISH,5,TRUE,NEUTRAL,TRUE,7,TRUE,BEARISH,5,TRUE,,,,
+NFLX,eval-images/NFLX.png,macd,BULLISH,3,TRUE,BUY,MACD line crossed above signal below the zero line recently,BULLISH,2,TRUE,BUY,TRUE,1,TRUE,BULLISH,3,TRUE,,HOLD,HOLD,HOLD
+NFLX,eval-images/NFLX.png,slowStochastic,BULLISH,2,FALSE,NEUTRAL,"%K crossed above %D but from mid-range (~40s), not oversold",BULLISH,3,FALSE,NEUTRAL,TRUE,1,TRUE,BULLISH,4,FALSE,,,,
+NFLX,eval-images/NFLX.png,sma,BULLISH,2,FALSE,NEUTRAL,Price crossed above SMA but SMA still sloping down,BULLISH,1,FALSE,NEUTRAL,TRUE,1,TRUE,BULLISH,2,FALSE,,,,
+GEV,eval-images/GEV.png,macd,BEARISH,8,TRUE,NEUTRAL,"MACD crossed below signal above zero line around mid-July, now -13.3 vs -19.6, both extending down",BEARISH,15,TRUE,NEUTRAL,TRUE,7,TRUE,BEARISH,16,TRUE,,HOLD,HOLD,HOLD
+GEV,eval-images/GEV.png,slowStochastic,BEARISH,5,FALSE,NEUTRAL,"%K crossed below %D from overbought region near 90, now at 17.7 vs 19.9, cross occurred above 80 zone not in oversold",BEARISH,5,FALSE,NEUTRAL,TRUE,0,TRUE,BEARISH,6,FALSE,,,,
+GEV,eval-images/GEV.png,sma,BEARISH,3,TRUE,SELL,"Price fell sharply through the 10-day SMA, SMA now sloping downward, close 900 vs MA 1012",BEARISH,5,TRUE,NEUTRAL,TRUE,2,FALSE,BEARISH,6,TRUE,,,,
+CEG,eval-images/CEG.png,macd,BEARISH,3,TRUE,SELL,MACD line crossed below signal near recent peak above zero line,BULLISH,13,TRUE,NEUTRAL,FALSE,10,FALSE,BULLISH,14,TRUE,,SELL,HOLD,HOLD
+CEG,eval-images/CEG.png,slowStochastic,BEARISH,2,TRUE,SELL,%K crossed below %D from overbought region above 80,BEARISH,1,TRUE,SELL,TRUE,1,TRUE,BEARISH,3,TRUE,,,,
+CEG,eval-images/CEG.png,sma,BEARISH,1,TRUE,SELL,Close crossed below 10-day SMA which is sloping down,BEARISH,1,FALSE,NEUTRAL,TRUE,0,FALSE,BEARISH,2,FALSE,,,,
+VST,eval-images/VST.png,macd,BEARISH,3,FALSE,NEUTRAL,"MACD line crossed below signal line a few bars ago, still above zero line",BEARISH,4,FALSE,NEUTRAL,TRUE,1,TRUE,BEARISH,5,TRUE,,HOLD,HOLD,HOLD
+VST,eval-images/VST.png,slowStochastic,BEARISH,2,FALSE,NEUTRAL,"%K crossed below %D near 40, not in overbought zone (>80)",BEARISH,4,FALSE,NEUTRAL,TRUE,2,TRUE,BEARISH,5,FALSE,,,,
+VST,eval-images/VST.png,sma,BEARISH,1,TRUE,SELL,Price crossed below the 10-day SMA with SMA now sloping down,BEARISH,5,TRUE,NEUTRAL,TRUE,4,FALSE,BEARISH,5,TRUE,,,,
