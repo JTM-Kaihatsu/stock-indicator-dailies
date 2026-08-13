@@ -140,6 +140,11 @@ export class TradingViewChartAgent implements ChartAgent {
       );
     }
 
+    // Some upsell modals arrive on a delay timer rather than immediately, so a
+    // single check right before the screenshot can still miss one that pops up
+    // a moment later. Two passes, spaced out, catch that without much cost.
+    await dismissPopups(page);
+    await page.waitForTimeout(1000);
     await dismissPopups(page);
     const buffer = await chart.screenshot({ type: 'png' });
     return { base64: buffer.toString('base64'), mediaType: 'image/png' };
@@ -171,19 +176,25 @@ export class TradingViewChartAgent implements ChartAgent {
  * there is not an error.
  */
 async function dismissPopups(page: Page): Promise<void> {
-  const dismissSelectors = [
-    // "Decline offer" on upsell modals
-    'button:has-text("Decline offer")',
-    'button:has-text("No, thanks")',
-    'button:has-text("Maybe later")',
-    'button:has-text("Not now")',
-    // Generic modal close buttons
-    '[data-name="close"]',
-    '[aria-label="Close"]',
-    'button[class*="close"][class*="dialog"]',
-  ];
+  // Text-based, not `button:has-text(...)` — TradingView's upsell modals style
+  // these as plain <div>s, not <button> elements, so a tag-scoped selector
+  // silently never matches. `:text()` matches any element by its text content.
+  const dismissTexts = ['Decline offer', 'No, thanks', 'Maybe later', 'Not now'];
 
-  for (const selector of dismissSelectors) {
+  for (const text of dismissTexts) {
+    try {
+      const el = page.locator(`:text("${text}")`).first();
+      if (await el.isVisible({ timeout: 200 })) {
+        await el.click();
+        await page.waitForTimeout(300);
+      }
+    } catch {
+      // not present or already gone
+    }
+  }
+
+  // Generic modal close buttons/icons
+  for (const selector of ['[data-name="close"]', '[aria-label="Close"]', 'button[class*="close"][class*="dialog"]']) {
     try {
       const btn = page.locator(selector).first();
       if (await btn.isVisible({ timeout: 200 })) {
