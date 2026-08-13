@@ -98,7 +98,7 @@ export function ReportCard({ report }: { report: DailyReport }) {
           · analyze {(timings.analyzeMs / 1000).toFixed(1)}s
           · data {(timings.deterministicMs / 1000).toFixed(1)}s)
         </div>
-        <div style={{ marginTop: 8 }}>Not financial advice. A data-acquisition and reporting tool — every decision is yours.</div>
+        <div style={{ marginTop: 8 }}>Not financial advice. A data-acquisition and reporting tool; every decision is yours to make.</div>
       </footer>
     </div>
   );
