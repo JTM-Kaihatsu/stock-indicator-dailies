@@ -3,8 +3,8 @@
   --ground: #1d2021; --surface: #282828; --surface-2: #3c3836; --border: #504945;
   --text: #ebdbb2; --muted: #a89984; --faint: #928374;
   --accent: #83a598;
-  --buy: #b8bb26; --sell: #fb4934; --hold: #fabd2f;
-  --buy-bg: rgba(184,187,38,.14); --sell-bg: rgba(251,73,52,.14); --hold-bg: rgba(250,189,47,.15);
+  --buy: #a6e22e; --sell: #fb4934; --hold: #fabd2f;
+  --buy-bg: rgba(166,226,46,.14); --sell-bg: rgba(251,73,52,.14); --hold-bg: rgba(250,189,47,.15);
   --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }

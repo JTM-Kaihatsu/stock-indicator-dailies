@@ -1,4 +1,5 @@
-import type { IndicatorKey } from '@stock-indicator-dailies/shared';
+import type { IndicatorKey, Signal } from '@stock-indicator-dailies/shared';
+import { deriveIndicatorSignal } from '@stock-indicator-dailies/shared';
 import type { DailyReport } from '@/types/api';
 import { SignalPill } from './SignalPill';
 import { IndicatorRow } from './IndicatorRow';
@@ -12,18 +13,38 @@ function sigClass(s: string): string {
   return 'sig-neutral';
 }
 
+/**
+ * Resolve the overall recommendation from the computed and AI signals.
+ * Asymmetric and risk-averse: either side calling SELL is enough to exit,
+ * but BUY needs both to agree — computed alone calling HOLD keeps it at
+ * HOLD even if the AI read is more bullish.
+ */
+function resolveOverall(detSignal: Signal | null, vlmSignal: Signal): Signal {
+  if (detSignal === null) return vlmSignal; // no computed data to defer to
+  if (detSignal === 'SELL' || vlmSignal === 'SELL') return 'SELL';
+  if (detSignal === 'HOLD') return 'HOLD';
+  if (detSignal === 'BUY' && vlmSignal === 'BUY') return 'BUY';
+  return 'HOLD';
+}
+
 export function ReportCard({ report }: { report: DailyReport }) {
   const { ticker, verdict, deterministic, image, warnings, timings } = report;
   const detSignal = deterministic?.signal ?? null;
   const vlmSignal = verdict.signal;
-  // Overall: computed always wins when available — it's the accurate signal
-  // source, AI is a cross-check. Falls back to the AI read only when the
-  // deterministic fetch itself failed (no computed signal to defer to).
-  const overallSignal = detSignal ?? vlmSignal;
-  const disagree = detSignal !== null && detSignal !== vlmSignal;
+  const overallSignal = resolveOverall(detSignal, vlmSignal);
 
   const vlmByKey = new Map(verdict.readings.map((r) => [r.indicator, r]));
   const detByKey = new Map((deterministic?.readings ?? []).map((r) => [r.indicator, r]));
+
+  // The disagreement note tracks the per-indicator DIFFERS badges below, not
+  // the overall signal — the two aren't the same thing once the overall
+  // policy can resolve to a single value even when individual reads differ.
+  const anyDiffers = INDICATORS.some((key) => {
+    const det = detByKey.get(key);
+    const vlm = vlmByKey.get(key);
+    if (!det || !vlm) return false;
+    return deriveIndicatorSignal(det) !== deriveIndicatorSignal(vlm);
+  });
 
   return (
     <div>
@@ -69,11 +90,11 @@ export function ReportCard({ report }: { report: DailyReport }) {
         ))}
       </section>
 
-      {(disagree || warnings.length > 0) && (
+      {(anyDiffers || warnings.length > 0) && (
         <section style={{ marginTop: 16 }}>
-          {disagree && (
+          {anyDiffers && (
             <div className="note note-warn">
-              The computed and AI reads disagree — worth a look at the chart.
+              The computed and AI results disagree. It's advised for you to look at the source chart below.
             </div>
           )}
           {warnings.map((w, i) => <div key={i} className="note">{w}</div>)}
