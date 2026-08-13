@@ -12,6 +12,7 @@
   "dependencies": {
     "hono": "^4.7.0",
     "@hono/node-server": "^1.14.0",
+    "@supabase/supabase-js": "^2.45.0",
     "@stock-indicator-dailies/daily": "*",
     "@stock-indicator-dailies/shared": "*",
     "@stock-indicator-dailies/agent": "*",
