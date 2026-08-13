@@ -1,13 +1,10 @@
 const PIPELINE_URL = process.env.PIPELINE_API_URL;
 
-// The pipeline (Playwright capture + VLM analysis) routinely takes 15-30s,
-// well past Vercel's default serverless timeout — without this, a slow run
-// gets killed mid-flight and the client sees an HTML error page instead of
-// JSON. Clamped to whatever the deployment's plan actually allows.
-export const maxDuration = 60;
-
+// A cache hit resolves inline (fast); a miss just kicks off a background job
+// and returns immediately — neither needs an extended timeout the way the
+// old single-shot blocking proxy did.
 export async function POST(req: Request) {
-  const target = PIPELINE_URL ? `${PIPELINE_URL}/api/daily` : null;
+  const target = PIPELINE_URL ? `${PIPELINE_URL}/api/daily/start` : null;
   if (!target) {
     return Response.json({ ok: false, reason: 'PIPELINE_API_URL not configured' }, { status: 503 });
   }
