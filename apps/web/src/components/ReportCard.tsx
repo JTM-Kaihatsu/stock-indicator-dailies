@@ -16,6 +16,10 @@ export function ReportCard({ report }: { report: DailyReport }) {
   const { ticker, verdict, deterministic, image, warnings, timings } = report;
   const detSignal = deterministic?.signal ?? null;
   const vlmSignal = verdict.signal;
+  // Overall: computed always wins when available — it's the accurate signal
+  // source, AI is a cross-check. Falls back to the AI read only when the
+  // deterministic fetch itself failed (no computed signal to defer to).
+  const overallSignal = detSignal ?? vlmSignal;
   const disagree = detSignal !== null && detSignal !== vlmSignal;
 
   const vlmByKey = new Map(verdict.readings.map((r) => [r.indicator, r]));
@@ -33,11 +37,21 @@ export function ReportCard({ report }: { report: DailyReport }) {
         </div>
         <div style={{ textAlign: 'right' }}>
           <span style={{ display: 'block', textTransform: 'uppercase', letterSpacing: '.1em', fontSize: 10, color: 'var(--faint)', marginBottom: 6 }}>
-            Computed signal
+            Overall
           </span>
-          {detSignal ? <SignalPill signal={detSignal} /> : <span className="pill pill-neutral">NO DATA</span>}
-          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
-            AI read: <b className={sigClass(vlmSignal)} style={{ fontFamily: 'var(--mono)' }}>{vlmSignal}</b>
+          <SignalPill signal={overallSignal} />
+          <div style={{ marginTop: 10, display: 'flex', gap: 14, justifyContent: 'flex-end', fontSize: 12, color: 'var(--muted)' }}>
+            <span>
+              Computed:{' '}
+              {detSignal ? (
+                <b className={sigClass(detSignal)} style={{ fontFamily: 'var(--mono)' }}>{detSignal}</b>
+              ) : (
+                <b style={{ fontFamily: 'var(--mono)' }}>—</b>
+              )}
+            </span>
+            <span>
+              AI: <b className={sigClass(vlmSignal)} style={{ fontFamily: 'var(--mono)' }}>{vlmSignal}</b>
+            </span>
           </div>
         </div>
       </header>
