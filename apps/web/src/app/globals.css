@@ -1,9 +1,10 @@
 :root {
-  --ground: #0f1319; --surface: #171c24; --surface-2: #1e242e; --border: #262d38;
-  --text: #e6e9ef; --muted: #9aa4b2; --faint: #6b7482;
-  --accent: #35d0ba;
-  --buy: #2ec16b; --sell: #f0523f; --hold: #d0a03a;
-  --buy-bg: rgba(46,193,107,.14); --sell-bg: rgba(240,82,63,.14); --hold-bg: rgba(208,160,58,.15);
+  /* Gruvbox Dark (medium contrast) */
+  --ground: #1d2021; --surface: #282828; --surface-2: #3c3836; --border: #504945;
+  --text: #ebdbb2; --muted: #a89984; --faint: #928374;
+  --accent: #83a598;
+  --buy: #b8bb26; --sell: #fb4934; --hold: #fabd2f;
+  --buy-bg: rgba(184,187,38,.14); --sell-bg: rgba(251,73,52,.14); --hold-bg: rgba(250,189,47,.15);
   --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -117,11 +118,11 @@ body {
   border: 1px solid var(--border); border-radius: 10px;
   padding: 10px 16px; width: 200px; outline: none;
 }
-.ticker-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(53,208,186,.25); }
+.ticker-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(131,165,152,.25); }
 .ticker-input::placeholder { color: var(--faint); text-transform: none; font-size: 18px; font-weight: 400; }
 .analyze-btn {
   font-family: var(--sans); font-size: 15px; font-weight: 600;
-  background: var(--accent); color: #0f1319; border: none; border-radius: 10px;
+  background: var(--accent); color: var(--ground); border: none; border-radius: 10px;
   padding: 12px 24px; cursor: pointer; transition: opacity .12s;
 }
 .analyze-btn:hover { opacity: .85; }

@@ -273,7 +273,7 @@ export function renderDailyReportHtml(
       <span class="badge">Chart · <b>TradingView</b></span>
       <span class="badge ok">Calibration · <b>matches TV legend &lt;0.003</b></span>
     </div>
-    <div class="disclaimer">Not financial advice. A data-acquisition and reporting tool — every decision is yours.</div>
+    <div class="disclaimer">Not financial advice. A data-acquisition and reporting tool; every decision is yours to make.</div>
   </footer>
 </div>
 </body>
