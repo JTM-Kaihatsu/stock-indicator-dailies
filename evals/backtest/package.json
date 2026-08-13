@@ -1,0 +1,19 @@
+{
+  "name": "@stock-indicator-dailies/eval-backtest",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Walk-forward backtest: replay the deterministic BUY/SELL/HOLD policy over real history and check whether following it would have made money.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "backtest": "node run-backtest.ts"
+  },
+  "dependencies": {
+    "@stock-indicator-dailies/shared": "*",
+    "@stock-indicator-dailies/indicators": "*"
+  }
+}
