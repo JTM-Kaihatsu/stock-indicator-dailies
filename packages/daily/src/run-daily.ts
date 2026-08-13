@@ -74,6 +74,12 @@ export type DailyResult =
       reason: string;
       errors: string[];
       timings: DailyTimings;
+      /**
+       * The chart at the moment of failure, when the capture agent could still
+       * grab one (e.g. studies didn't render, wrong interval) — so a failure log
+       * can show *what was on screen*, not just the error string.
+       */
+      image?: ChartImage;
     };
 
 export interface RunDailyInput {
@@ -128,6 +134,7 @@ export async function runDaily(
         reason: err.reason,
         errors: [err.message],
         timings: timings(captureMs, 0),
+        ...(err.image ? { image: err.image } : {}),
       };
     }
     return {
