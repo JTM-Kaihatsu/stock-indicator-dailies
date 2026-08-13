@@ -18,9 +18,10 @@ export interface TradingViewChartAgentOptions {
   /** Max time to wait for the chart + studies to render. Default 45s. */
   renderTimeoutMs?: number;
   /**
-   * Raster oversampling for the screenshot. 2 renders at 2× device pixels, so the
-   * tiny oscillator panes (Stochastic especially) carry twice the resolution for
-   * the VLM's fine read — the same chart, sharper. Default 2.
+   * Raster oversampling for the screenshot. Claude's vision API caps input images
+   * at ~1.15MP regardless, so a 2× capture (~5.5MP) downscales to the exact same
+   * pixels a 1× capture would after that cap — no extra detail reaches the model,
+   * only extra render cost. Default 1.
    */
   deviceScaleFactor?: number;
 }
@@ -50,7 +51,7 @@ export class TradingViewChartAgent implements ChartAgent {
     this.#profile = options.profile ?? TRADINGVIEW;
     this.#pacing = options.pacing ?? pacingFromEnv();
     this.#renderTimeoutMs = options.renderTimeoutMs ?? 45_000;
-    this.#deviceScaleFactor = options.deviceScaleFactor ?? 2;
+    this.#deviceScaleFactor = options.deviceScaleFactor ?? 1;
   }
 
   async acquire(ticker: string): Promise<ChartImage> {
