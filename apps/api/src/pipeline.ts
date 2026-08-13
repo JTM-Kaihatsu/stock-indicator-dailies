@@ -6,42 +6,58 @@ import { cacheReport, getCachedReport, logFailure } from './cache.ts';
 
 let agent: TradingViewChartAgent | undefined;
 let provider: ClaudeVlmProvider | undefined;
-let busy = false;
 
 function ensureInitialized() {
   agent ??= new TradingViewChartAgent();
   provider ??= new ClaudeVlmProvider();
 }
 
-export function isBusy(): boolean {
-  return busy;
+// The agent drives a single browser session, so only one pipeline run can be
+// in flight at a time. Concurrent callers queue and wait their turn rather
+// than getting rejected — chaining onto this promise serializes execution.
+let queue: Promise<unknown> = Promise.resolve();
+let queueLength = 0;
+
+/** Requests currently queued or running, for the health endpoint. */
+export function pendingCount(): number {
+  return queueLength;
 }
 
 export async function runPipeline(ticker: string): Promise<DailyResult> {
-  // Cache check happens before the browser-automation path entirely — a hit
-  // skips Playwright and the VLM call, and doesn't contend with the busy lock.
+  // Cache check happens before the browser-automation path entirely, and
+  // before joining the queue — a hit never waits on anything in flight.
   const cached = await getCachedReport(ticker);
   if (cached) return { ok: true, report: cached };
 
-  if (busy) throw new PipelineBusyError();
-  ensureInitialized();
-  busy = true;
+  queueLength++;
+  const run = queue.then(() => runExclusive(ticker));
+  // Swallow so one failed run doesn't wedge the chain for whoever's behind it.
+  queue = run.then(
+    () => undefined,
+    () => undefined,
+  );
   try {
-    const result = await runDaily({ ticker, agent: agent!, provider: provider! });
-    if (result.ok) {
-      await cacheReport(result.report);
-    } else {
-      await logFailure(ticker, result);
-    }
-    return result;
+    return await run;
   } finally {
-    busy = false;
+    queueLength--;
   }
 }
 
-export class PipelineBusyError extends Error {
-  constructor() {
-    super('A pipeline run is already in progress');
-    this.name = 'PipelineBusyError';
+/**
+ * Runs with exclusive access to the browser session. Re-checks the cache
+ * first: a same-ticker request that waited behind another may already have
+ * its answer by the time its turn comes up, sparing a redundant run.
+ */
+async function runExclusive(ticker: string): Promise<DailyResult> {
+  const cached = await getCachedReport(ticker);
+  if (cached) return { ok: true, report: cached };
+
+  ensureInitialized();
+  const result = await runDaily({ ticker, agent: agent!, provider: provider! });
+  if (result.ok) {
+    await cacheReport(result.report);
+  } else {
+    await logFailure(ticker, result);
   }
+  return result;
 }
