@@ -24,6 +24,7 @@ dist/
 # Persistent browser profile — holds the signed-in session. Treat as a secret.
 # Unanchored on purpose: must match at any depth, not just the repo root.
 .agent-profile/
+.agent-profile-linux/
 
 # Screenshots / captured chart assets (may contain account-identifying data)
 /captures/
