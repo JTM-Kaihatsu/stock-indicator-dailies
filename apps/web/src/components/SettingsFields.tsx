@@ -7,6 +7,15 @@ const num = (v: string, fallback: number) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+function InfoIcon({ text }: { text: string }) {
+  return (
+    <span className="info-icon" tabIndex={0}>
+      i
+      <span className="tip">{text}</span>
+    </span>
+  );
+}
+
 /** The 3 levers that drive the live report. Used by the global Indicator
  * Settings panel. */
 export function LiveSettingsFields({
@@ -82,7 +91,10 @@ export function BacktestOnlySettingsFields({
         />
       </div>
       <div className="settings-field">
-        <label htmlFor="atrEnabled">Enable ATR noise reduction</label>
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+          <label htmlFor="atrEnabled">Enable ATR noise reduction</label>
+          <InfoIcon text="Plain English: Tracks if the stock has fallen below the peak price for a period enough to warrant selling it." />
+        </span>
         <input
           id="atrEnabled" type="checkbox"
           checked={value.atrMultiplier !== undefined}
@@ -110,7 +122,10 @@ export function BacktestOnlySettingsFields({
         </>
       )}
       <div className="settings-field">
-        <label htmlFor="adxEnabled">Enable ADX trend-strength gate</label>
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+          <label htmlFor="adxEnabled">Enable ADX trend-strength gate</label>
+          <InfoIcon text="Plain English: Measures trend by seeing how steep the slope is." />
+        </span>
         <input
           id="adxEnabled" type="checkbox"
           checked={value.adxThreshold !== undefined}

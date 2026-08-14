@@ -117,19 +117,23 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
                     {pct(baseline.strategyReturnPct)}
                   </div>
                 </div>
-                {scenario && (
-                  <div className="backtest-stat">
-                    <div className="backtest-stat-label">Scenario return</div>
-                    <div className={`backtest-stat-value ${scenario.strategyReturnPct >= 0 ? 'pos' : 'neg'}`}>
-                      {pct(scenario.strategyReturnPct)}
-                    </div>
-                    {scenarioSettings && baselineSettings && (
-                      <div className="backtest-stat-delta">
-                        {diffSettings(baselineSettings, scenarioSettings).length} setting(s) changed vs baseline
+                <div className="backtest-stat">
+                  <div className="backtest-stat-label">Custom settings</div>
+                  {scenario ? (
+                    <>
+                      <div className={`backtest-stat-value ${scenario.strategyReturnPct >= 0 ? 'pos' : 'neg'}`}>
+                        {pct(scenario.strategyReturnPct)}
                       </div>
-                    )}
-                  </div>
-                )}
+                      {scenarioSettings && baselineSettings && (
+                        <div className="backtest-stat-delta">
+                          {diffSettings(baselineSettings, scenarioSettings).length} setting(s) changed vs baseline
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="backtest-stat-value backtest-stat-empty">—</div>
+                  )}
+                </div>
                 <div className="backtest-stat">
                   <div className="backtest-stat-label">Buy &amp; hold</div>
                   <div className={`backtest-stat-value ${baseline.buyAndHoldReturnPct >= 0 ? 'pos' : 'neg'}`}>
@@ -137,11 +141,24 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
                   </div>
                 </div>
               </div>
+
+              <div className="section-label" style={{ marginTop: 16 }}>Baseline trades</div>
               <div className="settings-group-hint">
                 {baseline.startDate} → {baseline.endDate} ({baseline.barsUsed} bars)
                 {baseline.stillHolding ? ' · still holding at end, marked to market' : ''}
               </div>
-              <TradeList trades={(scenario ?? baseline).trades} />
+              <TradeList trades={baseline.trades} />
+
+              {scenario && (
+                <>
+                  <div className="section-label" style={{ marginTop: 16 }}>Custom settings trades</div>
+                  <div className="settings-group-hint">
+                    {scenario.startDate} → {scenario.endDate} ({scenario.barsUsed} bars)
+                    {scenario.stillHolding ? ' · still holding at end, marked to market' : ''}
+                  </div>
+                  <TradeList trades={scenario.trades} />
+                </>
+              )}
             </>
           )}
 
