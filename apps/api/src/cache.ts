@@ -27,7 +27,7 @@ interface ChartCacheRow {
 }
 
 /** Look up a fresh cached report for `ticker`. `null` on a miss, an expired
- * row, or when Supabase isn't configured — all treated the same by the caller. */
+ * row, or when Supabase isn't configured; all treated the same by the caller. */
 export async function getCachedReport(ticker: string): Promise<DailyReport | null> {
   const db = getClient();
   if (!db) return null;
@@ -66,7 +66,7 @@ export async function cacheReport(report: DailyReport): Promise<void> {
   });
 }
 
-/** Log a failed run for later review. Never throws — a logging failure must
+/** Log a failed run for later review. Never throws; a logging failure must
  * not take down the response to the caller. */
 export async function logFailure(
   ticker: string,
@@ -91,7 +91,7 @@ export async function logFailure(
       image_path: imagePath,
     });
   } catch {
-    // Best-effort — never let failure logging itself fail the request.
+    // Best-effort; never let failure logging itself fail the request.
   }
 }
 

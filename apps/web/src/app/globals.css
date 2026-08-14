@@ -120,7 +120,7 @@ body {
 .badge b { color: var(--text); font-weight: 600; }
 
 /* --- Indicator settings panel --- */
-/* Deliberately plain/low-emphasis — Historical Testing (.backtest-panel,
+/* Deliberately plain/low-emphasis; Historical Testing (.backtest-panel,
    below) gets the boxed treatment instead, since that's the section meant
    to draw attention. */
 .settings-panel {
@@ -197,7 +197,7 @@ body {
 .error-card p { font-size: 13px; color: var(--muted); }
 
 /* --- Historical testing / backtest --- */
-/* Boxed/prominent — this is the section meant to draw the eye, unlike the
+/* Boxed/prominent; this is the section meant to draw the eye, unlike the
    now-plain .settings-panel above. */
 .backtest-panel {
   margin-top: 28px;

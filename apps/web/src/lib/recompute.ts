@@ -4,7 +4,7 @@ import { toLiveOptions, type LiveSettings } from './settings.ts';
 
 /**
  * Recomputes `deterministic.signal` and `verdict.signal` from their
- * already-loaded `readings` arrays, using the live-scoped 3 levers. Pure —
+ * already-loaded `readings` arrays, using the live-scoped 3 levers. Pure;
  * no network call, since `deriveSignal` only needs facts already present on
  * the report. Leaves `readings`, `image`, `warnings`, and `timings` untouched.
  */

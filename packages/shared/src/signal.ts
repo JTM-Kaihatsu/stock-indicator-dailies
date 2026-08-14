@@ -5,7 +5,7 @@ export interface DeriveSignalOptions {
   /** Minimum number of BUY readings required to emit BUY. Defaults to 2. */
   buyConsensus?: number;
   /**
-   * Minimum number of SELL readings required to emit SELL. Defaults to 3 —
+   * Minimum number of SELL readings required to emit SELL. Defaults to 3;
    * SELL requires unanimity across all three indicators.
    */
   sellConsensus?: number;
@@ -19,7 +19,7 @@ export interface DeriveSignalOptions {
 /**
  * Turn one indicator's crossover facts into a directional signal.
  *
- * This is the deterministic "judgment" layer. The VLM reports what it saw — a
+ * This is the deterministic "judgment" layer. The VLM reports what it saw; a
  * clean crossover, its direction, how many bars ago, and whether it met the
  * zone/slope condition. The recency window is applied *here*, in code, so it
  * stays tunable and unit-tested rather than baked into the model's output.
@@ -58,7 +58,7 @@ export function tallySignals(signals: readonly IndicatorSignal[]): SignalTally {
  * Combine per-indicator signals into an overall Buy/Sell/Hold recommendation.
  *
  * Policy:
- *   - SELL if at least `sellConsensus` indicators read SELL (default 3 — unanimity).
+ *   - SELL if at least `sellConsensus` indicators read SELL (default 3; unanimity).
  *   - BUY  if at least `buyConsensus` indicators read BUY   (default 2).
  *   - HOLD otherwise.
  *

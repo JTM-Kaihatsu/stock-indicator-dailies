@@ -13,7 +13,7 @@ import { adx, atr } from './volatility.ts';
  * hand:
  *   - `signalsForBars` recomputes the raw signal one bar at a time from only
  *     the data that would have been visible *as of that day*
- *     (`bars.slice(0, i + 1)`) — never peeking ahead. Uses `computeReadings`
+ *     (`bars.slice(0, i + 1)`); never peeking ahead. Uses `computeReadings`
  *     + `deriveSignal` unmodified, so it's testing the exact "what does the
  *     chart say today" policy the app ships, not a reimplementation.
  *   - `applyStrategy` takes any raw signal sequence and simulates trading
@@ -49,7 +49,7 @@ export interface StrategyOptions {
   startingCapital?: number;
   /**
    * Require the same raw non-HOLD signal to repeat this many consecutive
-   * bars before acting on it — filters single-bar noise flips. Default 1
+   * bars before acting on it; filters single-bar noise flips. Default 1
    * (act on the first occurrence, i.e. no persistence filter).
    */
   persistenceBars?: number;
@@ -69,7 +69,7 @@ export interface StrategyOptions {
   /**
    * ADX trend-strength gate: suppress any BUY/SELL unless ADX is at or above
    * this threshold (commonly 20-25 marks a trending market). `undefined`
-   * (default) disables the filter — a boolean "on/off" toggle in a caller's
+   * (default) disables the filter; a boolean "on/off" toggle in a caller's
    * UI can just set/unset this to a sensible default like 25.
    */
   adxThreshold?: number;
@@ -95,13 +95,13 @@ export function signalsForBars(bars: readonly Bar[], options: DeriveSignalOption
 /**
  * Simulates an all-in/all-out portfolio (buy with all available cash on a
  * confirmed BUY, liquidate fully on a confirmed SELL) against a sequence of
- * raw signals — one per bar from `bars[1]` onward, matching
+ * raw signals; one per bar from `bars[1]` onward, matching
  * `signalsForBars`'s output shape. Returns compound across trades this way,
  * so `strategyReturnPct` is directly comparable to `buyAndHoldReturnPct`
  * regardless of the stock's price level.
  *
  * The execution filters in `options` gate whether a raw signal is actually
- * *acted on* — they never change the raw signal itself, only whether this
+ * *acted on*; they never change the raw signal itself, only whether this
  * bar's occurrence of it triggers a trade.
  */
 export function applyStrategy(
@@ -162,7 +162,7 @@ export function applyStrategy(
     } else if (action === 'SELL' && holding) {
       if (barIndex - entryIndex < minHoldingDays) continue;
       if (atrMultiplier !== undefined) {
-        // Yesterday's ATR, not today's — today's true range would include
+        // Yesterday's ATR, not today's; today's true range would include
         // the very drop being evaluated, self-inflating the threshold on
         // exactly the bar a real sharp move happens.
         const atrVal = atrSeries![barIndex - 1]!;

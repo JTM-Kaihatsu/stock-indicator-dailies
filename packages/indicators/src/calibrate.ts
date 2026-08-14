@@ -4,7 +4,7 @@ import type { IndicatorValues } from './values.ts';
  * Confirm the computed indicator series matches TradingView's rendering by
  * comparing the last-bar values to the legend snapshot we capture alongside the
  * chart. Passing calibration turns "does my math match TradingView's math" from
- * a hope into a checked invariant — and catches data-source mismatches too
+ * a hope into a checked invariant; and catches data-source mismatches too
  * (wrong prices → wrong SMA → fails here rather than silently mis-grading).
  */
 export interface CalibrationField {

@@ -12,7 +12,7 @@ export const INDICATOR_KEYS = [
 ] as const satisfies readonly IndicatorKey[];
 
 /**
- * Fixed indicator parameters — the single source of truth consumed by the
+ * Fixed indicator parameters; the single source of truth consumed by the
  * agent (to configure the chart), the VLM prompt (to describe what it's reading),
  * and the eval suites (to label ground truth).
  *
@@ -24,14 +24,14 @@ export const INDICATOR_PARAMS = {
   macd: { fastLength: 8, slowLength: 17, signalSmoothing: 9 },
   /**
    * Slow Stochastic, as three parameters:
-   * - `percentKLength` — lookback window for the high/low range.
-   * - `percentKSmoothing` — moving average applied to raw %K (this is what
+   * - `percentKLength`; lookback window for the high/low range.
+   * - `percentKSmoothing`; moving average applied to raw %K (this is what
    *   makes it "slow"; 1 would be a Fast Stochastic).
-   * - `percentDSmoothing` — moving average of %K, producing the %D signal line
+   * - `percentDSmoothing`; moving average of %K, producing the %D signal line
    *   that %K crosses.
    *
    * These mirror the live "Rule 1" TradingView layout (`Stoch 14 5 3`), which is
-   * authoritative — the chart, this spec, and the VLM prompt must agree or every
+   * authoritative; the chart, this spec, and the VLM prompt must agree or every
    * signal measures a setup that isn't on screen.
    */
   slowStochastic: { percentKLength: 14, percentKSmoothing: 5, percentDSmoothing: 3 },
@@ -52,7 +52,7 @@ export const STOCHASTIC_THRESHOLDS = {
 /**
  * When a MACD cross happens within this fraction of the recent MACD range
  * from zero, treat it as qualified regardless of which side of zero it lands
- * on. Near-zero crosses are momentum-neutral — gating on sign is noise.
+ * on. Near-zero crosses are momentum-neutral; gating on sign is noise.
  */
 export const MACD_ZERO_DEADZONE_PCT = 0.05;
 
@@ -64,7 +64,7 @@ export const MACD_ZERO_DEADZONE_PCT = 0.05;
  * over 10 hours, so the agent pins and verifies the interval.
  *
  * The visible span is deliberately NOT pinned. TradingView stores a zoom level
- * (pixels per bar), not a time range — so the visible months vary with the saved
+ * (pixels per bar), not a time range; so the visible months vary with the saved
  * layout and the rendering viewport width, and its date axis is canvas-drawn and
  * unreadable by script. The VLM reports the range it actually sees
  * (`Verdict.visibleRange`) instead of us asserting a number we can't control.

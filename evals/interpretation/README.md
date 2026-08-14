@@ -9,21 +9,21 @@ system: whether Claude actually reads these charts correctly.
 The signal model is event-based (a *clean crossover, N bars ago, qualified*), so
 the oracle needs the indicator **time series**, not a single bar. It:
 
-1. Fetches daily OHLC (`ohlc.ts` — keyless Yahoo Finance, behind a `DataSource`
+1. Fetches daily OHLC (`ohlc.ts`; keyless Yahoo Finance, behind a `DataSource`
    interface so the math stays offline-testable).
-2. Computes the series (`compute.ts` — SMA, EMA, MACD, Slow Stochastic; matches
+2. Computes the series (`compute.ts`; SMA, EMA, MACD, Slow Stochastic; matches
    TradingView's default formulas).
 3. Detects the most recent crossover as a sign-flip of the difference series
    (`crossovers.ts`), giving direction + `barsAgo` + the zone/slope `qualified`
-   flag — the exact `{crossover, barsAgo, qualified}` shape the VLM produces
+   flag; the exact `{crossover, barsAgo, qualified}` shape the VLM produces
    (`event-oracle.ts`).
 
-### Calibration — the parity check
+### Calibration; the parity check
 
 `calibrate.ts` compares the computed last-bar values to **TradingView's own
 legend numbers** (captured alongside the chart). This turns "does my math match
 TradingView's math" from a hope into a checked invariant, and catches data-source
-mismatches too. Validated live on GEV — every value agrees to within 0.003:
+mismatches too. Validated live on GEV; every value agrees to within 0.003:
 
 ```
 node evals/interpretation/calibrate-live.ts GEV
@@ -32,13 +32,13 @@ node evals/interpretation/calibrate-live.ts GEV
   ...  calibration: ✅ PASS
 ```
 
-## Two independent reads — neither is ground truth
+## Two independent reads; neither is ground truth
 
 The eval surfaces **two reads per chart** and does NOT declare a winner:
 
 - the **VLM** read (the AI second opinion), and
 - the **fetched** read, computed from Yahoo price data (calibrated to
-  TradingView to <0.003 — see calibration above).
+  TradingView to <0.003; see calibration above).
 
 Both are shown to the user (and to the FE); the human labels the real answer.
 So the eval reports **agreement** between the two reads, not accuracy against a
@@ -48,12 +48,12 @@ reference.
 
 `score.ts` compares per-indicator **signals** (BUY/SELL/NEUTRAL) and aggregates.
 
-`fact-score.ts` compares one level deeper — the raw **facts** each read carries:
+`fact-score.ts` compares one level deeper; the raw **facts** each read carries:
 crossover *direction*, *barsAgo*, and the *qualified* flag, plus the derived
 signal. This attributes a disagreement to perception (direction), timing
 (barsAgo gap), or the judgment layer (recency). It exists because the GEV
 disagreement was a pure barsAgo gap (VLM 2d vs fetched 5d) that straddled the
-3-bar recency window — invisible to signal-only comparison.
+3-bar recency window; invisible to signal-only comparison.
 
 ## The harness
 
@@ -70,7 +70,7 @@ Live run (drives a real browser, one billed model call per ticker):
 npm run eval -w @stock-indicator-dailies/eval-interpretation -- GEV NVDA AAPL
 ```
 
-Tickers are required — a bare run refuses rather than silently billing. Writes
+Tickers are required; a bare run refuses rather than silently billing. Writes
 `eval-interpretation.json` (full record) and `eval-interpretation.csv` (open in
 Excel, fill the `truth_*` columns to label ground truth).
 

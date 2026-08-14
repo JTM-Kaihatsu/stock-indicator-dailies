@@ -5,7 +5,7 @@ import { runPipeline } from './pipeline.ts';
 
 /**
  * Render's own gateway times out requests around ~30s, well short of the
- * pipeline's typical 15-30s+ runtime — a blocking HTTP call can't reliably
+ * pipeline's typical 15-30s+ runtime; a blocking HTTP call can't reliably
  * outrun that. Instead, `/daily/start` kicks off the run here and returns
  * immediately with a job id; the client polls `/daily/jobs/:id` (each poll
  * is fast, never close to any gateway timeout) until it reports done.

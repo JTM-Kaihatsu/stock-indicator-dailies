@@ -13,7 +13,7 @@ advisor.post('/advisor/start', async (c) => {
     return c.json({ ok: false, reason: 'Invalid or missing ticker' }, 400);
   }
 
-  // No cache-hit-inline path (unlike /daily/start) — every suggestion is a
+  // No cache-hit-inline path (unlike /daily/start); every suggestion is a
   // fresh research call by design.
   const jobId = startAdvisorJob(ticker);
   return c.json({ ok: true, jobId });

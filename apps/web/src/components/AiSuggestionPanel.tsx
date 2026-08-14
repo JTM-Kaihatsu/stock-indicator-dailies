@@ -36,7 +36,7 @@ export function AiSuggestionPanel({
 
   async function accept() {
     if (!proposal) return;
-    // Fills the fields and auto-runs in one click — the user already saw
+    // Fills the fields and auto-runs in one click; the user already saw
     // the proposed diff, so a second manual "Run" click would just be
     // redundant confirmation. Rationale and diff stay visible, nothing
     // collapses.
@@ -78,7 +78,7 @@ export function AiSuggestionPanel({
               ))}
             </div>
           ) : (
-            <div className="advisor-diff-empty">Matches your current settings — nothing to change.</div>
+            <div className="advisor-diff-empty">Matches your current settings; nothing to change.</div>
           )}
           {changedFields.length > 0 && (
             <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>

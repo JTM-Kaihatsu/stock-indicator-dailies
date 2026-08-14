@@ -20,7 +20,7 @@ export interface TradingViewChartAgentOptions {
   /**
    * Raster oversampling for the screenshot. Claude's vision API caps input images
    * at ~1.15MP regardless, so a 2× capture (~5.5MP) downscales to the exact same
-   * pixels a 1× capture would after that cap — no extra detail reaches the model,
+   * pixels a 1× capture would after that cap; no extra detail reaches the model,
    * only extra render cost. Default 1.
    */
   deviceScaleFactor?: number;
@@ -29,7 +29,7 @@ export interface TradingViewChartAgentOptions {
 /**
  * Captures a chart from the user's **saved TradingView layout**.
  *
- * The agent deliberately does not add or configure indicators — the layout
+ * The agent deliberately does not add or configure indicators; the layout
  * already carries them. It changes the symbol, pins the daily interval, verifies
  * the expected studies are actually present, and screenshots the chart element.
  *
@@ -83,7 +83,7 @@ export class TradingViewChartAgent implements ChartAgent {
     if (!(await hasAuthSession(context))) {
       throw new ChartAcquisitionError(
         'not-authenticated',
-        'no signed-in session — run: npm run login -w @stock-indicator-dailies/agent',
+        'no signed-in session; run: npm run login -w @stock-indicator-dailies/agent',
       );
     }
 
@@ -93,7 +93,7 @@ export class TradingViewChartAgent implements ChartAgent {
     } catch {
       throw new ChartAcquisitionError(
         'chart-not-found',
-        `chart container ${this.#profile.selectors.chartContainer} never appeared — the provider DOM may have changed`,
+        `chart container ${this.#profile.selectors.chartContainer} never appeared; the provider DOM may have changed`,
       );
     }
 
@@ -103,7 +103,7 @@ export class TradingViewChartAgent implements ChartAgent {
     // Structural validation: every required study must be on the chart with the
     // expected parameters AND have actually rendered its plotted values before the
     // image is allowed anywhere near the VLM. The name check alone is a prefix
-    // match, so it passes even when the pane is still blank — the value check is
+    // match, so it passes even when the pane is still blank; the value check is
     // what proves the study painted. On failure we still screenshot, so the
     // caller can *see* the blank chart that was rejected.
     const validation = await this.#waitForStudies(page);
@@ -134,7 +134,7 @@ export class TradingViewChartAgent implements ChartAgent {
       const image = await screenshotChart(chart);
       throw new ChartAcquisitionError(
         'wrong-interval',
-        `chart is on "${interval ?? 'unknown'}" bars, expected "${this.#profile.interval.displayToken}" — ` +
+        `chart is on "${interval ?? 'unknown'}" bars, expected "${this.#profile.interval.displayToken}"; ` +
           `indicators would be computed over the wrong timeframe`,
         image,
       );
@@ -172,11 +172,11 @@ export class TradingViewChartAgent implements ChartAgent {
 /**
  * Dismiss TradingView popups/modals that can appear over the chart (upsell
  * offers, feature announcements, cookie banners). Clicks known dismiss buttons
- * and falls back to pressing Escape. Swallows all failures — a popup that isn't
+ * and falls back to pressing Escape. Swallows all failures; a popup that isn't
  * there is not an error.
  */
 async function dismissPopups(page: Page): Promise<void> {
-  // Text-based, not `button:has-text(...)` — TradingView's upsell modals style
+  // Text-based, not `button:has-text(...)`; TradingView's upsell modals style
   // these as plain <div>s, not <button> elements, so a tag-scoped selector
   // silently never matches. `:text()` matches any element by its text content.
   const dismissTexts = ['Decline offer', 'No, thanks', 'Maybe later', 'Not now'];
@@ -218,7 +218,7 @@ async function dismissPopups(page: Page): Promise<void> {
   }
 }
 
-/** Screenshot the chart element, swallowing failures — for diagnostic capture. */
+/** Screenshot the chart element, swallowing failures; for diagnostic capture. */
 async function screenshotChart(chart: Locator): Promise<ChartImage | undefined> {
   try {
     const buffer = await chart.screenshot({ type: 'png' });
@@ -233,7 +233,7 @@ async function screenshotChart(chart: Locator): Promise<ChartImage | undefined> 
  *
  * TradingView gives the legend no stable hook, so we collect short strings that
  * look like `NAME[source]params...` and let the study patterns do the matching.
- * Over-collecting is safe — validation only cares about matches.
+ * Over-collecting is safe; validation only cares about matches.
  */
 export async function readLegendTexts(page: Page): Promise<string[]> {
   return page.evaluate(() => {
@@ -257,7 +257,7 @@ export async function readLegendTexts(page: Page): Promise<string[]> {
 /**
  * Read each study's live legend VALUES, keyed by the plot's `title` (e.g.
  * `MACD`, `Signal line`, `Histogram`, `%K`, `%D`, `MA`). A study that is on the
- * layout but has not painted yet shows no value here — which is how we tell a
+ * layout but has not painted yet shows no value here; which is how we tell a
  * rendered chart from a blank one. Mirrors `calibrate-live.ts`'s extraction.
  */
 export async function readLegendValues(page: Page): Promise<Record<string, number>> {

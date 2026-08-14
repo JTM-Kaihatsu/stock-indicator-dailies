@@ -1,14 +1,14 @@
 import type { ChartImage } from '@stock-indicator-dailies/shared';
 
-/** Why an acquisition attempt failed — drives retry vs. surface-to-user. */
+/** Why an acquisition attempt failed; drives retry vs. surface-to-user. */
 export type ChartAcquisitionFailure =
   /** Session expired / not signed in. Needs a manual re-login, not a retry. */
   | 'not-authenticated'
-  /** Expected chart elements missing — DOM likely shifted (see PRD: DOM volatility). */
+  /** Expected chart elements missing; DOM likely shifted (see PRD: DOM volatility). */
   | 'chart-not-found'
   /**
    * The studies are on the layout (their legend names match) but their plotted
-   * values never rendered before the deadline — the chart would be captured with
+   * values never rendered before the deadline; the chart would be captured with
    * blank oscillator panes. A rendering/timing failure, distinct from missing.
    */
   | 'studies-not-rendered'
@@ -28,7 +28,7 @@ export class ChartAcquisitionError extends Error {
   readonly reason: ChartAcquisitionFailure;
   /**
    * The chart image at the moment of failure, when one could still be captured
-   * (e.g. studies didn't render, or the interval was wrong) — so callers can save
+   * (e.g. studies didn't render, or the interval was wrong); so callers can save
    * it and *see* why the chart was rejected instead of guessing.
    */
   readonly image?: ChartImage;
@@ -44,7 +44,7 @@ export class ChartAcquisitionError extends Error {
  * Acquires a chart for a ticker: navigate, apply the fixed indicator set and
  * the 3-month window, and capture the chart region as an image.
  *
- * Implementations must screenshot the chart element only — never the full page —
+ * Implementations must screenshot the chart element only, never the full page,
  * so account chrome (balances, watchlists, account numbers) never enters the image.
  */
 export interface ChartAgent {

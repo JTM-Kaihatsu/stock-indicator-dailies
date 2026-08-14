@@ -1,7 +1,7 @@
 import type { Bar } from '@stock-indicator-dailies/indicators';
 
 /**
- * ATR and ADX — Wilder's original smoothing. Scoped to the backtest package
+ * ATR and ADX; Wilder's original smoothing. Scoped to the backtest package
  * rather than `packages/indicators`: these are strategy-execution filters for
  * the simulator (noise reduction, trend-strength gating), not part of the
  * app's actual "Three Tools" (MACD/Stochastic/SMA) indicator set the live
@@ -35,7 +35,7 @@ export function atr(bars: readonly Bar[], period = 14): number[] {
 }
 
 /**
- * Average Directional Index — trend strength on a 0-100 scale, direction-
+ * Average Directional Index; trend strength on a 0-100 scale, direction-
  * agnostic (a strong downtrend reads just as high as a strong uptrend).
  * Needs roughly `2 * period` bars before the first value; NaN before that.
  */

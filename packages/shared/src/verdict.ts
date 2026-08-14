@@ -16,7 +16,7 @@ const TICKER_RE = /^[A-Z][A-Z0-9.-]{0,9}$/;
 
 export interface ParseVerdictOptions extends DeriveSignalOptions {
   /**
-   * Require a reading for every indicator in {@link INDICATOR_KEYS}. Default true —
+   * Require a reading for every indicator in {@link INDICATOR_KEYS}. Default true;
    * a partial chart read is treated as invalid rather than silently under-counted.
    */
   requireAllIndicators?: boolean;
@@ -34,7 +34,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
  * Validate raw VLM output and produce a trustworthy {@link Verdict}.
  *
  * The overall `signal` is always recomputed from the per-indicator readings via
- * {@link deriveSignal} — the deterministic logic is authoritative, not the model.
+ * {@link deriveSignal}; the deterministic logic is authoritative, not the model.
  * If the model also returned an overall signal, it's cross-checked: a disagreement
  * (or an invalid value) is surfaced as a warning, not an error, and the derived
  * signal is used regardless. Structural problems (bad shape, unknown indicator,
@@ -167,7 +167,7 @@ export function parseVerdict(
     return { ok: false, errors };
   }
 
-  // Authoritative overall signal — deterministic, from the readings.
+  // Authoritative overall signal; deterministic, from the readings.
   const signal = deriveSignal(readings, options);
 
   // Cross-check the model's self-reported signal, if it provided one.

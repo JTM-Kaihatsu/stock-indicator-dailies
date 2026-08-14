@@ -33,7 +33,7 @@ if (!result.ok) {
 
 const { report } = result;
 const { verdict, deterministic, timings } = report;
-const headline = deterministic ? deterministic.signal : `— (${verdict.signal} from AI only)`;
+const headline = deterministic ? deterministic.signal : `N/A (${verdict.signal} from AI only)`;
 
 console.log(`\n${'='.repeat(56)}`);
 console.log(`  ${verdict.ticker}   →   ${headline}     (AI read: ${verdict.signal})`);
@@ -42,7 +42,7 @@ const detByKey = new Map((deterministic?.readings ?? []).map((r) => [r.indicator
 for (const r of verdict.readings) {
   const aiSig = deriveIndicatorSignal(r);
   const det = detByKey.get(r.indicator);
-  const detSig = det ? deriveIndicatorSignal(det) : '—';
+  const detSig = det ? deriveIndicatorSignal(det) : 'N/A';
   const label = (rr: typeof r) =>
     rr.crossover === 'NONE' ? 'none' : `${rr.crossover.toLowerCase()} ${rr.barsAgo}d${rr.qualified ? '' : ' unq'}`;
   const mark = det ? (detSig === aiSig ? '' : '  ⚠ differ') : '';
@@ -63,7 +63,7 @@ writeFileSync(outBase, renderDailyReportHtml(report));
 console.log(`\n  report -> ${outBase}`);
 
 // Save the source chart alongside the report. The capture is scoped to the chart
-// container (no watchlist / account chrome), so it carries no account PII — this
+// container (no watchlist / account chrome), so it carries no account PII; this
 // is the exact image the reads were derived from, kept as evidence.
 const imgPath = outBase.replace(/\.html?$/i, '') + '.png';
 writeFileSync(imgPath, Buffer.from(report.image.base64, 'base64'));

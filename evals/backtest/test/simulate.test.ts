@@ -48,7 +48,7 @@ test('a second consecutive BUY signal while already holding is a no-op', () => {
 
   const result = applyStrategy('T', bars, signals, { startingCapital: 10_000 });
 
-  assert.equal(result.trades.length, 1, 'only the first BUY should execute — no pyramiding');
+  assert.equal(result.trades.length, 1, 'only the first BUY should execute; no pyramiding');
 });
 
 test('a SELL signal with nothing held is a no-op', () => {
@@ -110,7 +110,7 @@ test('a SELL within the minimum holding period is suppressed, position stays ope
   const bars = [bar('d0', 90), bar('d1', 100), bar('d2', 80), bar('d3', 70)];
   const signals: Signal[] = ['BUY', 'SELL', 'HOLD'];
   const result = applyStrategy('T', bars, signals, { minHoldingDays: 5 });
-  assert.equal(result.trades.length, 1, 'only the BUY executes — the SELL 1 bar later is too soon');
+  assert.equal(result.trades.length, 1, 'only the BUY executes; the SELL 1 bar later is too soon');
   assert.equal(result.stillHolding, true);
 });
 
@@ -153,7 +153,7 @@ test('a SELL executes once the drop from peak clears the ATR multiple', () => {
 
 // --- ADX trend-strength gate ---
 
-// A steady $1/day uptrend with a constant true range of 1 — ADX's ~27-bar
+// A steady $1/day uptrend with a constant true range of 1; ADX's ~27-bar
 // (2 * default period 14) warmup needs to be cleared before the gate has a
 // real (non-NaN) value to check, so the BUY signal is placed well past it.
 const trendingBars = Array.from({ length: 45 }, (_, i) => bar(`d${i}`, 100 + i));

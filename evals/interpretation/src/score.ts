@@ -1,7 +1,7 @@
 import type { IndicatorKey, IndicatorSignal } from '@stock-indicator-dailies/shared';
 
 /**
- * One indicator's final directional signal — what the VLM's reading derives to,
+ * One indicator's final directional signal; what the VLM's reading derives to,
  * and what the oracle computes. Scoring compares these, not the raw facts, so it
  * is decoupled from how either side was produced.
  */

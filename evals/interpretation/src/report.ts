@@ -31,7 +31,7 @@ function ratesLine(label: string, x: AgreementRates): string {
 export function formatReport(run: EvalRun): string {
   const lines: string[] = [];
   lines.push('='.repeat(72));
-  lines.push('  interpretation eval — VLM read vs. fetched read (agreement, not accuracy)');
+  lines.push('  interpretation eval; VLM read vs. fetched read (agreement, not accuracy)');
   lines.push('='.repeat(72));
   for (const r of run.results) lines.push(chartLine(r));
 

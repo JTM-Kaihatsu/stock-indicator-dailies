@@ -7,8 +7,8 @@ import {
 } from '@stock-indicator-dailies/shared';
 
 /**
- * Compares the two independent reads for one chart — the VLM's, and the
- * `fetched` read computed from price data — WITHOUT treating either as ground
+ * Compares the two independent reads for one chart; the VLM's, and the
+ * `fetched` read computed from price data; WITHOUT treating either as ground
  * truth. Both are displayed to the user (and to the FE); the human labels the
  * real answer afterwards. So this reports *agreement* between the two reads
  * (direction, barsAgo gap, qualified), not accuracy against a reference.

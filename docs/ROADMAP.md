@@ -2,36 +2,36 @@
 
 Status legend: ⬜ not started · 🟡 in progress · ✅ done
 
-## Phase 0 — Foundations (current)
+## Phase 0; Foundations (current)
 
 - ✅ PRD captured ([PRD.md](PRD.md))
 - ✅ Architecture defined ([ARCHITECTURE.md](ARCHITECTURE.md))
 - ✅ Repository structure & conventions
-- ✅ Monorepo tooling — npm workspaces; TypeScript run/tested natively via `node --test` (zero runtime test deps)
-- ✅ `packages/shared`: indicator constants, verdict types, and `deriveSignal()` decision logic — asymmetric policy (BUY needs all 3, SELL needs 2)
-- ✅ `packages/shared`: `parseVerdict()` — validate VLM JSON, recompute the authoritative signal, warn on model disagreement (39 unit tests total)
+- ✅ Monorepo tooling; npm workspaces; TypeScript run/tested natively via `node --test` (zero runtime test deps)
+- ✅ `packages/shared`: indicator constants, verdict types, and `deriveSignal()` decision logic; asymmetric policy (BUY needs all 3, SELL needs 2)
+- ✅ `packages/shared`: `parseVerdict()`; validate VLM JSON, recompute the authoritative signal, warn on model disagreement (39 unit tests total)
 
-## Phase 1 — MVP
+## Phase 1; MVP
 
 Goal: enter a ticker → get a Buy/Sell/Hold Daily Report in under 15 seconds.
 
 - ✅ **Orchestration** (`packages/daily`): `runDaily(ticker)` chains agent → VLM → verdict; staged failure reporting; short-circuits before any billed call on a bad capture (8 unit tests, fully mocked)
 - ⬜ **Web** (`apps/web`): Next.js dashboard, single ticker input, Daily Report card
-- ✅ **Agent** (`packages/agent`): live capture working — pinned daily interval, saved-layout reuse, study + interval validation, sanitized chart-element screenshot in ~5s (29 unit tests). Visible window is ~6M not 3M (see README).
-- ✅ **Agent**: structural validation — studies present with exact params, and bar interval verified as daily, before inference
-- ✅ **VLM** (`packages/vlm`): prompt builder, response parser, provider interface, and the Claude provider adapter (`claude-sonnet-5` default) — 21 unit tests, all mocked. Live smoke test pending an API key.
+- ✅ **Agent** (`packages/agent`): live capture working; pinned daily interval, saved-layout reuse, study + interval validation, sanitized chart-element screenshot in ~5s (29 unit tests). Visible window is ~6M not 3M (see README).
+- ✅ **Agent**: structural validation; studies present with exact params, and bar interval verified as daily, before inference
+- ✅ **VLM** (`packages/vlm`): prompt builder, response parser, provider interface, and the Claude provider adapter (`claude-sonnet-5` default); 21 unit tests, all mocked. Live smoke test pending an API key.
 - ⬜ **DB** (`supabase`): schema for preferences + daily history; history purge
 - ⬜ **Security**: OS-vault credential storage; read-only scoping; no trade-execution paths
-- 🟡 **Evals**: `interpretation` oracle built and CALIBRATED against TradingView live (all values match to <0.003) — event-capable (OHLC → indicator series → crossover facts), scoring done (40 unit tests); harness (capture N + VLM + score) still to run. `retrieval` (SSIM ≥ 95%) not started.
-- ✅ **Metric**: time-to-signal instrumented and measured — 11.3s end-to-end on a real run (capture 6.6s + analyze 4.7s), against the 15s target
+- 🟡 **Evals**: `interpretation` oracle built and CALIBRATED against TradingView live (all values match to <0.003); event-capable (OHLC → indicator series → crossover facts), scoring done (40 unit tests); harness (capture N + VLM + score) still to run. `retrieval` (SSIM ≥ 95%) not started.
+- ✅ **Metric**: time-to-signal instrumented and measured; 11.3s end-to-end on a real run (capture 6.6s + analyze 4.7s), against the 15s target
 
-## Phase 1.5 — Quality-of-life
+## Phase 1.5; Quality-of-life
 
 - ⬜ Designate preferred technical indicators & parameters
 - ⬜ Email notifications for the daily report
 - ⬜ Saved sessions to preserve portfolio reporting + changes over time
 
-## Phase 2 — Financials
+## Phase 2; Financials
 
 Extend into financial-statement extraction & synthesis.
 

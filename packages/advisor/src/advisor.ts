@@ -4,12 +4,12 @@ import { PROPOSE_SETTINGS_TOOL, WEB_SEARCH_TOOL, validateProposedSettings, type 
 
 export const DEFAULT_MODEL = 'claude-sonnet-5';
 export const DEFAULT_MAX_TOKENS = 4096;
-/** Round-trip safety net, not the primary bound — see DEFAULT_SEARCH_BUDGET. */
+/** Round-trip safety net, not the primary bound; see DEFAULT_SEARCH_BUDGET. */
 export const DEFAULT_MAX_TURNS = 4;
 /**
  * Total searches allowed across the *whole* conversation, not per call.
  * `max_uses` on the tool itself only caps a single `messages.create`
- * response — since web_search is a server tool, one turn can already chain
+ * response; since web_search is a server tool, one turn can already chain
  * several searches, and this loop can run multiple turns, so without a
  * cumulative budget the true worst case is `maxTurns * per-call max_uses`.
  * Once this hits zero, web_search is dropped from the offered tools
@@ -17,11 +17,11 @@ export const DEFAULT_MAX_TURNS = 4;
  * remaining turns.
  */
 export const DEFAULT_SEARCH_BUDGET = 5;
-/** Wall-clock cap on the whole call — protects against the model simply
+/** Wall-clock cap on the whole call; protects against the model simply
  * being slow (or a hung request) even while within its search budget. */
 export const DEFAULT_TIMEOUT_MS = 60_000;
 
-/** The slice of the SDK this depends on — narrow and injectable, same
+/** The slice of the SDK this depends on; narrow and injectable, same
  * testability pattern as packages/vlm/src/providers/claude.ts. */
 export interface AnthropicLike {
   messages: {
@@ -33,7 +33,7 @@ export interface AnthropicLike {
 }
 
 export interface AdvisorOptions {
-  /** Defaults to `process.env.VLM_API_KEY` — same key already used for the
+  /** Defaults to `process.env.VLM_API_KEY`; same key already used for the
    * chart-reading VLM calls, since both are Claude API usage. */
   apiKey?: string;
   model?: string;
@@ -67,7 +67,7 @@ const SYSTEM_PROMPT = `You are researching a public company to help tune a techn
 indicator settings for its stock.
 
 Use web_search to research the company: its industry and sector, current trends affecting it,
-recent relevant news, and its competitors. Base your proposal on what you find — do not rely on
+recent relevant news, and its competitors. Base your proposal on what you find; do not rely on
 general knowledge alone when search results are available. Your search budget is limited, so
 prioritize the highest-value queries rather than searching exhaustively.
 
@@ -80,7 +80,7 @@ function findToolUse(content: Array<{ type: string; [key: string]: unknown }>, n
     | undefined;
 }
 
-/** Counts how many web_search invocations actually happened in a response —
+/** Counts how many web_search invocations actually happened in a response;
  * `server_tool_use` blocks are the model's search calls; unlike a
  * client-defined tool, Anthropic resolves these server-side inline in the
  * same response, so there's no separate round-trip to count. */
@@ -129,7 +129,7 @@ async function runLoop(ticker: string, options: RunLoopOptions): Promise<Advisor
       return validateProposedSettings(proposal.input);
     }
 
-    // Not done yet — carry the assistant's turn forward (including any
+    // Not done yet; carry the assistant's turn forward (including any
     // server_tool_use / web_search_tool_result blocks) and nudge it to
     // wrap up on the next attempt.
     messages.push({ role: 'assistant', content: response.content });

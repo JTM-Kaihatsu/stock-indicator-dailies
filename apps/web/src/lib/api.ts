@@ -16,7 +16,7 @@ function failure(reason: string): DailyResult {
 }
 
 /**
- * Kicks off analysis and resolves once it's done — a cache hit resolves
+ * Kicks off analysis and resolves once it's done; a cache hit resolves
  * immediately, a miss polls a background job. No single HTTP request stays
  * open for the pipeline's full duration, so this can't hit a gateway timeout
  * the way a single blocking call could.

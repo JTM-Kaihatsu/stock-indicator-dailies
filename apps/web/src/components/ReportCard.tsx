@@ -16,7 +16,7 @@ function sigClass(s: string): string {
 /**
  * Resolve the overall recommendation from the computed and AI signals.
  * Asymmetric and risk-averse: either side calling SELL is enough to exit,
- * but BUY needs both to agree — computed alone calling HOLD keeps it at
+ * but BUY needs both to agree; computed alone calling HOLD keeps it at
  * HOLD even if the AI read is more bullish.
  */
 function resolveOverall(detSignal: Signal | null, vlmSignal: Signal): Signal {
@@ -37,7 +37,7 @@ export function ReportCard({ report, options }: { report: DailyReport; options?:
   const detByKey = new Map((deterministic?.readings ?? []).map((r) => [r.indicator, r]));
 
   // The disagreement note tracks the per-indicator DIFFERS badges below, not
-  // the overall signal — the two aren't the same thing once the overall
+  // the overall signal; the two aren't the same thing once the overall
   // policy can resolve to a single value even when individual reads differ.
   // Uses the same `options` IndicatorRow renders with, so the note never
   // contradicts what the per-row badges show.
@@ -55,7 +55,7 @@ export function ReportCard({ report, options }: { report: DailyReport; options?:
           <div className="eyebrow">Stock Indicator Dailies</div>
           <h1 style={{ fontFamily: 'var(--mono)', fontSize: 40, fontWeight: 600, letterSpacing: '-.01em', margin: '2px 0 0' }}>{ticker}</h1>
           <div className="tabular" style={{ color: 'var(--muted)', fontSize: 13 }}>
-            daily bars · as of {deterministic?.asOf ?? '—'}
+            daily bars · as of {deterministic?.asOf ?? 'N/A'}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -69,7 +69,7 @@ export function ReportCard({ report, options }: { report: DailyReport; options?:
               {detSignal ? (
                 <b className={sigClass(detSignal)} style={{ fontFamily: 'var(--mono)' }}>{detSignal}</b>
               ) : (
-                <b style={{ fontFamily: 'var(--mono)' }}>—</b>
+                <b style={{ fontFamily: 'var(--mono)' }}>N/A</b>
               )}
             </span>
             <span>

@@ -9,7 +9,7 @@ import type { DataSource } from '@stock-indicator-dailies/indicators';
 
 import { runDaily } from '../src/run-daily.ts';
 
-/** VLM provider returning a canned response — no network, no key. */
+/** VLM provider returning a canned response; no network, no key. */
 class FakeProvider implements VlmProvider {
   readonly name = 'fake';
   readonly #response: string;

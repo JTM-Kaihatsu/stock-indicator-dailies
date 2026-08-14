@@ -3,7 +3,7 @@ import { apiUrl } from './api.ts';
 import { pollUntilDone } from './polling.ts';
 
 /** Same start→poll shape as analyzeDaily, but every call is a fresh
- * research request — no cache-hit-inline path on this one. */
+ * research request; no cache-hit-inline path on this one. */
 export async function requestAiSuggestion(ticker: string): Promise<AdvisorProposal> {
   const startRes = await fetch(apiUrl('/api/advisor/start'), {
     method: 'POST',

@@ -1,5 +1,5 @@
 /**
- * Manual smoke test — drive the real browser and capture one chart.
+ * Manual smoke test; drive the real browser and capture one chart.
  * Writes the PNG locally so you can eyeball what the VLM would receive.
  *
  *   node packages/agent/smoke-capture.ts NVDA

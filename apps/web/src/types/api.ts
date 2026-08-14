@@ -43,7 +43,7 @@ export type DailyResult =
   | { ok: true; report: DailyReport }
   | { ok: false; stage: string; reason: string; errors: string[]; timings: DailyTimings };
 
-/** Response from POST /api/daily/start — a cache hit resolves inline, a
+/** Response from POST /api/daily/start; a cache hit resolves inline, a
  * miss returns a job id to poll instead. */
 export type StartResponse =
   | { ok: true; report: DailyReport }

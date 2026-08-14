@@ -2,10 +2,10 @@ import Anthropic from '@anthropic-ai/sdk';
 
 import type { VlmProvider, VlmRequest } from '../provider.ts';
 
-/** Default model — Sonnet 5: high-res vision + strong structured output. */
+/** Default model; Sonnet 5: high-res vision + strong structured output. */
 export const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5';
 /**
- * Ceiling, not a target — you're billed on actual output. Must comfortably fit
+ * Ceiling, not a target; you're billed on actual output. Must comfortably fit
  * both the adaptive-thinking budget (on by default for Sonnet 5) AND the JSON
  * verdict; 1024 truncated the JSON once thinking + three fuller rationales grew.
  */
@@ -14,7 +14,7 @@ export const DEFAULT_MAX_TOKENS = 4096;
  * Effort caps how deep adaptive thinking (and overall token spend) goes. Sonnet 5
  * defaults to `high`, which ran its adaptive thinking nearly unbounded and pushed
  * time-to-signal to ~30s in the first eval. `budget_tokens` is rejected on Sonnet
- * 5 (400) — effort is the supported lever. We keep thinking ON (an independent
+ * 5 (400); effort is the supported lever. We keep thinking ON (an independent
  * read still benefits from some reasoning) but bound it. `low` is the default; the
  * eval measures the accuracy cost against the calibrated fetched read.
  */
@@ -23,7 +23,7 @@ export const DEFAULT_EFFORT: EffortLevel = 'low';
 
 /**
  * The slice of the Anthropic SDK this provider depends on. Declaring it as an
- * interface lets tests inject a fake client — no network, no API key, not flaky.
+ * interface lets tests inject a fake client; no network, no API key, not flaky.
  */
 export interface AnthropicLike {
   messages: {
@@ -60,7 +60,7 @@ export interface ClaudeVlmProviderOptions {
   /** Adaptive-thinking / spend cap. Defaults to {@link DEFAULT_EFFORT} (`low`). */
   effort?: EffortLevel;
   /**
-   * Whether adaptive thinking runs at all. Defaults to `adaptive` — we cap it
+   * Whether adaptive thinking runs at all. Defaults to `adaptive`; we cap it
    * with `effort` rather than turning it off, since a chart read still benefits
    * from some reasoning and disabling thinking on Sonnet 5 has known failure
    * modes (reasoning leaking into the response text).
@@ -120,7 +120,7 @@ export class ClaudeVlmProvider implements VlmProvider {
 
     if (response.stop_reason === 'max_tokens') {
       throw new Error(
-        `Claude response was truncated (stop_reason=max_tokens) at maxTokens=${this.#maxTokens} — ` +
+        `Claude response was truncated (stop_reason=max_tokens) at maxTokens=${this.#maxTokens}; ` +
           `raise maxTokens. Thinking tokens share this budget.`,
       );
     }

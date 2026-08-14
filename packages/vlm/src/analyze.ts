@@ -21,7 +21,7 @@ export type AnalyzeChartResult =
 
 /**
  * Turn one raw model response into a validated result. The requested `ticker`
- * is injected as authoritative — we asked about a specific symbol, so we never
+ * is injected as authoritative; we asked about a specific symbol, so we never
  * depend on the model echoing it back correctly. The rest flows through
  * {@link parseVerdict}, which recomputes the overall signal from the readings.
  */

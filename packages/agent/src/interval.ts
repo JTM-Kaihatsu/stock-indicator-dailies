@@ -4,7 +4,7 @@
  * The indicator spec is defined on DAILY bars (a 10-day SMA, MACD 8/17/9 on
  * daily closes). If the chart silently loads an intraday interval, every study
  * is computed over the wrong timeframe and the resulting verdict is confidently
- * wrong — the failure is invisible in the image unless you read the header.
+ * wrong; the failure is invisible in the image unless you read the header.
  *
  * TradingView renders the symbol header as name + interval + exchange, which
  * normalizes to e.g. `GGE Vernova Inc.1DNYSE` or `NNVIDIA Corporation1DNASDAQ`.

@@ -74,7 +74,7 @@ stock-indicator-dailies/
 └── docs/                    # PRD, architecture, roadmap
 ```
 
-> **Status:** Docs & structure only. Application code lands in later commits — see [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Status:** Docs & structure only. Application code lands in later commits; see [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Getting started
 
@@ -96,10 +96,10 @@ Because the agent authenticates into external charting/brokerage platforms on yo
 security is a first-class concern. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#security--risk)
 for the full model. Highlights:
 
-- **Read-only, no trade execution** — trade execution is explicitly out of scope for the MVP.
-- **Encrypted, local-first credentials** — secrets live in OS-level vaults (e.g. Keychain), never in plaintext or logs, never on centralized servers.
-- **Token-based auth preferred** — OAuth / scoped read-only API keys over passwords.
-- **Image sanitization** — screenshots are regionally cropped to strip account-identifying metadata.
+- **Read-only, no trade execution**; trade execution is explicitly out of scope for the MVP.
+- **Encrypted, local-first credentials**; secrets live in OS-level vaults (e.g. Keychain), never in plaintext or logs, never on centralized servers.
+- **Token-based auth preferred**; OAuth / scoped read-only API keys over passwords.
+- **Image sanitization**; screenshots are regionally cropped to strip account-identifying metadata.
 
 ## Roadmap
 

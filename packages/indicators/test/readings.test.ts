@@ -65,7 +65,7 @@ test('oracle readings have the VLM fact shape', () => {
 // --- MACD near-zero dead zone ---
 
 test('MACD cross near zero is qualified regardless of sign', () => {
-  // Build a series where MACD crosses bearishly just barely above zero —
+  // Build a series where MACD crosses bearishly just barely above zero;
   // close enough that |macd| / range < 5% (the dead zone threshold).
   // A long flat series followed by a gentle rise then a tiny dip does this:
   // the MACD oscillates near zero with a large historical range.
@@ -98,7 +98,7 @@ test('MACD cross near zero is qualified regardless of sign', () => {
 test('calibration passes when computed matches the legend', () => {
   const bars = vShape();
   const computed = computeLastBar(bars);
-  // Feed the computed values back as the "legend" — must calibrate cleanly.
+  // Feed the computed values back as the "legend"; must calibrate cleanly.
   const result = calibrate(computed, {
     macd: computed.macd,
     stochastic: computed.stochastic,
@@ -114,7 +114,7 @@ test('calibration fails loudly on a data mismatch', () => {
   const result = calibrate(computed, {
     macd: computed.macd,
     stochastic: computed.stochastic,
-    sma: computed.sma * 1.1, // 10% off — a wrong data source
+    sma: computed.sma * 1.1, // 10% off; a wrong data source
     close: computed.close,
   });
   assert.equal(result.ok, false);

@@ -5,8 +5,8 @@ import type { BacktestOptions } from '@stock-indicator-dailies/eval-backtest';
  * The 9 tunable levers, split by where they take effect. `LiveSettings`
  * drives both the live report (client-side recompute) and is global,
  * session-persisted state. `BacktestOnlySettings` only matters once there's
- * a multi-day position to hold/exit — `deriveSignal` has no concept of that
- * for a single-day snapshot — so it lives locally inside Historical Testing,
+ * a multi-day position to hold/exit; `deriveSignal` has no concept of that
+ * for a single-day snapshot; so it lives locally inside Historical Testing,
  * not in global settings.
  */
 export interface LiveSettings {
@@ -28,7 +28,7 @@ export interface BacktestOnlySettings {
 
 export type IndicatorSettings = LiveSettings & BacktestOnlySettings;
 
-/** Mirrors the backend's actual defaults in packages/shared/src/signal.ts —
+/** Mirrors the backend's actual defaults in packages/shared/src/signal.ts;
  * keep in sync if that ever changes. */
 export const DEFAULT_LIVE_SETTINGS: LiveSettings = {
   buyConsensus: 2,
@@ -124,7 +124,7 @@ const FIELD_LABELS: Record<keyof IndicatorSettings, string> = {
   adxPeriod: 'ADX period',
 };
 
-/** Fields that differ between two settings profiles — used by both the
+/** Fields that differ between two settings profiles; used by both the
  * unified scenario/AI-suggestion pellet mechanism. */
 export function diffSettings(a: IndicatorSettings, b: IndicatorSettings): SettingsDiffEntry[] {
   return (Object.keys(FIELD_LABELS) as Array<keyof IndicatorSettings>)

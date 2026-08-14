@@ -14,7 +14,7 @@ function ensureInitialized() {
 
 // The agent drives a single browser session, so only one pipeline run can be
 // in flight at a time. Concurrent callers queue and wait their turn rather
-// than getting rejected — chaining onto this promise serializes execution.
+// than getting rejected; chaining onto this promise serializes execution.
 let queue: Promise<unknown> = Promise.resolve();
 let queueLength = 0;
 
@@ -25,7 +25,7 @@ export function pendingCount(): number {
 
 export async function runPipeline(ticker: string): Promise<DailyResult> {
   // Cache check happens before the browser-automation path entirely, and
-  // before joining the queue — a hit never waits on anything in flight.
+  // before joining the queue; a hit never waits on anything in flight.
   const cached = await getCachedReport(ticker);
   if (cached) return { ok: true, report: cached };
 

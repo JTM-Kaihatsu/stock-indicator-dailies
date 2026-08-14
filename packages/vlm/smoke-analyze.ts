@@ -1,5 +1,5 @@
 /**
- * Manual smoke test — feed one real chart PNG through the full VLM pipeline.
+ * Manual smoke test; feed one real chart PNG through the full VLM pipeline.
  * Makes a live, billed Anthropic call. Run from the repo root:
  *
  *   node --env-file=.env.local packages/vlm/smoke-analyze.ts <image.png> <TICKER>
@@ -28,7 +28,7 @@ console.log('\n--- result ---');
 if (result.ok) {
   console.log(`SIGNAL: ${result.verdict.signal}`);
   for (const r of result.verdict.readings) {
-    console.log(`  ${r.indicator.padEnd(16)} ${r.signal}${r.rationale ? ` — ${r.rationale}` : ''}`);
+    console.log(`  ${r.indicator.padEnd(16)} ${r.signal}${r.rationale ? `; ${r.rationale}` : ''}`);
   }
   if (result.warnings.length) console.log('warnings:', result.warnings);
 } else {

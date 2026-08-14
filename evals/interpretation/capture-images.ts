@@ -1,12 +1,12 @@
 /**
- * Capture-only pass — save the chart PNGs for hand-labeling WITHOUT any model
+ * Capture-only pass; save the chart PNGs for hand-labeling WITHOUT any model
  * calls (free). Use this to produce evidence images for an existing CSV, or to
  * eyeball charts before spending on a billed eval.
  *
  *   npm run capture-images -w @stock-indicator-dailies/eval-interpretation -- GEV NVDA AAPL
  *
  * Drives a real browser (needs a live TradingView session) but calls no model.
- * Images land in ./eval-images/<TICKER>.png — the same path the CSV references.
+ * Images land in ./eval-images/<TICKER>.png; the same path the CSV references.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -23,7 +23,7 @@ if (tickers.length === 0) {
 const dir = path.resolve(process.env.INIT_CWD ?? process.cwd(), 'eval-images');
 mkdirSync(dir, { recursive: true });
 
-console.error(`\nCapturing ${tickers.length} chart(s) — no model calls, browser only.\n`);
+console.error(`\nCapturing ${tickers.length} chart(s); no model calls, browser only.\n`);
 
 const agent = new TradingViewChartAgent();
 let saved = 0;
@@ -36,7 +36,7 @@ for (const ticker of tickers) {
     saved++;
   } catch (err) {
     console.error(`  ❌ ${ticker.padEnd(6)} ${err instanceof Error ? err.message : String(err)}`);
-    // A rejected chart often still carries the image it was rejected on — save
+    // A rejected chart often still carries the image it was rejected on; save
     // it (clearly marked FAILED) so the failure can be verified by eye.
     if (err instanceof ChartAcquisitionError && err.image) {
       const out = path.join(dir, `${ticker}.FAILED.png`);

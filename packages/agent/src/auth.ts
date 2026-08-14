@@ -5,7 +5,7 @@
  * rendered chart proves nothing (TradingView serves charts anonymously), and
  * header markup changes far more often than the auth cookie name.
  *
- * Cookie *values* are secrets — this module only ever inspects names/domains
+ * Cookie *values* are secrets; this module only ever inspects names/domains
  * and must never log or return a value.
  */
 

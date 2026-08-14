@@ -18,7 +18,7 @@ const esc = (s: string): string =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 const num = (n: number, dp = 2): string =>
-  Number.isFinite(n) ? n.toFixed(dp) : '—';
+  Number.isFinite(n) ? n.toFixed(dp) : 'N/A';
 
 /** Short human label for a crossover fact. */
 function factLabel(r: IndicatorReading): string {
@@ -86,7 +86,7 @@ export function renderDailyReportHtml(
         : `<div class="read read-empty">Computed<span class="fact">unavailable</span></div>`;
       const aiCell = vlm
         ? readCell('AI read', vlmSig, factLabel(vlm), vlm.rationale ?? '')
-        : `<div class="read read-empty">AI read<span class="fact">—</span></div>`;
+        : `<div class="read read-empty">AI read<span class="fact">N/A</span></div>`;
 
       return `<div class="ind-row">
         <div class="ind-name">
@@ -96,7 +96,7 @@ export function renderDailyReportHtml(
         ${computedCell}
         ${aiCell}
         <div class="agree ${det && vlm ? (match ? 'agree-yes' : 'agree-no') : 'agree-na'}">
-          ${det && vlm ? (match ? 'match' : 'differs') : '—'}
+          ${det && vlm ? (match ? 'match' : 'differs') : 'N/A'}
         </div>
       </div>`;
     })
@@ -108,12 +108,12 @@ export function renderDailyReportHtml(
 
   const disclaimerAndNotes = [
     disagree
-      ? `<div class="note note-warn">The computed and AI reads disagree — worth a look at the chart.</div>`
+      ? `<div class="note note-warn">The computed and AI reads disagree; worth a look at the chart.</div>`
       : '',
     ...report.warnings.map((w) => `<div class="note">${esc(w)}</div>`),
   ].join('\n');
 
-  const asOf = deterministic ? deterministic.asOf : '—';
+  const asOf = deterministic ? deterministic.asOf : 'N/A';
 
   return `<!doctype html>
 <html lang="en">

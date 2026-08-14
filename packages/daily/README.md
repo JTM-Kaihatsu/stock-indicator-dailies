@@ -2,7 +2,7 @@
 
 Orchestration: **ticker in → Daily Report out.** Chains the agent (capture) and
 the VLM (interpretation) into one call, and is the only package that depends on
-both — `agent` and `vlm` stay independent of each other.
+both; `agent` and `vlm` stay independent of each other.
 
 ## Run one
 
@@ -28,14 +28,14 @@ if (result.ok) {
 }
 ```
 
-**Failures are returned, not thrown**, and tagged with the stage that failed —
+**Failures are returned, not thrown**, and tagged with the stage that failed;
 because the responses differ:
 
 | Stage | Reason | What it means |
 |---|---|---|
 | `capture` | `not-authenticated` | Session expired → re-run the login |
 | `capture` | `chart-not-found` | Saved layout changed, or a study is missing/misconfigured |
-| `capture` | `wrong-interval` | Chart isn't on daily bars — indicators would be wrong |
+| `capture` | `wrong-interval` | Chart isn't on daily bars; indicators would be wrong |
 | `capture` | `timeout` | Provider slow or unreachable |
 | `analysis` | `invalid-verdict` | Model output wasn't parseable/valid |
 
@@ -44,7 +44,7 @@ never costs a billed request (covered by a test).
 
 ## Guarantees carried through
 
-- The overall signal is always recomputed by `deriveSignal` — the model's own
+- The overall signal is always recomputed by `deriveSignal`; the model's own
   call is cross-checked and surfaced as a warning, never trusted.
 - The source image is returned with every report so a human can verify the call
   (the PRD's human-in-the-loop requirement).

@@ -12,7 +12,7 @@ export type Signal = 'BUY' | 'SELL' | 'HOLD';
 
 /**
  * Direction of the most recent *clean* crossover for an indicator, as judged by
- * the VLM. `NONE` covers both "no crossover" and "too choppy to call one" — the
+ * the VLM. `NONE` covers both "no crossover" and "too choppy to call one"; the
  * VLM is expected to not force a crossover out of noise.
  *
  * The crossover per indicator:
@@ -23,7 +23,7 @@ export type Signal = 'BUY' | 'SELL' | 'HOLD';
 export type CrossoverDirection = 'BULLISH' | 'BEARISH' | 'NONE';
 
 /**
- * The VLM's interpreted *facts* for one indicator — what it read off the chart,
+ * The VLM's interpreted *facts* for one indicator; what it read off the chart,
  * before any recency judgment. The signal is derived from these downstream
  * (see `deriveIndicatorSignal`), keeping the tunable rules out of the model.
  */
@@ -34,7 +34,7 @@ export interface IndicatorReading {
   /** Daily bars since that crossover. Present iff `crossover !== 'NONE'`. */
   barsAgo?: number;
   /**
-   * Whether the crossover met its zone/slope condition — MACD below zero
+   * Whether the crossover met its zone/slope condition; MACD below zero
    * (bullish) / above zero (bearish); Stochastic oversold / overbought; SMA
    * upward / downward slope. Ignored when `crossover` is NONE.
    */
@@ -47,7 +47,7 @@ export interface IndicatorReading {
 }
 
 /**
- * A captured chart screenshot. Produced by the agent, consumed by the VLM —
+ * A captured chart screenshot. Produced by the agent, consumed by the VLM;
  * hence it lives here rather than in either package.
  *
  * Capture is expected to be scoped to the chart region only (never a full-page
@@ -75,7 +75,7 @@ export interface Verdict {
    * The date range the model actually saw on the chart's axis, as it reported it
    * (e.g. `"Jan 2026 to Aug 2026"`).
    *
-   * Observability only — the axis is canvas-rendered, so this is the one way to
+   * Observability only; the axis is canvas-rendered, so this is the one way to
    * learn what history the model was given. Treat as a soft signal: it is the
    * model's reading, not a measurement.
    */

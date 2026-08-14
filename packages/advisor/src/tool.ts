@@ -70,7 +70,7 @@ const RANGES: Record<keyof ProposedSettings, [number, number]> = {
 
 /** Validates a parsed `propose_settings` tool call input against the same
  * bounds the backend enforces. Throws with a specific message on the first
- * violation — the caller decides how to handle a model that ignored the
+ * violation; the caller decides how to handle a model that ignored the
  * schema's declared bounds. */
 export function validateProposedSettings(input: unknown): { rationale: string; settings: ProposedSettings } {
   if (typeof input !== 'object' || input === null) {

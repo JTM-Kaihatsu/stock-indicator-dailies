@@ -71,7 +71,7 @@ test('patterns are built from the shared constants', () => {
 });
 
 test('a study with default (wrong) params fails validation', () => {
-  // TradingView's stock MACD default is 12/26/9 — must not pass.
+  // TradingView's stock MACD default is 12/26/9; must not pass.
   const result = validateStudies(
     ['SMA10close207.45', 'MACDclose122690.24', 'Stoch145370.13'],
     TRADINGVIEW_EXPECTED_STUDIES,
@@ -117,7 +117,7 @@ test('with a values map, fully rendered studies validate', () => {
 });
 
 test('named-but-unrendered studies are notRendered, not missing (the blank-pane bug)', () => {
-  // Names present (prefix match passes) but NO plotted values yet — this is the
+  // Names present (prefix match passes) but NO plotted values yet; this is the
   // VST/GOOG blank-oscillator failure the name-only check used to wave through.
   const result = validateStudies(REAL_LEGEND, TRADINGVIEW_EXPECTED_STUDIES, {});
   assert.equal(result.ok, false);

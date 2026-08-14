@@ -1,4 +1,4 @@
--- "Automatically expose new tables" was left off (by design — see 0001), which
+-- "Automatically expose new tables" was left off (by design; see 0001), which
 -- also withholds base table grants from service_role, not just anon/authenticated.
 -- service_role bypasses RLS but still needs an explicit GRANT to touch a table
 -- at all. This is the only role that should ever have access to these two.

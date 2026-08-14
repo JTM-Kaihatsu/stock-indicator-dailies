@@ -9,7 +9,7 @@
  *   npm run backtest -w @stock-indicator-dailies/eval-backtest -- --buy-consensus=2 NVDA
  *   npm run backtest -w @stock-indicator-dailies/eval-backtest -- --min-holding-days=10 --atr-multiplier=2 NVDA
  *
- * No model calls, no chart capture — pure history replay against Yahoo OHLC
+ * No model calls, no chart capture; pure history replay against Yahoo OHLC
  * data, using the exact `computeReadings` + `deriveSignal` the app ships.
  */
 import { yahooDataSource } from '@stock-indicator-dailies/indicators';
@@ -55,9 +55,9 @@ if (options.minHoldingDays !== undefined) leverParts.push(`minHoldingDays=${opti
 if (options.atrMultiplier !== undefined) leverParts.push(`atrMultiplier=${options.atrMultiplier} (period ${options.atrPeriod ?? 14})`);
 if (options.adxThreshold !== undefined) leverParts.push(`adxThreshold=${options.adxThreshold} (period ${options.adxPeriod ?? 14})`);
 
-console.log(`\nWalk-forward backtest — range ${range}, ${tickers.length} ticker(s)`);
+console.log(`\nWalk-forward backtest; range ${range}, ${tickers.length} ticker(s)`);
 console.log(`policy: ${policyDesc} (defaults shown where not overridden)`);
-console.log(`execution filters: ${leverParts.length > 0 ? leverParts.join(', ') : '(none — pure vote-based signal)'}\n`);
+console.log(`execution filters: ${leverParts.length > 0 ? leverParts.join(', ') : '(none; pure vote-based signal)'}\n`);
 
 const results: BacktestResult[] = [];
 for (const ticker of tickers) {
@@ -71,14 +71,14 @@ for (const ticker of tickers) {
     for (const t of result.trades) {
       console.log(`  ${t.date}  ${t.type.padEnd(4)} @ ${money(t.price)}  → portfolio ${money(t.portfolioValue)}`);
     }
-    if (result.trades.length === 0) console.log('  (no trades — signal never left HOLD)');
-    if (result.stillHolding) console.log('  (still holding at end — marked to market at final close)');
+    if (result.trades.length === 0) console.log('  (no trades; signal never left HOLD)');
+    if (result.stillHolding) console.log('  (still holding at end; marked to market at final close)');
     console.log(
       `  strategy ${pct(result.strategyReturnPct)}   buy-and-hold ${pct(result.buyAndHoldReturnPct)}   ` +
         `${result.strategyReturnPct > result.buyAndHoldReturnPct ? 'beat' : 'lagged'} buy-and-hold\n`,
     );
   } catch (err) {
-    console.log(`── ${ticker}: FAILED — ${err instanceof Error ? err.message : String(err)}\n`);
+    console.log(`── ${ticker}: FAILED; ${err instanceof Error ? err.message : String(err)}\n`);
   }
 }
 

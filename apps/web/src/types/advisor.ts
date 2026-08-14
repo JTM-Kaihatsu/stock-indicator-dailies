@@ -1,6 +1,6 @@
 /**
  * Local duplication of the advisor's wire shapes (same precedent as
- * types/api.ts's DailyReport) — not worth adding the Anthropic SDK to the
+ * types/api.ts's DailyReport); not worth adding the Anthropic SDK to the
  * web bundle's dependency graph for two small types.
  */
 export interface ProposedSettings {

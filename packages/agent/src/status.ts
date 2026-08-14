@@ -3,7 +3,7 @@
  *
  *   npm run status -w @stock-indicator-dailies/agent
  *
- * Prints cookie NAMES only — never values.
+ * Prints cookie NAMES only; never values.
  */
 import { chromium } from 'playwright';
 
@@ -30,7 +30,7 @@ try {
 
   const signedIn = await hasAuthSession(context);
   if (signedIn) {
-    console.log('✅ SIGNED IN — the agent can use this session.');
+    console.log('✅ SIGNED IN; the agent can use this session.');
   } else {
     console.log('❌ NOT signed in (no session cookie).');
     console.log('   Run: npm run login -w @stock-indicator-dailies/agent');

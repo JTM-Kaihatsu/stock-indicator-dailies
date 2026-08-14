@@ -5,11 +5,11 @@ import { runBacktest, type BacktestOptions } from '@stock-indicator-dailies/eval
 /**
  * Regression-testing endpoint: replay the deterministic policy over real
  * history for a ticker and report whether following it would have beaten
- * buy-and-hold. Pure computation over Yahoo OHLC data — no Playwright, no
- * VLM call — so unlike /api/daily this stays well within any request
+ * buy-and-hold. Pure computation over Yahoo OHLC data; no Playwright, no
+ * VLM call; so unlike /api/daily this stays well within any request
  * timeout even for a multi-year range; no job/poll pattern needed here.
  *
- * Not yet wired into the frontend (tooling ahead of a future FE page) — see
+ * Not yet wired into the frontend (tooling ahead of a future FE page); see
  * evals/backtest for the CLI equivalent.
  */
 export const backtestRoute = new Hono();

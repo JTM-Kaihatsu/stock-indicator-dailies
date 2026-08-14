@@ -78,7 +78,7 @@ export function macdSeries(
 export interface StochasticSeries {
   /** Smoothed %K (the faster line). */
   percentK: number[];
-  /** %D — the signal line %K crosses. */
+  /** %D; the signal line %K crosses. */
   percentD: number[];
 }
 

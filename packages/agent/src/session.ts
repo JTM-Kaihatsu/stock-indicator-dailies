@@ -6,7 +6,7 @@ import path from 'node:path';
  *
  * This is how the agent stays signed in without ever handling a password:
  * you sign in once by hand (including via Google SSO), and the resulting
- * session lives here. Treat it as a secret — it grants access to the account.
+ * session lives here. Treat it as a secret; it grants access to the account.
  * It is gitignored.
  */
 export const DEFAULT_PROFILE_DIR = '.agent-profile';

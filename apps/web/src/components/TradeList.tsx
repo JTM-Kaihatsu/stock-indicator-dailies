@@ -4,7 +4,7 @@ const money = (n: number) => `$${n.toFixed(2)}`;
 
 export function TradeList({ trades }: { trades: Trade[] }) {
   if (trades.length === 0) {
-    return <div className="settings-group-hint">No trades — the signal never left HOLD over this window.</div>;
+    return <div className="settings-group-hint">No trades; the signal never left HOLD over this window.</div>;
   }
   return (
     <table className="trade-list">

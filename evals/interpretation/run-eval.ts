@@ -5,7 +5,7 @@
  *   npm run eval -w @stock-indicator-dailies/eval-interpretation -- GEV NVDA AAPL
  *
  * Drives a real browser and makes ONE billed model call per ticker. Tickers are
- * required — there is no default, so a bare run cannot silently bill you.
+ * required; there is no default, so a bare run cannot silently bill you.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';

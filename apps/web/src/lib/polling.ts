@@ -4,7 +4,7 @@ export function sleep(ms: number): Promise<void> {
 
 export interface PollOptions {
   intervalMs?: number;
-  /** Generous ceiling — guards against polling forever if something
+  /** Generous ceiling; guards against polling forever if something
    * server-side genuinely never resolves a job. */
   maxMs?: number;
 }
@@ -27,7 +27,7 @@ export async function pollUntilDone<T>(
     const status = await poll();
     if (status.status === 'done') return status.result;
     if (status.status === 'not-found') throw new Error('Job expired or was never created');
-    // status.status === 'pending' — keep polling
+    // status.status === 'pending'; keep polling
   }
   throw new Error('Timed out waiting for the job to finish');
 }
