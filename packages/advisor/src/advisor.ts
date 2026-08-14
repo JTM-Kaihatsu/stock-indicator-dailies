@@ -20,6 +20,11 @@ export const DEFAULT_SEARCH_BUDGET = 5;
 /** Wall-clock cap on the whole call; protects against the model simply
  * being slow (or a hung request) even while within its search budget. */
 export const DEFAULT_TIMEOUT_MS = 60_000;
+/** This is a background job, not a synchronous request on the critical
+ * path, so it can afford to absorb more of Anthropic's transient
+ * 429/5xx/529 responses than the SDK's own default of 2 before giving up.
+ * The SDK already applies exponential backoff between attempts. */
+export const DEFAULT_MAX_RETRIES = 5;
 
 /** The slice of the SDK this depends on; narrow and injectable, same
  * testability pattern as packages/vlm/src/providers/claude.ts. */
@@ -41,6 +46,9 @@ export interface AdvisorOptions {
   maxTurns?: number;
   searchBudget?: number;
   timeoutMs?: number;
+  /** Only applies when `client` is not supplied; ignored for an injected
+   * test client, which has no retry behavior of its own. */
+  maxRetries?: number;
   client?: AnthropicLike;
 }
 
@@ -61,6 +69,41 @@ export class AdvisorWallClockTimeoutError extends Error {
     super(`advisor did not finish within ${timeoutMs}ms`);
     this.name = 'AdvisorWallClockTimeoutError';
   }
+}
+
+/** Anthropic's API returned a transient error (rate limit, overload, or a
+ * 5xx) after the SDK's own retries were exhausted. Distinct from
+ * AdvisorTimeoutError (the model never proposed) and
+ * AdvisorWallClockTimeoutError (the whole call ran too long); this one
+ * means the upstream API itself was unavailable, and trying again shortly
+ * is likely to work. */
+export class AdvisorUpstreamError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'AdvisorUpstreamError';
+    this.status = status;
+  }
+}
+
+const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504, 529]);
+
+/** Duck-typed status extraction so this works against both the real
+ * Anthropic SDK's APIError and any fake client tests throw. */
+function extractStatus(err: unknown): number | undefined {
+  if (typeof err !== 'object' || err === null || !('status' in err)) return undefined;
+  const status = (err as { status?: unknown }).status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+function friendlyUpstreamMessage(status: number): string {
+  if (status === 529) {
+    return "Claude's API is temporarily overloaded. This usually clears up within a minute; please try again shortly.";
+  }
+  if (status === 429) {
+    return "Hit Claude's API rate limit. Please wait a moment and try again.";
+  }
+  return `Claude's API returned an unexpected error (HTTP ${status}). Please try again shortly.`;
 }
 
 const SYSTEM_PROMPT = `You are researching a public company to help tune a technical-analysis trading tool's
@@ -113,14 +156,23 @@ async function runLoop(ticker: string, options: RunLoopOptions): Promise<Advisor
       ? [PROPOSE_SETTINGS_TOOL]
       : [{ ...WEB_SEARCH_TOOL, max_uses: remainingSearches }, PROPOSE_SETTINGS_TOOL];
 
-    const response = await client.messages.create({
-      model,
-      max_tokens: maxTokens,
-      system: SYSTEM_PROMPT,
-      tools,
-      tool_choice: forcing ? { type: 'tool', name: 'propose_settings' } : { type: 'auto' },
-      messages,
-    });
+    let response: Awaited<ReturnType<AnthropicLike['messages']['create']>>;
+    try {
+      response = await client.messages.create({
+        model,
+        max_tokens: maxTokens,
+        system: SYSTEM_PROMPT,
+        tools,
+        tool_choice: forcing ? { type: 'tool', name: 'propose_settings' } : { type: 'auto' },
+        messages,
+      });
+    } catch (err) {
+      const status = extractStatus(err);
+      if (status !== undefined && RETRYABLE_STATUSES.has(status)) {
+        throw new AdvisorUpstreamError(status, friendlyUpstreamMessage(status));
+      }
+      throw err;
+    }
 
     searchesUsed += countSearchesUsed(response.content);
 
@@ -157,7 +209,10 @@ export async function researchAndPropose(ticker: string, options: AdvisorOptions
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const client: AnthropicLike =
     options.client ??
-    (new Anthropic({ apiKey: options.apiKey ?? process.env.VLM_API_KEY }) as unknown as AnthropicLike);
+    (new Anthropic({
+      apiKey: options.apiKey ?? process.env.VLM_API_KEY,
+      maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,
+    }) as unknown as AnthropicLike);
 
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {

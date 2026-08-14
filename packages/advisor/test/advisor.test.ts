@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { AdvisorTimeoutError, AdvisorWallClockTimeoutError, researchAndPropose, type AnthropicLike } from '../src/advisor.ts';
+import { AdvisorTimeoutError, AdvisorUpstreamError, AdvisorWallClockTimeoutError, researchAndPropose, type AnthropicLike } from '../src/advisor.ts';
 
 const VALID_SETTINGS = {
   buyConsensus: 2, sellConsensus: 3, recencyDays: 3, persistenceBars: 1,
@@ -112,6 +112,40 @@ test('drops web_search and forces propose_settings once the search budget is exh
   const secondBody = bodies[1] as { tools: Array<{ name: string }>; tool_choice: { type: string; name?: string } };
   assert.ok(!secondBody.tools.some((t) => t.name === 'web_search'), 'web_search should be dropped once budget is exhausted');
   assert.deepEqual(secondBody.tool_choice, { type: 'tool', name: 'propose_settings' });
+});
+
+test('translates a 529 overloaded error into a friendly AdvisorUpstreamError', async () => {
+  const client: AnthropicLike = {
+    messages: {
+      async create() {
+        const err = new Error('529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}');
+        (err as unknown as { status: number }).status = 529;
+        throw err;
+      },
+    },
+  };
+  await assert.rejects(
+    () => researchAndPropose('NVDA', { client, maxTurns: 1 }),
+    (err: unknown) => {
+      assert.ok(err instanceof AdvisorUpstreamError);
+      assert.equal(err.status, 529);
+      assert.match(err.message, /temporarily overloaded/);
+      return true;
+    },
+  );
+});
+
+test('passes through a non-retryable error unchanged', async () => {
+  const client: AnthropicLike = {
+    messages: {
+      async create() {
+        const err = new Error('401 invalid API key');
+        (err as unknown as { status: number }).status = 401;
+        throw err;
+      },
+    },
+  };
+  await assert.rejects(() => researchAndPropose('NVDA', { client, maxTurns: 1 }), /invalid API key/);
 });
 
 test('throws AdvisorWallClockTimeoutError when the call runs past timeoutMs', async () => {
