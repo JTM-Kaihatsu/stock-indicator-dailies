@@ -96,9 +96,14 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
       {open && (
         <div style={{ marginTop: 12 }}>
           <div className="settings-group-hint">
-            Time travel / alternate universe time! See how much money a given strategy would make by changing
-            indicator-read settings and simulating the strategy on the historic data. Backtest-only execution
-            filters; these have no effect on the live report above.
+            <p>
+              It&apos;s time to time travel and make more money! Adjust how much money a given strategy would
+              make by changing indicator-read settings and then simulating how this strategy would play out.
+            </p>
+            <p>
+              Note that the settings below are backtest-only execution filters; these have no effect on the
+              live report above.
+            </p>
           </div>
           <LiveSettingsFields value={policy} onChange={setPolicy} idPrefix="bt-" />
           <BacktestOnlySettingsFields value={backtestOnly} onChange={setBacktestOnly} />
