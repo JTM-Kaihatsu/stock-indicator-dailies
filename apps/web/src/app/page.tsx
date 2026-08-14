@@ -1,17 +1,35 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { analyzeDaily } from '@/lib/api';
 import type { DailyReport } from '@/types/api';
+import { DEFAULT_SETTINGS, loadSettings, saveSettings, toLiveOptions, type IndicatorSettings } from '@/lib/settings';
+import { recomputeReport } from '@/lib/recompute';
 import { TickerInput } from '@/components/TickerInput';
 import { ReportCard } from '@/components/ReportCard';
 import { LoadingState } from '@/components/LoadingState';
+import { SettingsPanel } from '@/components/SettingsPanel';
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [ticker, setTicker] = useState('');
   const [report, setReport] = useState<DailyReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<IndicatorSettings>(DEFAULT_SETTINGS);
+
+  // Hydrate from sessionStorage after mount, not at initial render, so the
+  // server-rendered and first client render both start from the same
+  // defaults (avoids a hydration mismatch).
+  useEffect(() => {
+    setSettings(loadSettings());
+  }, []);
+
+  /** Single recompute path for both manual Apply and AI-suggestion accept. */
+  function applySettings(newSettings: IndicatorSettings) {
+    saveSettings(newSettings);
+    setSettings(newSettings);
+    setReport((current) => (current ? recomputeReport(current, newSettings) : current));
+  }
 
   async function handleSubmit(t: string) {
     setTicker(t);
@@ -22,7 +40,7 @@ export default function Home() {
     try {
       const result = await analyzeDaily(t);
       if (result.ok) {
-        setReport(result.report);
+        setReport(recomputeReport(result.report, settings));
       } else {
         setError(`${result.stage}: ${result.reason}`);
       }
@@ -35,6 +53,7 @@ export default function Home() {
 
   return (
     <div className="wrap">
+      <SettingsPanel settings={settings} onApply={applySettings} />
       <TickerInput onSubmit={handleSubmit} disabled={loading} />
 
       {loading && <LoadingState ticker={ticker} />}
@@ -46,7 +65,7 @@ export default function Home() {
         </div>
       )}
 
-      {report && <ReportCard report={report} />}
+      {report && <ReportCard report={report} options={toLiveOptions(settings)} />}
     </div>
   );
 }

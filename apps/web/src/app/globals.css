@@ -107,6 +107,40 @@ body {
 }
 .badge b { color: var(--text); font-weight: 600; }
 
+/* --- Indicator settings panel --- */
+.settings-panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 18px; margin-bottom: 20px;
+}
+.settings-toggle {
+  background: none; border: none; color: var(--text); font-family: var(--sans);
+  font-size: 14px; font-weight: 600; cursor: pointer; padding: 4px 0;
+}
+.settings-badge-active { color: var(--accent); border-color: var(--accent); }
+.settings-group { margin-top: 16px; }
+.settings-group:first-child { margin-top: 0; }
+.settings-group-title {
+  text-transform: uppercase; letter-spacing: .08em; font-size: 11px;
+  font-weight: 600; color: var(--faint);
+}
+.settings-group-hint { font-size: 12px; color: var(--muted); margin: 4px 0 10px; max-width: 520px; }
+.settings-field {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 6px 0; border-bottom: 1px solid var(--border);
+}
+.settings-field:last-child { border-bottom: none; }
+.settings-subfield { padding-left: 16px; }
+.settings-field label { font-size: 13px; color: var(--muted); }
+.settings-field input[type="number"] {
+  font-family: var(--mono); background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; width: 80px;
+}
+.settings-field input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+.settings-confirm {
+  margin-top: 12px; padding: 10px 12px; background: var(--hold-bg);
+  border-left: 2px solid var(--hold); border-radius: 0 6px 6px 0; font-size: 13px;
+}
+
 /* --- Ticker input --- */
 .ticker-form {
   display: flex; gap: 10px; align-items: center; margin-bottom: 28px;

@@ -9,7 +9,7 @@
     "evals/*"
   ],
   "scripts": {
-    "test": "node --test \"packages/**/test/**/*.test.ts\" \"evals/**/test/**/*.test.ts\"",
+    "test": "node --test \"packages/**/test/**/*.test.ts\" \"evals/**/test/**/*.test.ts\" \"apps/**/test/**/*.test.ts\"",
     "typecheck": "tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p packages/indicators/tsconfig.json && tsc --noEmit -p packages/vlm/tsconfig.json && tsc --noEmit -p packages/agent/tsconfig.json && tsc --noEmit -p packages/daily/tsconfig.json && tsc --noEmit -p evals/interpretation/tsconfig.json && tsc --noEmit -p evals/backtest/tsconfig.json && tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json",
     "dev:api": "npm run dev -w @stock-indicator-dailies/api",
     "dev:web": "npm run dev -w @stock-indicator-dailies/web"
