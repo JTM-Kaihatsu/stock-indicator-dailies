@@ -16,14 +16,17 @@ function InfoIcon({ text }: { text: string }) {
   );
 }
 
-/** The 3 levers that drive the live report. Used by the global Indicator
- * Settings panel. */
+/** The 3 levers that drive the live report. Used by both the global
+ * Indicator Settings panel and (with a distinct `idPrefix`, since both can
+ * be open at once) Historical Testing's own local policy override. */
 export function LiveSettingsFields({
   value,
   onChange,
+  idPrefix = '',
 }: {
   value: LiveSettings;
   onChange: (next: LiveSettings) => void;
+  idPrefix?: string;
 }) {
   function set<K extends keyof LiveSettings>(key: K, v: LiveSettings[K]) {
     onChange({ ...value, [key]: v });
@@ -32,25 +35,25 @@ export function LiveSettingsFields({
   return (
     <div className="settings-group">
       <div className="settings-field">
-        <label htmlFor="buyConsensus">BUY needs at least (of 3)</label>
+        <label htmlFor={`${idPrefix}buyConsensus`}>BUY needs at least (of 3)</label>
         <input
-          id="buyConsensus" type="number" min={1} max={3}
+          id={`${idPrefix}buyConsensus`} type="number" min={1} max={3}
           value={value.buyConsensus}
           onChange={(e) => set('buyConsensus', num(e.target.value, value.buyConsensus))}
         />
       </div>
       <div className="settings-field">
-        <label htmlFor="sellConsensus">SELL needs at least (of 3)</label>
+        <label htmlFor={`${idPrefix}sellConsensus`}>SELL needs at least (of 3)</label>
         <input
-          id="sellConsensus" type="number" min={1} max={3}
+          id={`${idPrefix}sellConsensus`} type="number" min={1} max={3}
           value={value.sellConsensus}
           onChange={(e) => set('sellConsensus', num(e.target.value, value.sellConsensus))}
         />
       </div>
       <div className="settings-field">
-        <label htmlFor="recencyDays">Recency window (days)</label>
+        <label htmlFor={`${idPrefix}recencyDays`}>Recency window (days)</label>
         <input
-          id="recencyDays" type="number" min={1} max={60}
+          id={`${idPrefix}recencyDays`} type="number" min={1} max={60}
           value={value.recencyDays}
           onChange={(e) => set('recencyDays', num(e.target.value, value.recencyDays))}
         />

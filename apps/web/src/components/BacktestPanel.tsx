@@ -13,13 +13,18 @@ import {
 } from '@/lib/settings';
 import type { BacktestResult } from '@/types/backtest';
 import { TradeList } from './TradeList';
-import { BacktestOnlySettingsFields } from './SettingsFields';
+import { BacktestOnlySettingsFields, LiveSettingsFields } from './SettingsFields';
 import { AiSuggestionPanel } from './AiSuggestionPanel';
 
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
 export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSettings: LiveSettings }) {
   const [open, setOpen] = useState(false);
+  // A local, sandboxed copy of the policy thresholds — starts from the
+  // live report's current settings but is freely editable here without
+  // touching the live report. Same "alternate universe" scoping as
+  // backtestOnly below.
+  const [policy, setPolicy] = useState<LiveSettings>(liveSettings);
   const [backtestOnly, setBacktestOnly] = useState<BacktestOnlySettings>(DEFAULT_BACKTEST_ONLY_SETTINGS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,13 +38,14 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
   const [scenario, setScenario] = useState<BacktestResult | null>(null);
   const [scenarioSettings, setScenarioSettings] = useState<IndicatorSettings | null>(null);
 
-  const currentSettings = mergeSettings(liveSettings, backtestOnly);
+  const currentSettings = mergeSettings(policy, backtestOnly);
 
-  async function runWith(nextBacktestOnly: BacktestOnlySettings) {
+  async function runWith(nextPolicy: LiveSettings, nextBacktestOnly: BacktestOnlySettings) {
+    setPolicy(nextPolicy);
     setBacktestOnly(nextBacktestOnly);
     setLoading(true);
     setError(null);
-    const settings = mergeSettings(liveSettings, nextBacktestOnly);
+    const settings = mergeSettings(nextPolicy, nextBacktestOnly);
     try {
       const res = await runBacktest(ticker, toBacktestOptions(settings));
       if (!res.ok) {
@@ -61,10 +67,15 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
   }
 
   function run() {
-    return runWith(backtestOnly);
+    return runWith(policy, backtestOnly);
   }
 
   function acceptAiSuggestion(proposed: IndicatorSettings) {
+    const nextPolicy: LiveSettings = {
+      buyConsensus: proposed.buyConsensus,
+      sellConsensus: proposed.sellConsensus,
+      recencyDays: proposed.recencyDays,
+    };
     const nextBacktestOnly: BacktestOnlySettings = {
       persistenceBars: proposed.persistenceBars,
       minHoldingDays: proposed.minHoldingDays,
@@ -73,7 +84,7 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
       adxThreshold: proposed.adxThreshold,
       adxPeriod: proposed.adxPeriod,
     };
-    return runWith(nextBacktestOnly);
+    return runWith(nextPolicy, nextBacktestOnly);
   }
 
   return (
@@ -85,8 +96,11 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
       {open && (
         <div style={{ marginTop: 12 }}>
           <div className="settings-group-hint">
-            Backtest-only execution filters — these have no effect on the live report above.
+            Time travel / alternate universe time! See how much money a given strategy would make by changing
+            indicator-read settings and simulating the strategy on the historic data. Backtest-only execution
+            filters; these have no effect on the live report above.
           </div>
+          <LiveSettingsFields value={policy} onChange={setPolicy} idPrefix="bt-" />
           <BacktestOnlySettingsFields value={backtestOnly} onChange={setBacktestOnly} />
 
           <div style={{ marginTop: 12 }}>
