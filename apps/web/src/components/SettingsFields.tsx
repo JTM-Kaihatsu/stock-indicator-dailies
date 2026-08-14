@@ -7,7 +7,7 @@ const num = (v: string, fallback: number) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-function InfoIcon({ text }: { text: string }) {
+export function InfoIcon({ text }: { text: string }) {
   return (
     <span className="info-icon" tabIndex={0}>
       i
@@ -63,7 +63,7 @@ export function LiveSettingsFields({
 }
 
 /** The 6 execution-filter levers that only affect Historical Testing. Used
- * inline inside BacktestPanel — never global. */
+ * inline inside BacktestPanel; never global. */
 export function BacktestOnlySettingsFields({
   value,
   onChange,

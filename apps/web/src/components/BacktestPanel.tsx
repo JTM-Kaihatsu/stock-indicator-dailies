@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { runBacktest } from '@/lib/backtestApi';
 import {
   DEFAULT_BACKTEST_ONLY_SETTINGS,
@@ -13,14 +13,14 @@ import {
 } from '@/lib/settings';
 import type { BacktestResult } from '@/types/backtest';
 import { TradeList } from './TradeList';
-import { BacktestOnlySettingsFields, LiveSettingsFields } from './SettingsFields';
+import { BacktestOnlySettingsFields, InfoIcon, LiveSettingsFields } from './SettingsFields';
 import { AiSuggestionPanel } from './AiSuggestionPanel';
 
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
 export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSettings: LiveSettings }) {
   const [open, setOpen] = useState(false);
-  // A local, sandboxed copy of the policy thresholds — starts from the
+  // A local, sandboxed copy of the policy thresholds; starts from the
   // live report's current settings but is freely editable here without
   // touching the live report. Same "alternate universe" scoping as
   // backtestOnly below.
@@ -30,7 +30,7 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
   const [error, setError] = useState<string | null>(null);
 
   // First run becomes the fixed baseline; every run after that replaces the
-  // scenario slot — one middle pellet at a time, never stacked. Both a
+  // scenario slot; one middle pellet at a time, never stacked. Both a
   // manual field edit + Run and an AI-suggestion Accept go through the same
   // path below.
   const [baseline, setBaseline] = useState<BacktestResult | null>(null);
@@ -41,7 +41,7 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
   const currentSettings = mergeSettings(policy, backtestOnly);
 
   /** Fetches one backtest and surfaces an error, without touching
-   * baseline/scenario slot state — callers decide where the result goes. */
+   * baseline/scenario slot state; callers decide where the result goes. */
   async function runFor(settings: IndicatorSettings): Promise<BacktestResult | null> {
     try {
       const res = await runBacktest(ticker, toBacktestOptions(settings));
@@ -55,6 +55,33 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
       return null;
     }
   }
+
+  /** Establishes the baseline using the settings active in the report above
+   * (default backtest-only filters, current live policy). Returns the
+   * result so callers can chain a second run off it. Guarded by baseline
+   * already being null, so it only ever runs once. */
+  async function establishBaseline(): Promise<BacktestResult | null> {
+    setLoading(true);
+    setError(null);
+    const defaultSettings = mergeSettings(liveSettings, DEFAULT_BACKTEST_ONLY_SETTINGS);
+    const result = await runFor(defaultSettings);
+    if (result) {
+      setBaseline(result);
+      setBaselineSettings(defaultSettings);
+    }
+    setLoading(false);
+    return result;
+  }
+
+  // Auto-run the baseline as soon as the section opens. It always reflects
+  // the settings active in the report above, so there is no reason to wait
+  // for the user to click a button to see it.
+  useEffect(() => {
+    if (open && !baseline && !loading) {
+      void establishBaseline();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   async function run() {
     setLoading(true);
@@ -90,23 +117,17 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
     setPolicy(nextPolicy);
     setBacktestOnly(nextBacktestOnly);
 
+    // The AI proposal always lands in the "Custom settings" slot, never
+    // "Strategy return". That pellet means the settings active when the
+    // report was generated, so if there is no baseline yet (e.g. the
+    // auto-run above is still in flight or failed), establish it first.
+    if (!baseline) {
+      const baselineResult = await establishBaseline();
+      if (!baselineResult) return;
+    }
+
     setLoading(true);
     setError(null);
-    // The AI proposal always lands in the "Custom settings" slot, never
-    // "Strategy return" — that pellet means "the settings active when you
-    // hit Analyze," so if there's no baseline yet, establish it from the
-    // defaults first (silently, same click) rather than letting whichever
-    // run happens first claim that slot.
-    if (!baseline) {
-      const defaultSettings = mergeSettings(liveSettings, DEFAULT_BACKTEST_ONLY_SETTINGS);
-      const baselineResult = await runFor(defaultSettings);
-      if (!baselineResult) {
-        setLoading(false);
-        return;
-      }
-      setBaseline(baselineResult);
-      setBaselineSettings(defaultSettings);
-    }
     const settings = mergeSettings(nextPolicy, nextBacktestOnly);
     const result = await runFor(settings);
     if (result) {
@@ -150,9 +171,9 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
             </div>
           )}
 
-          {!baseline && !loading && !error && (
+          {!baseline && loading && (
             <div className="advisor-diff-empty" style={{ marginTop: 12 }}>
-              Uninitialized — adjust settings above and run to see results.
+              Running the baseline test using the settings from the analysis above.
             </div>
           )}
 
@@ -160,7 +181,10 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
             <>
               <div className="backtest-stats">
                 <div className="backtest-stat">
-                  <div className="backtest-stat-label">Strategy return</div>
+                  <div className="backtest-stat-label" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Strategy return
+                    <InfoIcon text="Baseline uses indicator settings used in the main stock indicator analysis above." />
+                  </div>
                   <div className={`backtest-stat-value ${baseline.strategyReturnPct >= 0 ? 'pos' : 'neg'}`}>
                     {pct(baseline.strategyReturnPct)}
                   </div>
@@ -172,7 +196,7 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
                       {pct(scenario.strategyReturnPct)}
                     </div>
                   ) : (
-                    <div className="backtest-stat-value backtest-stat-empty">—</div>
+                    <div className="backtest-stat-value backtest-stat-empty">N/A</div>
                   )}
                 </div>
                 <div className="backtest-stat">
