@@ -10,6 +10,7 @@ import { ReportCard } from '@/components/ReportCard';
 import { LoadingState } from '@/components/LoadingState';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { BacktestPanel } from '@/components/BacktestPanel';
+import { AiSuggestionPanel } from '@/components/AiSuggestionPanel';
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
@@ -70,6 +71,7 @@ export default function Home() {
         <>
           <ReportCard report={report} options={toLiveOptions(settings)} />
           <BacktestPanel ticker={report.ticker} settings={settings} />
+          <AiSuggestionPanel ticker={report.ticker} settings={settings} onAccept={applySettings} />
         </>
       )}
     </div>

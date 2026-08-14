@@ -216,6 +216,14 @@ body {
 .compare-delta.pos { color: var(--buy); background: var(--buy-bg); }
 .compare-delta.neg { color: var(--sell); background: var(--sell-bg); }
 
+/* --- AI suggestion --- */
+.advisor-panel { margin-top: 28px; }
+.advisor-rationale {
+  font-size: 13px; color: var(--text); line-height: 1.6;
+  background: var(--surface-2); border-radius: 8px; padding: 12px 14px; margin: 10px 0;
+}
+.advisor-diff-empty { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
 /* --- Footer --- */
 footer {
   margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border);

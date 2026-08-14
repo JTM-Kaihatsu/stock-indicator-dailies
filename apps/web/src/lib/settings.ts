@@ -116,3 +116,25 @@ export function diffSettings(a: IndicatorSettings, b: IndicatorSettings): Settin
     .filter((key) => a[key] !== b[key])
     .map((key) => ({ key, label: FIELD_LABELS[key], from: a[key], to: b[key] }));
 }
+
+/** The advisor's proposed-settings shape uses `null` for a disabled
+ * ATR/ADX filter (JSON-schema nullable); IndicatorSettings uses `undefined`.
+ * Bridges the two so a proposal can flow straight into applySettings. */
+export function fromProposedSettings(proposed: {
+  buyConsensus: number; sellConsensus: number; recencyDays: number;
+  persistenceBars: number; minHoldingDays: number;
+  atrMultiplier?: number | null; atrPeriod: number;
+  adxThreshold?: number | null; adxPeriod: number;
+}): IndicatorSettings {
+  return {
+    buyConsensus: proposed.buyConsensus,
+    sellConsensus: proposed.sellConsensus,
+    recencyDays: proposed.recencyDays,
+    persistenceBars: proposed.persistenceBars,
+    minHoldingDays: proposed.minHoldingDays,
+    atrMultiplier: proposed.atrMultiplier ?? undefined,
+    atrPeriod: proposed.atrPeriod,
+    adxThreshold: proposed.adxThreshold ?? undefined,
+    adxPeriod: proposed.adxPeriod,
+  };
+}
