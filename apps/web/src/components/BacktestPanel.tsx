@@ -182,7 +182,7 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
               <div className="backtest-stats">
                 <div className="backtest-stat">
                   <div className="backtest-stat-label" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                    Strategy return
+                    Baseline Strategy Return
                     <InfoIcon text="Baseline uses indicator settings used in the main stock indicator analysis above." />
                   </div>
                   <div className={`backtest-stat-value ${baseline.strategyReturnPct >= 0 ? 'pos' : 'neg'}`}>
@@ -190,7 +190,7 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
                   </div>
                 </div>
                 <div className="backtest-stat">
-                  <div className="backtest-stat-label">Custom settings</div>
+                  <div className="backtest-stat-label">Custom Strategy Return</div>
                   {scenario ? (
                     <div className={`backtest-stat-value ${scenario.strategyReturnPct >= 0 ? 'pos' : 'neg'}`}>
                       {pct(scenario.strategyReturnPct)}
@@ -200,7 +200,7 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
                   )}
                 </div>
                 <div className="backtest-stat">
-                  <div className="backtest-stat-label">Buy &amp; hold</div>
+                  <div className="backtest-stat-label">Buy &amp; Hold Return</div>
                   <div className={`backtest-stat-value ${baseline.buyAndHoldReturnPct >= 0 ? 'pos' : 'neg'}`}>
                     {pct(baseline.buyAndHoldReturnPct)}
                   </div>
@@ -226,7 +226,7 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
                 {baseline.startDate} → {baseline.endDate} ({baseline.barsUsed} bars)
                 {baseline.stillHolding ? ' · still holding at end, marked to market' : ''}
               </div>
-              <TradeList trades={baseline.trades} />
+              <TradeList result={baseline} />
 
               {scenario && (
                 <>
@@ -235,7 +235,7 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
                     {scenario.startDate} → {scenario.endDate} ({scenario.barsUsed} bars)
                     {scenario.stillHolding ? ' · still holding at end, marked to market' : ''}
                   </div>
-                  <TradeList trades={scenario.trades} />
+                  <TradeList result={scenario} />
                 </>
               )}
             </>

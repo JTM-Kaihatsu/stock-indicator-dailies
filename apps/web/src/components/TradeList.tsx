@@ -1,8 +1,9 @@
-import type { Trade } from '@/types/backtest';
+import type { BacktestResult } from '@/types/backtest';
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
-export function TradeList({ trades }: { trades: Trade[] }) {
+export function TradeList({ result }: { result: BacktestResult }) {
+  const { trades, stillHolding, finalValue } = result;
   if (trades.length === 0) {
     return <div className="settings-group-hint">No trades; the signal never left HOLD over this window.</div>;
   }
@@ -25,6 +26,12 @@ export function TradeList({ trades }: { trades: Trade[] }) {
             <td>{money(t.portfolioValue)}</td>
           </tr>
         ))}
+        {stillHolding && (
+          <tr className="trade-list-current">
+            <td colSpan={3}>Current value, marked to market at the last close</td>
+            <td>{money(finalValue)}</td>
+          </tr>
+        )}
       </tbody>
     </table>
   );
