@@ -180,6 +180,7 @@ body {
 /* --- Loading skeleton --- */
 .loading-wrap { text-align: center; padding: 60px 20px; }
 .loading-text { color: var(--muted); font-size: 15px; margin-top: 12px; }
+.loading-status { color: var(--faint); font-size: 13px; margin-top: 6px; max-width: 320px; margin-left: auto; margin-right: auto; }
 .elapsed { font-family: var(--mono); font-size: 13px; color: var(--faint); margin-top: 4px; }
 .spinner {
   width: 36px; height: 36px; border: 3px solid var(--border);
