@@ -199,6 +199,23 @@ body {
 }
 .trade-list td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 
+/* --- Scenario comparison --- */
+.compare-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px 18px; margin-top: 16px;
+}
+.compare-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.compare-row:last-child { border-bottom: none; }
+.compare-label { font-size: 13px; color: var(--muted); }
+.compare-values { font-family: var(--mono); font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.compare-arrow { color: var(--faint); }
+.compare-delta { font-weight: 700; padding: 2px 8px; border-radius: 6px; font-size: 12px; }
+.compare-delta.pos { color: var(--buy); background: var(--buy-bg); }
+.compare-delta.neg { color: var(--sell); background: var(--sell-bg); }
+
 /* --- Footer --- */
 footer {
   margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border);

@@ -89,3 +89,30 @@ export function isDefault(settings: IndicatorSettings): boolean {
     (key) => settings[key] === DEFAULT_SETTINGS[key],
   );
 }
+
+export interface SettingsDiffEntry {
+  key: keyof IndicatorSettings;
+  label: string;
+  from: number | undefined;
+  to: number | undefined;
+}
+
+const FIELD_LABELS: Record<keyof IndicatorSettings, string> = {
+  buyConsensus: 'BUY needs at least (of 3)',
+  sellConsensus: 'SELL needs at least (of 3)',
+  recencyDays: 'Recency window (days)',
+  persistenceBars: 'Persistence (bars)',
+  minHoldingDays: 'Minimum holding period (days)',
+  atrMultiplier: 'ATR multiplier',
+  atrPeriod: 'ATR period',
+  adxThreshold: 'ADX threshold',
+  adxPeriod: 'ADX period',
+};
+
+/** Fields that differ between two settings profiles — used by both the
+ * scenario comparison and the AI-suggestion diff view. */
+export function diffSettings(a: IndicatorSettings, b: IndicatorSettings): SettingsDiffEntry[] {
+  return (Object.keys(FIELD_LABELS) as Array<keyof IndicatorSettings>)
+    .filter((key) => a[key] !== b[key])
+    .map((key) => ({ key, label: FIELD_LABELS[key], from: a[key], to: b[key] }));
+}
