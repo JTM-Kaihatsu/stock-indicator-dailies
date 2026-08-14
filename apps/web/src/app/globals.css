@@ -181,6 +181,24 @@ body {
 .error-card h3 { font-size: 15px; margin-bottom: 6px; }
 .error-card p { font-size: 13px; color: var(--muted); }
 
+/* --- Historical testing / backtest --- */
+.backtest-panel { margin-top: 28px; }
+.backtest-stats { display: flex; gap: 16px; margin: 14px 0; }
+.backtest-stat {
+  flex: 1; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px;
+}
+.backtest-stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); }
+.backtest-stat-value { font-family: var(--mono); font-size: 22px; font-weight: 700; margin-top: 4px; }
+.backtest-stat-value.pos { color: var(--buy); }
+.backtest-stat-value.neg { color: var(--sell); }
+.trade-list { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
+.trade-list th {
+  text-align: left; color: var(--faint); font-weight: 600; padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.trade-list td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+
 /* --- Footer --- */
 footer {
   margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border);

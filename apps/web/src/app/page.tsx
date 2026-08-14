@@ -9,6 +9,7 @@ import { TickerInput } from '@/components/TickerInput';
 import { ReportCard } from '@/components/ReportCard';
 import { LoadingState } from '@/components/LoadingState';
 import { SettingsPanel } from '@/components/SettingsPanel';
+import { BacktestPanel } from '@/components/BacktestPanel';
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
@@ -65,7 +66,12 @@ export default function Home() {
         </div>
       )}
 
-      {report && <ReportCard report={report} options={toLiveOptions(settings)} />}
+      {report && (
+        <>
+          <ReportCard report={report} options={toLiveOptions(settings)} />
+          <BacktestPanel ticker={report.ticker} settings={settings} />
+        </>
+      )}
     </div>
   );
 }

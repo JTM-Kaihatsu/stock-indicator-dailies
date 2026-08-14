@@ -6,7 +6,7 @@ const POLL_INTERVAL_MS = 2000;
 // forever if something server-side genuinely never resolves a job.
 const MAX_POLL_MS = 3 * 60 * 1000;
 
-function apiUrl(path: string): string {
+export function apiUrl(path: string): string {
   return API_BASE ? `${API_BASE}${path}` : path;
 }
 
