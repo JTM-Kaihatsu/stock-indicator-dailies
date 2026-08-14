@@ -12,11 +12,12 @@ export function AiSuggestionPanel({
 }: {
   ticker: string;
   settings: IndicatorSettings;
-  onAccept: (settings: IndicatorSettings) => void;
+  onAccept: (settings: IndicatorSettings) => Promise<void>;
 }) {
   const [loading, setLoading] = useState(false);
   const [proposal, setProposal] = useState<AdvisorProposal | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [accepting, setAccepting] = useState(false);
   const [accepted, setAccepted] = useState(false);
 
   async function request() {
@@ -33,13 +34,15 @@ export function AiSuggestionPanel({
     }
   }
 
-  function accept() {
+  async function accept() {
     if (!proposal) return;
-    // Fills the backtest-only fields and auto-runs — rationale and diff
-    // stay visible, nothing collapses. Live-report fields are shown in the
-    // diff but never auto-applied here; the user changes those themselves
-    // via Indicator Settings above.
-    onAccept(fromProposedSettings(proposal.settings));
+    // Fills the fields and auto-runs in one click — the user already saw
+    // the proposed diff, so a second manual "Run" click would just be
+    // redundant confirmation. Rationale and diff stay visible, nothing
+    // collapses.
+    setAccepting(true);
+    await onAccept(fromProposedSettings(proposal.settings));
+    setAccepting(false);
     setAccepted(true);
   }
 
@@ -79,10 +82,10 @@ export function AiSuggestionPanel({
           )}
           {changedFields.length > 0 && (
             <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button type="button" className="analyze-btn" onClick={accept}>
-                Accept AI Suggestion
+              <button type="button" className="analyze-btn" onClick={accept} disabled={accepting}>
+                {accepting ? 'Running…' : 'Accept AI Suggestion'}
               </button>
-              {accepted && <span className="badge settings-badge-active">Applied ✓</span>}
+              {accepted && !accepting && <span className="badge settings-badge-active">Applied ✓</span>}
             </div>
           )}
         </div>

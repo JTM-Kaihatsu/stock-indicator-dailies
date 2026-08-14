@@ -40,37 +40,40 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
 
   const currentSettings = mergeSettings(policy, backtestOnly);
 
-  async function runWith(nextPolicy: LiveSettings, nextBacktestOnly: BacktestOnlySettings) {
-    setPolicy(nextPolicy);
-    setBacktestOnly(nextBacktestOnly);
-    setLoading(true);
-    setError(null);
-    const settings = mergeSettings(nextPolicy, nextBacktestOnly);
+  /** Fetches one backtest and surfaces an error, without touching
+   * baseline/scenario slot state — callers decide where the result goes. */
+  async function runFor(settings: IndicatorSettings): Promise<BacktestResult | null> {
     try {
       const res = await runBacktest(ticker, toBacktestOptions(settings));
       if (!res.ok) {
         setError(res.reason);
-        return;
+        return null;
       }
-      if (!baseline) {
-        setBaseline(res.result);
-        setBaselineSettings(settings);
-      } else {
-        setScenario(res.result);
-        setScenarioSettings(settings);
-      }
+      return res.result;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Network error');
-    } finally {
-      setLoading(false);
+      return null;
     }
   }
 
-  function run() {
-    return runWith(policy, backtestOnly);
+  async function run() {
+    setLoading(true);
+    setError(null);
+    const settings = mergeSettings(policy, backtestOnly);
+    const result = await runFor(settings);
+    if (result) {
+      if (!baseline) {
+        setBaseline(result);
+        setBaselineSettings(settings);
+      } else {
+        setScenario(result);
+        setScenarioSettings(settings);
+      }
+    }
+    setLoading(false);
   }
 
-  function acceptAiSuggestion(proposed: IndicatorSettings) {
+  async function acceptAiSuggestion(proposed: IndicatorSettings) {
     const nextPolicy: LiveSettings = {
       buyConsensus: proposed.buyConsensus,
       sellConsensus: proposed.sellConsensus,
@@ -84,7 +87,33 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
       adxThreshold: proposed.adxThreshold,
       adxPeriod: proposed.adxPeriod,
     };
-    return runWith(nextPolicy, nextBacktestOnly);
+    setPolicy(nextPolicy);
+    setBacktestOnly(nextBacktestOnly);
+
+    setLoading(true);
+    setError(null);
+    // The AI proposal always lands in the "Custom settings" slot, never
+    // "Strategy return" — that pellet means "the settings active when you
+    // hit Analyze," so if there's no baseline yet, establish it from the
+    // defaults first (silently, same click) rather than letting whichever
+    // run happens first claim that slot.
+    if (!baseline) {
+      const defaultSettings = mergeSettings(liveSettings, DEFAULT_BACKTEST_ONLY_SETTINGS);
+      const baselineResult = await runFor(defaultSettings);
+      if (!baselineResult) {
+        setLoading(false);
+        return;
+      }
+      setBaseline(baselineResult);
+      setBaselineSettings(defaultSettings);
+    }
+    const settings = mergeSettings(nextPolicy, nextBacktestOnly);
+    const result = await runFor(settings);
+    if (result) {
+      setScenario(result);
+      setScenarioSettings(settings);
+    }
+    setLoading(false);
   }
 
   return (
@@ -154,7 +183,7 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
                 </div>
               </div>
 
-              {scenario && scenarioSettings && baselineSettings && (
+              {scenario && scenarioSettings && baselineSettings && diffSettings(baselineSettings, scenarioSettings).length > 0 && (
                 <div className="compare-card">
                   <div className="settings-group-title">Custom settings vs baseline</div>
                   {diffSettings(baselineSettings, scenarioSettings).map((f) => (
