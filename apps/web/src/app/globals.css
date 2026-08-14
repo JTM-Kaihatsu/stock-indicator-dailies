@@ -108,9 +108,11 @@ body {
 .badge b { color: var(--text); font-weight: 600; }
 
 /* --- Indicator settings panel --- */
+/* Deliberately plain/low-emphasis — Historical Testing (.backtest-panel,
+   below) gets the boxed treatment instead, since that's the section meant
+   to draw attention. */
 .settings-panel {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-  padding: 14px 18px; margin-bottom: 20px;
+  margin-bottom: 20px;
 }
 .settings-toggle {
   background: none; border: none; color: var(--text); font-family: var(--sans);
@@ -182,7 +184,13 @@ body {
 .error-card p { font-size: 13px; color: var(--muted); }
 
 /* --- Historical testing / backtest --- */
-.backtest-panel { margin-top: 28px; }
+/* Boxed/prominent — this is the section meant to draw the eye, unlike the
+   now-plain .settings-panel above. */
+.backtest-panel {
+  margin-top: 28px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 18px;
+}
 .backtest-stats { display: flex; gap: 16px; margin: 14px 0; }
 .backtest-stat {
   flex: 1; background: var(--surface); border: 1px solid var(--border);
