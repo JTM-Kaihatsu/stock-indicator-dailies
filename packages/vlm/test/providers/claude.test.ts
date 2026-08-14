@@ -93,7 +93,7 @@ test('plugs into analyzeChart end-to-end', async () => {
     readings: [
       { indicator: 'macd', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
       { indicator: 'slowStochastic', crossover: 'BEARISH', qualified: true, barsAgo: 0 },
-      { indicator: 'sma', crossover: 'NONE', qualified: false },
+      { indicator: 'sma', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
     ],
   });
   const { client } = fakeClient([{ type: 'text', text: '```json\n' + verdictJson + '\n```' }]);
@@ -103,5 +103,5 @@ test('plugs into analyzeChart end-to-end', async () => {
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.equal(result.verdict.ticker, 'NVDA');
-  assert.equal(result.verdict.signal, 'SELL'); // two SELL, recomputed authoritatively
+  assert.equal(result.verdict.signal, 'SELL'); // three SELL, recomputed authoritatively (unanimity)
 });

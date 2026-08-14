@@ -83,13 +83,13 @@ test('derived signal overrides a disagreeing model signal, with a warning', () =
     readings: [
       { indicator: 'macd', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
       { indicator: 'slowStochastic', crossover: 'BEARISH', qualified: true, barsAgo: 0 },
-      { indicator: 'sma', crossover: 'BULLISH', qualified: true, barsAgo: 2 },
+      { indicator: 'sma', crossover: 'BEARISH', qualified: true, barsAgo: 2 },
     ],
   });
   const result = interpretChartResponse(raw, { ticker: 'NVDA' });
   assert.equal(result.ok, true);
   if (!result.ok) return;
-  assert.equal(result.verdict.signal, 'SELL'); // two SELL wins
+  assert.equal(result.verdict.signal, 'SELL'); // three SELL wins (unanimity)
   assert.match(result.warnings.join('\n'), /disagreed/);
 });
 
@@ -97,13 +97,13 @@ test('parse options flow through interpretChartResponse', () => {
   const raw = JSON.stringify({
     readings: [
       { indicator: 'macd', crossover: 'BULLISH', qualified: true, barsAgo: 1 },
-      { indicator: 'slowStochastic', crossover: 'BULLISH', qualified: true, barsAgo: 1 },
+      { indicator: 'slowStochastic', crossover: 'NONE', qualified: false },
       { indicator: 'sma', crossover: 'NONE', qualified: false },
     ],
   });
   const strict = interpretChartResponse(raw, { ticker: 'NVDA' });
-  assert.equal(strict.ok && strict.verdict.signal, 'HOLD'); // default buyConsensus 3
+  assert.equal(strict.ok && strict.verdict.signal, 'HOLD'); // default buyConsensus 2
 
-  const loose = interpretChartResponse(raw, { ticker: 'NVDA' }, { buyConsensus: 2 });
+  const loose = interpretChartResponse(raw, { ticker: 'NVDA' }, { buyConsensus: 1 });
   assert.equal(loose.ok && loose.verdict.signal, 'BUY');
 });

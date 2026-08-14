@@ -120,8 +120,11 @@ test('recency window flows through as an option', () => {
   const input = raw({
     readings: [cross('macd', 'BEARISH', { barsAgo: 5 }), cross('slowStochastic', 'BEARISH', { barsAgo: 5 }), none('sma')],
   });
-  assert.equal(expectOk(parseVerdict(input)).verdict.signal, 'HOLD'); // default 3
-  assert.equal(expectOk(parseVerdict(input, { recencyDays: 7 })).verdict.signal, 'SELL');
+  assert.equal(expectOk(parseVerdict(input)).verdict.signal, 'HOLD'); // default recency window is 3
+  // Only 2 of 3 indicators have any crossover here (sma is NONE either way), so
+  // sellConsensus is lowered too — isolates the recency-window option being
+  // tested from the separate (now stricter, unanimity) SELL consensus default.
+  assert.equal(expectOk(parseVerdict(input, { recencyDays: 7, sellConsensus: 2 })).verdict.signal, 'SELL');
 });
 
 test('rationale on readings and top-level are preserved', () => {
@@ -210,7 +213,10 @@ test('missing indicator fails when requireAllIndicators (default)', () => {
 
 test('partial readings allowed when requireAllIndicators is false', () => {
   const input = raw({ readings: [cross('macd', 'BEARISH'), cross('slowStochastic', 'BEARISH')] });
-  const { verdict } = expectOk(parseVerdict(input, { requireAllIndicators: false }));
+  // sellConsensus lowered to isolate the requireAllIndicators behavior under
+  // test — with only 2 readings present, unanimity (the new default) can never
+  // be reached, regardless of this option.
+  const { verdict } = expectOk(parseVerdict(input, { requireAllIndicators: false, sellConsensus: 2 }));
   assert.equal(verdict.signal, 'SELL');
   assert.equal(verdict.readings.length, 2);
 });

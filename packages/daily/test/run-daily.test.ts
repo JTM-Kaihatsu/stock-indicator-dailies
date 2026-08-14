@@ -34,7 +34,7 @@ const sellJson = JSON.stringify({
   visibleRange: 'Dec 2025 to Aug 2026',
   readings: [
     { indicator: 'macd', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
-    { indicator: 'slowStochastic', crossover: 'NONE', qualified: false },
+    { indicator: 'slowStochastic', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
     { indicator: 'sma', crossover: 'BEARISH', qualified: true, barsAgo: 2 },
   ],
 });
@@ -59,7 +59,7 @@ test('happy path returns a verdict, the source image, and timings', async () => 
   if (!result.ok) return;
   const { report } = result;
   assert.equal(report.ticker, 'GEV');
-  assert.equal(report.verdict.signal, 'SELL'); // two SELL meets sellConsensus
+  assert.equal(report.verdict.signal, 'SELL'); // three SELL meets sellConsensus (unanimity)
   assert.equal(report.verdict.visibleRange, 'Dec 2025 to Aug 2026');
   assert.ok(report.image.base64.length > 0, 'source image is returned for verification');
   assert.deepEqual(report.warnings, []);
@@ -135,7 +135,7 @@ test('model disagreement surfaces as a warning, derived signal wins', async () =
     readings: [
       { indicator: 'macd', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
       { indicator: 'slowStochastic', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
-      { indicator: 'sma', crossover: 'NONE', qualified: false },
+      { indicator: 'sma', crossover: 'BEARISH', qualified: true, barsAgo: 1 },
     ],
   });
   const result = await runDaily({
@@ -163,25 +163,25 @@ test('a slow run is flagged against the time-to-signal target', async () => {
 });
 
 test('consensus options flow through to the derived signal', async () => {
-  const twoBuys = JSON.stringify({
+  const oneBuy = JSON.stringify({
     ticker: 'GEV',
     readings: [
       { indicator: 'macd', crossover: 'BULLISH', qualified: true, barsAgo: 1 },
-      { indicator: 'slowStochastic', crossover: 'BULLISH', qualified: true, barsAgo: 1 },
+      { indicator: 'slowStochastic', crossover: 'NONE', qualified: false },
       { indicator: 'sma', crossover: 'NONE', qualified: false },
     ],
   });
   const strict = await runDaily({
     ticker: 'GEV',
     agent: new FakeChartAgent(),
-    provider: new FakeProvider(twoBuys),
+    provider: new FakeProvider(oneBuy),
     dataSource: fakeSource as DataSource,
   });
-  assert.equal(strict.ok && strict.report.verdict.signal, 'HOLD');
+  assert.equal(strict.ok && strict.report.verdict.signal, 'HOLD'); // default buyConsensus is 2
 
   const loose = await runDaily(
-    { ticker: 'GEV', agent: new FakeChartAgent(), provider: new FakeProvider(twoBuys), dataSource: fakeSource as DataSource },
-    { buyConsensus: 2 },
+    { ticker: 'GEV', agent: new FakeChartAgent(), provider: new FakeProvider(oneBuy), dataSource: fakeSource as DataSource },
+    { buyConsensus: 1 },
   );
   assert.equal(loose.ok && loose.report.verdict.signal, 'BUY');
 });

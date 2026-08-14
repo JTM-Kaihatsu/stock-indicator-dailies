@@ -61,22 +61,30 @@ test('recency window is configurable', () => {
   assert.equal(deriveIndicatorSignal(stale, { recencyDays: 7 }), 'SELL');
 });
 
-// --- combineSignals: asymmetric consensus (BUY needs 3, SELL needs 2) ---
+// --- combineSignals: asymmetric consensus (BUY needs 2, SELL needs 3) ---
 
 test('tallySignals counts each bucket', () => {
   assert.deepEqual(tallySignals(['BUY', 'SELL', 'NEUTRAL']), { buys: 1, sells: 1, neutrals: 1 });
 });
 
-test('three BUYs -> BUY (unanimity)', () => {
+test('three BUYs -> BUY', () => {
   assert.equal(combineSignals(['BUY', 'BUY', 'BUY']), 'BUY');
 });
 
-test('two BUYs -> HOLD (BUY needs all three)', () => {
-  assert.equal(combineSignals(['BUY', 'BUY', 'NEUTRAL']), 'HOLD');
+test('two BUYs -> BUY (BUY needs only two of three)', () => {
+  assert.equal(combineSignals(['BUY', 'BUY', 'NEUTRAL']), 'BUY');
 });
 
-test('two SELLs -> SELL (even against a BUY)', () => {
-  assert.equal(combineSignals(['SELL', 'SELL', 'BUY']), 'SELL');
+test('one BUY -> HOLD (BUY needs at least two)', () => {
+  assert.equal(combineSignals(['BUY', 'NEUTRAL', 'NEUTRAL']), 'HOLD');
+});
+
+test('two SELLs -> HOLD (SELL needs all three)', () => {
+  assert.equal(combineSignals(['SELL', 'SELL', 'BUY']), 'HOLD');
+});
+
+test('three SELLs -> SELL (unanimity)', () => {
+  assert.equal(combineSignals(['SELL', 'SELL', 'SELL']), 'SELL');
 });
 
 test('one SELL -> HOLD', () => {
@@ -84,7 +92,7 @@ test('one SELL -> HOLD', () => {
 });
 
 test('SELL wins over BUY when custom thresholds overlap', () => {
-  assert.equal(combineSignals(['SELL', 'SELL', 'BUY'], { buyConsensus: 1 }), 'SELL');
+  assert.equal(combineSignals(['SELL', 'SELL', 'BUY'], { buyConsensus: 1, sellConsensus: 2 }), 'SELL');
 });
 
 // --- deriveSignal: full path, facts -> overall ---
@@ -109,16 +117,16 @@ test('three recent bearish crossovers -> SELL', () => {
   assert.equal(deriveSignal(facts('BEARISH', 'BEARISH', 'BEARISH')), 'SELL');
 });
 
-test('two bearish + one none -> SELL', () => {
-  assert.equal(deriveSignal(facts('BEARISH', 'BEARISH', 'NONE')), 'SELL');
+test('two bearish + one none -> HOLD (SELL needs all three)', () => {
+  assert.equal(deriveSignal(facts('BEARISH', 'BEARISH', 'NONE')), 'HOLD');
 });
 
 test('three recent bullish crossovers -> BUY', () => {
   assert.equal(deriveSignal(facts('BULLISH', 'BULLISH', 'BULLISH')), 'BUY');
 });
 
-test('two bullish + one none -> HOLD (BUY needs all three)', () => {
-  assert.equal(deriveSignal(facts('BULLISH', 'BULLISH', 'NONE')), 'HOLD');
+test('two bullish + one none -> BUY (BUY needs only two of three)', () => {
+  assert.equal(deriveSignal(facts('BULLISH', 'BULLISH', 'NONE')), 'BUY');
 });
 
 test('stale crossovers do not fire', () => {
