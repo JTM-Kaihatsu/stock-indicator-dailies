@@ -134,16 +134,9 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
                 <div className="backtest-stat">
                   <div className="backtest-stat-label">Custom settings</div>
                   {scenario ? (
-                    <>
-                      <div className={`backtest-stat-value ${scenario.strategyReturnPct >= 0 ? 'pos' : 'neg'}`}>
-                        {pct(scenario.strategyReturnPct)}
-                      </div>
-                      {scenarioSettings && baselineSettings && (
-                        <div className="backtest-stat-delta">
-                          {diffSettings(baselineSettings, scenarioSettings).length} setting(s) changed vs baseline
-                        </div>
-                      )}
-                    </>
+                    <div className={`backtest-stat-value ${scenario.strategyReturnPct >= 0 ? 'pos' : 'neg'}`}>
+                      {pct(scenario.strategyReturnPct)}
+                    </div>
                   ) : (
                     <div className="backtest-stat-value backtest-stat-empty">—</div>
                   )}
@@ -155,6 +148,20 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
                   </div>
                 </div>
               </div>
+
+              {scenario && scenarioSettings && baselineSettings && (
+                <div className="compare-card">
+                  <div className="settings-group-title">Custom settings vs baseline</div>
+                  {diffSettings(baselineSettings, scenarioSettings).map((f) => (
+                    <div className="compare-row" key={f.key}>
+                      <span className="compare-label">{f.label}</span>
+                      <span className="compare-values">
+                        {f.from ?? 'off'} <span className="compare-arrow">→</span> {f.to ?? 'off'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="section-label" style={{ marginTop: 16 }}>Baseline trades</div>
               <div className="settings-group-hint">
