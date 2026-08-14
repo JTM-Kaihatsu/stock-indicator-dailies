@@ -2,10 +2,12 @@ import type { DeriveSignalOptions } from '@stock-indicator-dailies/shared';
 import type { BacktestOptions } from '@stock-indicator-dailies/eval-backtest';
 
 /**
- * The 9 tunable levers. Only `LiveSettings` has meaning for the live,
- * single-day report — `deriveSignal` doesn't know about a multi-day position,
- * so persistence/holding-period/ATR/ADX only take effect inside Historical
- * Testing (see `toBacktestOptions`).
+ * The 9 tunable levers, split by where they take effect. `LiveSettings`
+ * drives both the live report (client-side recompute) and is global,
+ * session-persisted state. `BacktestOnlySettings` only matters once there's
+ * a multi-day position to hold/exit — `deriveSignal` has no concept of that
+ * for a single-day snapshot — so it lives locally inside Historical Testing,
+ * not in global settings.
  */
 export interface LiveSettings {
   buyConsensus: number;
@@ -26,12 +28,16 @@ export interface BacktestOnlySettings {
 
 export type IndicatorSettings = LiveSettings & BacktestOnlySettings;
 
-/** Mirrors the backend's actual defaults in packages/shared/src/signal.ts and
- * evals/backtest/src/simulate.ts — keep these in sync if those ever change. */
-export const DEFAULT_SETTINGS: IndicatorSettings = {
+/** Mirrors the backend's actual defaults in packages/shared/src/signal.ts —
+ * keep in sync if that ever changes. */
+export const DEFAULT_LIVE_SETTINGS: LiveSettings = {
   buyConsensus: 2,
   sellConsensus: 3,
   recencyDays: 3,
+};
+
+/** Mirrors evals/backtest/src/simulate.ts's defaults. */
+export const DEFAULT_BACKTEST_ONLY_SETTINGS: BacktestOnlySettings = {
   persistenceBars: 1,
   minHoldingDays: 0,
   atrMultiplier: undefined,
@@ -40,30 +46,39 @@ export const DEFAULT_SETTINGS: IndicatorSettings = {
   adxPeriod: 14,
 };
 
-const STORAGE_KEY = 'sid:indicatorSettings:v1';
+export const DEFAULT_SETTINGS: IndicatorSettings = {
+  ...DEFAULT_LIVE_SETTINGS,
+  ...DEFAULT_BACKTEST_ONLY_SETTINGS,
+};
 
-/** Reads persisted settings for this browser session. Falls back to defaults
- * on first visit, a parse failure, or when called during SSR. Merges over
- * DEFAULT_SETTINGS so a future new field added here doesn't crash on an
- * older stored blob missing that key. */
-export function loadSettings(): IndicatorSettings {
-  if (typeof window === 'undefined') return DEFAULT_SETTINGS;
+export function mergeSettings(live: LiveSettings, backtestOnly: BacktestOnlySettings): IndicatorSettings {
+  return { ...live, ...backtestOnly };
+}
+
+const STORAGE_KEY = 'sid:liveSettings:v1';
+
+/** Reads persisted live settings for this browser session. Falls back to
+ * defaults on first visit, a parse failure, or when called during SSR.
+ * Merges over DEFAULT_LIVE_SETTINGS so a future new field doesn't crash on
+ * an older stored blob missing that key. */
+export function loadSettings(): LiveSettings {
+  if (typeof window === 'undefined') return DEFAULT_LIVE_SETTINGS;
   try {
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<IndicatorSettings>) };
+    if (!raw) return DEFAULT_LIVE_SETTINGS;
+    return { ...DEFAULT_LIVE_SETTINGS, ...(JSON.parse(raw) as Partial<LiveSettings>) };
   } catch {
-    return DEFAULT_SETTINGS;
+    return DEFAULT_LIVE_SETTINGS;
   }
 }
 
-export function saveSettings(settings: IndicatorSettings): void {
+export function saveSettings(settings: LiveSettings): void {
   if (typeof window === 'undefined') return;
   window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
 }
 
 /** The 3 levers the live report's client-side recompute actually uses. */
-export function toLiveOptions(settings: IndicatorSettings): DeriveSignalOptions {
+export function toLiveOptions(settings: LiveSettings): DeriveSignalOptions {
   return {
     buyConsensus: settings.buyConsensus,
     sellConsensus: settings.sellConsensus,
@@ -84,9 +99,9 @@ export function toBacktestOptions(settings: IndicatorSettings): BacktestOptions 
   };
 }
 
-export function isDefault(settings: IndicatorSettings): boolean {
-  return (Object.keys(DEFAULT_SETTINGS) as Array<keyof IndicatorSettings>).every(
-    (key) => settings[key] === DEFAULT_SETTINGS[key],
+export function isDefault(settings: LiveSettings): boolean {
+  return (Object.keys(DEFAULT_LIVE_SETTINGS) as Array<keyof LiveSettings>).every(
+    (key) => settings[key] === DEFAULT_LIVE_SETTINGS[key],
   );
 }
 
@@ -110,7 +125,7 @@ const FIELD_LABELS: Record<keyof IndicatorSettings, string> = {
 };
 
 /** Fields that differ between two settings profiles — used by both the
- * scenario comparison and the AI-suggestion diff view. */
+ * unified scenario/AI-suggestion pellet mechanism. */
 export function diffSettings(a: IndicatorSettings, b: IndicatorSettings): SettingsDiffEntry[] {
   return (Object.keys(FIELD_LABELS) as Array<keyof IndicatorSettings>)
     .filter((key) => a[key] !== b[key])
@@ -119,7 +134,7 @@ export function diffSettings(a: IndicatorSettings, b: IndicatorSettings): Settin
 
 /** The advisor's proposed-settings shape uses `null` for a disabled
  * ATR/ADX filter (JSON-schema nullable); IndicatorSettings uses `undefined`.
- * Bridges the two so a proposal can flow straight into applySettings. */
+ * Bridges the two so a proposal can flow straight into the backtest form. */
 export function fromProposedSettings(proposed: {
   buyConsensus: number; sellConsensus: number; recencyDays: number;
   persistenceBars: number; minHoldingDays: number;

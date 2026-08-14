@@ -1,6 +1,6 @@
 import { deriveSignal } from '@stock-indicator-dailies/shared';
 import type { DailyReport } from '@/types/api';
-import { toLiveOptions, type IndicatorSettings } from './settings.ts';
+import { toLiveOptions, type LiveSettings } from './settings.ts';
 
 /**
  * Recomputes `deterministic.signal` and `verdict.signal` from their
@@ -8,7 +8,7 @@ import { toLiveOptions, type IndicatorSettings } from './settings.ts';
  * no network call, since `deriveSignal` only needs facts already present on
  * the report. Leaves `readings`, `image`, `warnings`, and `timings` untouched.
  */
-export function recomputeReport(report: DailyReport, settings: IndicatorSettings): DailyReport {
+export function recomputeReport(report: DailyReport, settings: LiveSettings): DailyReport {
   const options = toLiveOptions(settings);
   return {
     ...report,

@@ -4,11 +4,22 @@ import { PROPOSE_SETTINGS_TOOL, WEB_SEARCH_TOOL, validateProposedSettings, type 
 
 export const DEFAULT_MODEL = 'claude-sonnet-5';
 export const DEFAULT_MAX_TOKENS = 4096;
-/** Safety net, not the primary path — `web_search` is a server tool, so
- * Claude can chain multiple searches and reasoning steps within a single
- * response. This bounds how many follow-up turns we'll allow if the model
- * stops without having called propose_settings yet. */
+/** Round-trip safety net, not the primary bound — see DEFAULT_SEARCH_BUDGET. */
 export const DEFAULT_MAX_TURNS = 4;
+/**
+ * Total searches allowed across the *whole* conversation, not per call.
+ * `max_uses` on the tool itself only caps a single `messages.create`
+ * response — since web_search is a server tool, one turn can already chain
+ * several searches, and this loop can run multiple turns, so without a
+ * cumulative budget the true worst case is `maxTurns * per-call max_uses`.
+ * Once this hits zero, web_search is dropped from the offered tools
+ * entirely and propose_settings is forced immediately, regardless of
+ * remaining turns.
+ */
+export const DEFAULT_SEARCH_BUDGET = 5;
+/** Wall-clock cap on the whole call — protects against the model simply
+ * being slow (or a hung request) even while within its search budget. */
+export const DEFAULT_TIMEOUT_MS = 60_000;
 
 /** The slice of the SDK this depends on — narrow and injectable, same
  * testability pattern as packages/vlm/src/providers/claude.ts. */
@@ -28,6 +39,8 @@ export interface AdvisorOptions {
   model?: string;
   maxTokens?: number;
   maxTurns?: number;
+  searchBudget?: number;
+  timeoutMs?: number;
   client?: AnthropicLike;
 }
 
@@ -43,12 +56,20 @@ export class AdvisorTimeoutError extends Error {
   }
 }
 
+export class AdvisorWallClockTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`advisor did not finish within ${timeoutMs}ms`);
+    this.name = 'AdvisorWallClockTimeoutError';
+  }
+}
+
 const SYSTEM_PROMPT = `You are researching a public company to help tune a technical-analysis trading tool's
 indicator settings for its stock.
 
 Use web_search to research the company: its industry and sector, current trends affecting it,
 recent relevant news, and its competitors. Base your proposal on what you find — do not rely on
-general knowledge alone when search results are available.
+general knowledge alone when search results are available. Your search budget is limited, so
+prioritize the highest-value queries rather than searching exhaustively.
 
 You MUST end by calling propose_settings exactly once, as your final action. Do not give your
 answer as plain text.`;
@@ -59,32 +80,49 @@ function findToolUse(content: Array<{ type: string; [key: string]: unknown }>, n
     | undefined;
 }
 
-/** Researches `ticker`'s company via Claude + the hosted web_search tool and
- * returns a structured settings proposal with a rationale. Throws
- * AdvisorTimeoutError if the model never calls propose_settings within
- * maxTurns. */
-export async function researchAndPropose(ticker: string, options: AdvisorOptions = {}): Promise<AdvisorResult> {
-  const model = options.model ?? DEFAULT_MODEL;
-  const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
-  const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
-  const client: AnthropicLike =
-    options.client ??
-    (new Anthropic({ apiKey: options.apiKey ?? process.env.VLM_API_KEY }) as unknown as AnthropicLike);
+/** Counts how many web_search invocations actually happened in a response —
+ * `server_tool_use` blocks are the model's search calls; unlike a
+ * client-defined tool, Anthropic resolves these server-side inline in the
+ * same response, so there's no separate round-trip to count. */
+function countSearchesUsed(content: Array<{ type: string; [key: string]: unknown }>): number {
+  return content.filter((block) => block.type === 'server_tool_use' && block.name === 'web_search').length;
+}
 
+interface RunLoopOptions {
+  client: AnthropicLike;
+  model: string;
+  maxTokens: number;
+  maxTurns: number;
+  searchBudget: number;
+}
+
+async function runLoop(ticker: string, options: RunLoopOptions): Promise<AdvisorResult> {
+  const { client, model, maxTokens, maxTurns, searchBudget } = options;
   const messages: Array<{ role: 'user' | 'assistant'; content: unknown }> = [
     { role: 'user', content: `Research ${ticker} and propose indicator settings for it.` },
   ];
 
+  let searchesUsed = 0;
+
   for (let turn = 0; turn < maxTurns; turn++) {
-    const forcing = turn === maxTurns - 1;
+    const remainingSearches = Math.max(0, searchBudget - searchesUsed);
+    const budgetExhausted = remainingSearches === 0;
+    const forcing = turn === maxTurns - 1 || budgetExhausted;
+
+    const tools = budgetExhausted
+      ? [PROPOSE_SETTINGS_TOOL]
+      : [{ ...WEB_SEARCH_TOOL, max_uses: remainingSearches }, PROPOSE_SETTINGS_TOOL];
+
     const response = await client.messages.create({
       model,
       max_tokens: maxTokens,
       system: SYSTEM_PROMPT,
-      tools: [WEB_SEARCH_TOOL, PROPOSE_SETTINGS_TOOL],
+      tools,
       tool_choice: forcing ? { type: 'tool', name: 'propose_settings' } : { type: 'auto' },
       messages,
     });
+
+    searchesUsed += countSearchesUsed(response.content);
 
     const proposal = findToolUse(response.content, 'propose_settings');
     if (proposal) {
@@ -104,4 +142,34 @@ export async function researchAndPropose(ticker: string, options: AdvisorOptions
   }
 
   throw new AdvisorTimeoutError(maxTurns);
+}
+
+/** Researches `ticker`'s company via Claude + the hosted web_search tool and
+ * returns a structured settings proposal with a rationale. Throws
+ * AdvisorTimeoutError if the model never calls propose_settings within
+ * maxTurns, or AdvisorWallClockTimeoutError if the whole call runs past
+ * timeoutMs. */
+export async function researchAndPropose(ticker: string, options: AdvisorOptions = {}): Promise<AdvisorResult> {
+  const model = options.model ?? DEFAULT_MODEL;
+  const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
+  const searchBudget = options.searchBudget ?? DEFAULT_SEARCH_BUDGET;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const client: AnthropicLike =
+    options.client ??
+    (new Anthropic({ apiKey: options.apiKey ?? process.env.VLM_API_KEY }) as unknown as AnthropicLike);
+
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new AdvisorWallClockTimeoutError(timeoutMs)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([
+      runLoop(ticker, { client, model, maxTokens, maxTurns, searchBudget }),
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timer!);
+  }
 }

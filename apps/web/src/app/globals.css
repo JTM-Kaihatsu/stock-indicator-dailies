@@ -192,6 +192,7 @@ body {
 .backtest-stat-value { font-family: var(--mono); font-size: 22px; font-weight: 700; margin-top: 4px; }
 .backtest-stat-value.pos { color: var(--buy); }
 .backtest-stat-value.neg { color: var(--sell); }
+.backtest-stat-delta { font-size: 11px; color: var(--faint); margin-top: 4px; }
 .trade-list { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
 .trade-list th {
   text-align: left; color: var(--faint); font-weight: 600; padding: 6px 8px;

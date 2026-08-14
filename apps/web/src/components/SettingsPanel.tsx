@@ -1,18 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { DEFAULT_SETTINGS, isDefault, type IndicatorSettings } from '@/lib/settings';
-import { SettingsFields } from './SettingsFields';
+import { DEFAULT_LIVE_SETTINGS, isDefault, type LiveSettings } from '@/lib/settings';
+import { LiveSettingsFields } from './SettingsFields';
 
 export function SettingsPanel({
   settings,
   onApply,
 }: {
-  settings: IndicatorSettings;
-  onApply: (settings: IndicatorSettings) => void;
+  settings: LiveSettings;
+  onApply: (settings: LiveSettings) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState<IndicatorSettings>(settings);
+  const [pending, setPending] = useState<LiveSettings>(settings);
   const [confirming, setConfirming] = useState(false);
 
   function openPanel() {
@@ -37,7 +37,7 @@ export function SettingsPanel({
   }
 
   function resetToDefaults() {
-    setPending(DEFAULT_SETTINGS);
+    setPending(DEFAULT_LIVE_SETTINGS);
     setConfirming(true);
   }
 
@@ -52,7 +52,11 @@ export function SettingsPanel({
 
       {open && (
         <div style={{ marginTop: 12 }}>
-          <SettingsFields value={pending} onChange={setPending} />
+          <div className="settings-group-hint">
+            These affect the live report above and the baseline for Historical Testing below. Backtest-only
+            execution filters live inside Historical Testing itself.
+          </div>
+          <LiveSettingsFields value={pending} onChange={setPending} />
 
           {confirming ? (
             <div className="settings-confirm">

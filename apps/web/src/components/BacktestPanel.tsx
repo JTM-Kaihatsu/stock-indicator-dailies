@@ -2,36 +2,57 @@
 
 import { useState } from 'react';
 import { runBacktest } from '@/lib/backtestApi';
-import { toBacktestOptions, type IndicatorSettings } from '@/lib/settings';
+import {
+  DEFAULT_BACKTEST_ONLY_SETTINGS,
+  diffSettings,
+  mergeSettings,
+  toBacktestOptions,
+  type BacktestOnlySettings,
+  type IndicatorSettings,
+  type LiveSettings,
+} from '@/lib/settings';
 import type { BacktestResult } from '@/types/backtest';
 import { TradeList } from './TradeList';
-import { ScenarioForm } from './ScenarioForm';
-import { CompareCard } from './CompareCard';
+import { BacktestOnlySettingsFields } from './SettingsFields';
+import { AiSuggestionPanel } from './AiSuggestionPanel';
 
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
-export function BacktestPanel({ ticker, settings }: { ticker: string; settings: IndicatorSettings }) {
+export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSettings: LiveSettings }) {
+  const [open, setOpen] = useState(false);
+  const [backtestOnly, setBacktestOnly] = useState<BacktestOnlySettings>(DEFAULT_BACKTEST_ONLY_SETTINGS);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Comparison state — only one open/active at a time by construction: opening
-  // the form always replaces prior scenario state, never stacks.
-  const [comparing, setComparing] = useState(false);
-  const [compareLoading, setCompareLoading] = useState(false);
-  const [compareError, setCompareError] = useState<string | null>(null);
-  const [scenario, setScenario] = useState<{ settings: IndicatorSettings; baseline: BacktestResult; result: BacktestResult } | null>(null);
+  // First run becomes the fixed baseline; every run after that replaces the
+  // scenario slot — one middle pellet at a time, never stacked. Both a
+  // manual field edit + Run and an AI-suggestion Accept go through the same
+  // path below.
+  const [baseline, setBaseline] = useState<BacktestResult | null>(null);
+  const [baselineSettings, setBaselineSettings] = useState<IndicatorSettings | null>(null);
+  const [scenario, setScenario] = useState<BacktestResult | null>(null);
+  const [scenarioSettings, setScenarioSettings] = useState<IndicatorSettings | null>(null);
 
-  async function run() {
+  const currentSettings = mergeSettings(liveSettings, backtestOnly);
+
+  async function runWith(nextBacktestOnly: BacktestOnlySettings) {
+    setBacktestOnly(nextBacktestOnly);
     setLoading(true);
     setError(null);
-    setResult(null);
-    setScenario(null);
-    setComparing(false);
+    const settings = mergeSettings(liveSettings, nextBacktestOnly);
     try {
       const res = await runBacktest(ticker, toBacktestOptions(settings));
-      if (res.ok) setResult(res.result);
-      else setError(res.reason);
+      if (!res.ok) {
+        setError(res.reason);
+        return;
+      }
+      if (!baseline) {
+        setBaseline(res.result);
+        setBaselineSettings(settings);
+      } else {
+        setScenario(res.result);
+        setScenarioSettings(settings);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Network error');
     } finally {
@@ -39,99 +60,93 @@ export function BacktestPanel({ ticker, settings }: { ticker: string; settings: 
     }
   }
 
-  function openCompare() {
-    setScenario(null);
-    setCompareError(null);
-    setComparing(true);
+  function run() {
+    return runWith(backtestOnly);
   }
 
-  async function runComparison(scenarioSettings: IndicatorSettings) {
-    setCompareLoading(true);
-    setCompareError(null);
-    try {
-      const [baselineRes, scenarioRes] = await Promise.all([
-        runBacktest(ticker, toBacktestOptions(settings)),
-        runBacktest(ticker, toBacktestOptions(scenarioSettings)),
-      ]);
-      if (!baselineRes.ok) return setCompareError(baselineRes.reason);
-      if (!scenarioRes.ok) return setCompareError(scenarioRes.reason);
-      setScenario({ settings: scenarioSettings, baseline: baselineRes.result, result: scenarioRes.result });
-      setComparing(false);
-    } catch (err) {
-      setCompareError(err instanceof Error ? err.message : 'Network error');
-    } finally {
-      setCompareLoading(false);
-    }
+  function acceptAiSuggestion(proposed: IndicatorSettings) {
+    const nextBacktestOnly: BacktestOnlySettings = {
+      persistenceBars: proposed.persistenceBars,
+      minHoldingDays: proposed.minHoldingDays,
+      atrMultiplier: proposed.atrMultiplier,
+      atrPeriod: proposed.atrPeriod,
+      adxThreshold: proposed.adxThreshold,
+      adxPeriod: proposed.adxPeriod,
+    };
+    return runWith(nextBacktestOnly);
   }
 
   return (
     <section className="backtest-panel">
-      <div className="section-label">Historical testing</div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button type="button" className="analyze-btn" onClick={run} disabled={loading}>
-          {loading ? 'Running…' : 'Run Historical Test'}
-        </button>
-        {result && (
-          <button type="button" className="settings-toggle" onClick={openCompare} disabled={compareLoading}>
-            Compare Different Settings
-          </button>
-        )}
-      </div>
+      <button type="button" className="settings-toggle" onClick={() => setOpen((v) => !v)}>
+        {open ? '▾' : '▸'} Historical Testing
+      </button>
 
-      {error && (
-        <div className="error-card" style={{ marginTop: 12 }}>
-          <h3>Backtest failed</h3>
-          <p>{error}</p>
-        </div>
-      )}
-
-      {result && (
-        <>
-          <div className="backtest-stats">
-            <div className="backtest-stat">
-              <div className="backtest-stat-label">Strategy return</div>
-              <div className={`backtest-stat-value ${result.strategyReturnPct >= 0 ? 'pos' : 'neg'}`}>
-                {pct(result.strategyReturnPct)}
-              </div>
-            </div>
-            <div className="backtest-stat">
-              <div className="backtest-stat-label">Buy &amp; hold</div>
-              <div className={`backtest-stat-value ${result.buyAndHoldReturnPct >= 0 ? 'pos' : 'neg'}`}>
-                {pct(result.buyAndHoldReturnPct)}
-              </div>
-            </div>
-          </div>
+      {open && (
+        <div style={{ marginTop: 12 }}>
           <div className="settings-group-hint">
-            {result.startDate} → {result.endDate} ({result.barsUsed} bars)
-            {result.stillHolding ? ' · still holding at end, marked to market' : ''}
+            Backtest-only execution filters — these have no effect on the live report above.
           </div>
-          <TradeList trades={result.trades} />
-        </>
-      )}
+          <BacktestOnlySettingsFields value={backtestOnly} onChange={setBacktestOnly} />
 
-      {comparing && (
-        <ScenarioForm
-          initial={settings}
-          onRun={runComparison}
-          onCancel={() => setComparing(false)}
-          running={compareLoading}
-        />
-      )}
+          <div style={{ marginTop: 12 }}>
+            <button type="button" className="analyze-btn" onClick={run} disabled={loading}>
+              {loading ? 'Running…' : 'Run Historical Test'}
+            </button>
+          </div>
 
-      {compareError && (
-        <div className="error-card" style={{ marginTop: 12 }}>
-          <h3>Comparison failed</h3>
-          <p>{compareError}</p>
+          {error && (
+            <div className="error-card" style={{ marginTop: 12 }}>
+              <h3>Backtest failed</h3>
+              <p>{error}</p>
+            </div>
+          )}
+
+          {!baseline && !loading && !error && (
+            <div className="advisor-diff-empty" style={{ marginTop: 12 }}>
+              Uninitialized — adjust settings above and run to see results.
+            </div>
+          )}
+
+          {baseline && (
+            <>
+              <div className="backtest-stats">
+                <div className="backtest-stat">
+                  <div className="backtest-stat-label">Strategy return</div>
+                  <div className={`backtest-stat-value ${baseline.strategyReturnPct >= 0 ? 'pos' : 'neg'}`}>
+                    {pct(baseline.strategyReturnPct)}
+                  </div>
+                </div>
+                {scenario && (
+                  <div className="backtest-stat">
+                    <div className="backtest-stat-label">Scenario return</div>
+                    <div className={`backtest-stat-value ${scenario.strategyReturnPct >= 0 ? 'pos' : 'neg'}`}>
+                      {pct(scenario.strategyReturnPct)}
+                    </div>
+                    {scenarioSettings && baselineSettings && (
+                      <div className="backtest-stat-delta">
+                        {diffSettings(baselineSettings, scenarioSettings).length} setting(s) changed vs baseline
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="backtest-stat">
+                  <div className="backtest-stat-label">Buy &amp; hold</div>
+                  <div className={`backtest-stat-value ${baseline.buyAndHoldReturnPct >= 0 ? 'pos' : 'neg'}`}>
+                    {pct(baseline.buyAndHoldReturnPct)}
+                  </div>
+                </div>
+              </div>
+              <div className="settings-group-hint">
+                {baseline.startDate} → {baseline.endDate} ({baseline.barsUsed} bars)
+                {baseline.stillHolding ? ' · still holding at end, marked to market' : ''}
+              </div>
+              <TradeList trades={(scenario ?? baseline).trades} />
+            </>
+          )}
+
+          <AiSuggestionPanel ticker={ticker} settings={currentSettings} onAccept={acceptAiSuggestion} />
         </div>
-      )}
-
-      {scenario && (
-        <CompareCard
-          baselineSettings={settings}
-          scenarioSettings={scenario.settings}
-          baseline={scenario.baseline}
-          scenario={scenario.result}
-        />
       )}
     </section>
   );

@@ -3,33 +3,31 @@
 import { useEffect, useState } from 'react';
 import { analyzeDaily } from '@/lib/api';
 import type { DailyReport } from '@/types/api';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings, toLiveOptions, type IndicatorSettings } from '@/lib/settings';
+import { DEFAULT_LIVE_SETTINGS, loadSettings, saveSettings, toLiveOptions, type LiveSettings } from '@/lib/settings';
 import { recomputeReport } from '@/lib/recompute';
 import { TickerInput } from '@/components/TickerInput';
 import { ReportCard } from '@/components/ReportCard';
 import { LoadingState } from '@/components/LoadingState';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { BacktestPanel } from '@/components/BacktestPanel';
-import { AiSuggestionPanel } from '@/components/AiSuggestionPanel';
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [ticker, setTicker] = useState('');
   const [report, setReport] = useState<DailyReport | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [settings, setSettings] = useState<IndicatorSettings>(DEFAULT_SETTINGS);
+  const [liveSettings, setLiveSettings] = useState<LiveSettings>(DEFAULT_LIVE_SETTINGS);
 
   // Hydrate from sessionStorage after mount, not at initial render, so the
   // server-rendered and first client render both start from the same
   // defaults (avoids a hydration mismatch).
   useEffect(() => {
-    setSettings(loadSettings());
+    setLiveSettings(loadSettings());
   }, []);
 
-  /** Single recompute path for both manual Apply and AI-suggestion accept. */
-  function applySettings(newSettings: IndicatorSettings) {
+  function applySettings(newSettings: LiveSettings) {
     saveSettings(newSettings);
-    setSettings(newSettings);
+    setLiveSettings(newSettings);
     setReport((current) => (current ? recomputeReport(current, newSettings) : current));
   }
 
@@ -42,7 +40,7 @@ export default function Home() {
     try {
       const result = await analyzeDaily(t);
       if (result.ok) {
-        setReport(recomputeReport(result.report, settings));
+        setReport(recomputeReport(result.report, liveSettings));
       } else {
         setError(`${result.stage}: ${result.reason}`);
       }
@@ -55,7 +53,7 @@ export default function Home() {
 
   return (
     <div className="wrap">
-      <SettingsPanel settings={settings} onApply={applySettings} />
+      <SettingsPanel settings={liveSettings} onApply={applySettings} />
       <TickerInput onSubmit={handleSubmit} disabled={loading} />
 
       {loading && <LoadingState ticker={ticker} />}
@@ -69,9 +67,8 @@ export default function Home() {
 
       {report && (
         <>
-          <ReportCard report={report} options={toLiveOptions(settings)} />
-          <BacktestPanel ticker={report.ticker} settings={settings} />
-          <AiSuggestionPanel ticker={report.ticker} settings={settings} onAccept={applySettings} />
+          <ReportCard report={report} options={toLiveOptions(liveSettings)} />
+          <BacktestPanel ticker={report.ticker} liveSettings={liveSettings} />
         </>
       )}
     </div>

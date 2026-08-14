@@ -17,11 +17,13 @@ export function AiSuggestionPanel({
   const [loading, setLoading] = useState(false);
   const [proposal, setProposal] = useState<AdvisorProposal | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [accepted, setAccepted] = useState(false);
 
   async function request() {
     setLoading(true);
     setError(null);
     setProposal(null);
+    setAccepted(false);
     try {
       setProposal(await requestAiSuggestion(ticker));
     } catch (err) {
@@ -33,10 +35,12 @@ export function AiSuggestionPanel({
 
   function accept() {
     if (!proposal) return;
-    // Accepting the suggestion IS the confirmation — applies directly,
-    // bypassing SettingsPanel's own confirm step.
+    // Fills the backtest-only fields and auto-runs — rationale and diff
+    // stay visible, nothing collapses. Live-report fields are shown in the
+    // diff but never auto-applied here; the user changes those themselves
+    // via Indicator Settings above.
     onAccept(fromProposedSettings(proposal.settings));
-    setProposal(null);
+    setAccepted(true);
   }
 
   const proposedSettings = proposal ? fromProposedSettings(proposal.settings) : null;
@@ -74,9 +78,12 @@ export function AiSuggestionPanel({
             <div className="advisor-diff-empty">Matches your current settings — nothing to change.</div>
           )}
           {changedFields.length > 0 && (
-            <button type="button" className="analyze-btn" style={{ marginTop: 12 }} onClick={accept}>
-              Accept AI Suggestion
-            </button>
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button type="button" className="analyze-btn" onClick={accept}>
+                Accept AI Suggestion
+              </button>
+              {accepted && <span className="badge settings-badge-active">Applied ✓</span>}
+            </div>
           )}
         </div>
       )}
