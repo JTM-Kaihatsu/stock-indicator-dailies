@@ -56,3 +56,6 @@ Thumbs.db
 
 # Handoff / working documents
 *.docx
+
+# Exported spreadsheets (ground-truth labeling, etc.)
+*.numbers

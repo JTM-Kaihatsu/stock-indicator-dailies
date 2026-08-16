@@ -25,7 +25,11 @@ const result = await runDaily({
 });
 
 if (!result.ok) {
-  console.error(`\n❌ ${ticker}: failed during ${result.stage} (${result.reason})`);
+  if (result.userMessage) {
+    // Friendly, actionable message (e.g. a provider outage) shown first.
+    console.error(`\n⚠️  ${result.userMessage}\n`);
+  }
+  console.error(`❌ ${ticker}: failed during ${result.stage} (${result.reason})`);
   for (const e of result.errors) console.error(`   ${e}`);
   console.error(`   capture ${(result.timings.captureMs / 1000).toFixed(1)}s`);
   process.exit(1);

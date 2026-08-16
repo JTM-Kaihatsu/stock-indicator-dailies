@@ -128,6 +128,47 @@ test('unparseable model output is reported as an analysis failure', async () => 
   assert.match(result.errors.join('\n'), /no JSON object found/);
 });
 
+test('a provider outage yields a friendly, actionable userMessage', async () => {
+  const outageProvider: VlmProvider = {
+    name: 'down',
+    async complete() {
+      throw Object.assign(new Error('Connection error'), { name: 'APIConnectionError' });
+    },
+  };
+  const result = await runDaily({
+    ticker: 'GEV',
+    agent: new FakeChartAgent(),
+    provider: outageProvider,
+    dataSource: fakeSource as DataSource,
+  });
+
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.stage, 'analysis');
+  assert.equal(result.reason, 'provider-unavailable');
+  assert.match(result.userMessage ?? '', /downdetector|status\.claude\.com/);
+});
+
+test('a non-outage provider error stays generic (no userMessage)', async () => {
+  const badProvider: VlmProvider = {
+    name: 'bad',
+    async complete() {
+      throw Object.assign(new Error('invalid_request_error'), { status: 400 });
+    },
+  };
+  const result = await runDaily({
+    ticker: 'GEV',
+    agent: new FakeChartAgent(),
+    provider: badProvider,
+    dataSource: fakeSource as DataSource,
+  });
+
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.reason, 'provider-error');
+  assert.equal(result.userMessage, undefined);
+});
+
 test('model disagreement surfaces as a warning, derived signal wins', async () => {
   const disagrees = JSON.stringify({
     ticker: 'GEV',

@@ -8,7 +8,7 @@ import {
   type Verdict,
 } from '@stock-indicator-dailies/shared';
 import { ChartAcquisitionError, type ChartAgent } from '@stock-indicator-dailies/agent';
-import { analyzeChart, type VlmProvider } from '@stock-indicator-dailies/vlm';
+import { analyzeChart, isOutageError, OUTAGE_MESSAGE, type VlmProvider } from '@stock-indicator-dailies/vlm';
 import {
   computeLastBar,
   computeReadings,
@@ -73,6 +73,11 @@ export type DailyResult =
       /** `ChartAcquisitionFailure` for capture, or `invalid-verdict` for analysis. */
       reason: string;
       errors: string[];
+      /**
+       * A friendly, user-facing message when one applies (e.g. a provider
+       * outage). Distinct from `errors`, which carry the raw technical detail.
+       */
+      userMessage?: string;
       timings: DailyTimings;
       /**
        * The chart at the moment of failure, when the capture agent could still
@@ -154,11 +159,14 @@ export async function runDaily(
     result = await analyzeChart({ ticker, image, provider: input.provider }, options);
   } catch (err) {
     // A thrown provider error (network, truncation, auth); surface it cleanly.
+    // An outage/connectivity failure gets a friendly, actionable message.
+    const outage = isOutageError(err);
     return {
       ok: false,
       stage: 'analysis',
-      reason: 'provider-error',
+      reason: outage ? 'provider-unavailable' : 'provider-error',
       errors: [err instanceof Error ? err.message : String(err)],
+      ...(outage ? { userMessage: OUTAGE_MESSAGE } : {}),
       timings: timings(captureMs, now() - analyzeStarted),
     };
   }
