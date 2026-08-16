@@ -42,7 +42,7 @@ export default function Home() {
       if (result.ok) {
         setReport(recomputeReport(result.report, liveSettings));
       } else {
-        setError(`${result.stage}: ${result.reason}`);
+        setError(result.userMessage ?? `${result.stage}: ${result.reason}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Network error');
