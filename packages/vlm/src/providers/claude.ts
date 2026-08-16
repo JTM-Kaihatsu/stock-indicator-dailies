@@ -22,6 +22,17 @@ export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export const DEFAULT_EFFORT: EffortLevel = 'low';
 
 /**
+ * Per-request timeout. The Anthropic SDK defaults to a 10-minute timeout with 2
+ * retries, so a call during an API outage can hang ~30 minutes. A single
+ * vision+low-effort read completes in well under 30s, so a tight cap fails fast
+ * during an outage instead of hanging. On timeout the SDK throws, which runDaily
+ * surfaces as a clean analysis-stage failure.
+ */
+export const DEFAULT_TIMEOUT_MS = 90_000;
+/** Retries on timeout / 429 / 5xx. Kept low so an outage can't multiply the wait. */
+export const DEFAULT_MAX_RETRIES = 1;
+
+/**
  * The slice of the Anthropic SDK this provider depends on. Declaring it as an
  * interface lets tests inject a fake client; no network, no API key, not flaky.
  */
@@ -66,6 +77,10 @@ export interface ClaudeVlmProviderOptions {
    * modes (reasoning leaking into the response text).
    */
   thinking?: 'adaptive' | 'disabled';
+  /** Per-request timeout in ms. Defaults to {@link DEFAULT_TIMEOUT_MS} (90s). */
+  timeoutMs?: number;
+  /** SDK retries on timeout/429/5xx. Defaults to {@link DEFAULT_MAX_RETRIES} (1). */
+  maxRetries?: number;
   /** Inject a client (or fake) instead of constructing a real SDK instance. */
   client?: AnthropicLike;
 }
@@ -90,7 +105,11 @@ export class ClaudeVlmProvider implements VlmProvider {
     this.#thinking = options.thinking ?? 'adaptive';
     this.#client =
       options.client ??
-      (new Anthropic({ apiKey: options.apiKey ?? process.env.VLM_API_KEY }) as unknown as AnthropicLike);
+      (new Anthropic({
+        apiKey: options.apiKey ?? process.env.VLM_API_KEY,
+        timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,
+      }) as unknown as AnthropicLike);
   }
 
   async complete(request: VlmRequest): Promise<string> {
