@@ -22,7 +22,12 @@ export interface AdvisorProposal {
 
 export type AdvisorJobResult = { ok: true; result: AdvisorProposal } | { ok: false; reason: string };
 
-export type StartAdvisorResponse = { ok: true; jobId: string } | { ok: false; reason: string };
+/** A cache hit resolves inline with the result; a miss returns a job id to
+ * poll instead. Same shape as StartResponse for the daily pipeline. */
+export type StartAdvisorResponse =
+  | { ok: true; result: AdvisorProposal }
+  | { ok: true; jobId: string }
+  | { ok: false; reason: string };
 
 export type AdvisorJobStatusResponse =
   | { status: 'pending' }

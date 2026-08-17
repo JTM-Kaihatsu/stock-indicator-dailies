@@ -2,8 +2,8 @@ import type { AdvisorJobResult, AdvisorJobStatusResponse, AdvisorProposal, Start
 import { apiUrl } from './api.ts';
 import { pollUntilDone } from './polling.ts';
 
-/** Same start→poll shape as analyzeDaily, but every call is a fresh
- * research request; no cache-hit-inline path on this one. */
+/** Same start→poll shape as analyzeDaily: a cache hit resolves immediately,
+ * a miss polls a background research job. */
 export async function requestAiSuggestion(ticker: string): Promise<AdvisorProposal> {
   const startRes = await fetch(apiUrl('/api/advisor/start'), {
     method: 'POST',
@@ -12,6 +12,7 @@ export async function requestAiSuggestion(ticker: string): Promise<AdvisorPropos
   });
   const start: StartAdvisorResponse = await startRes.json();
   if (!start.ok) throw new Error(start.reason);
+  if ('result' in start) return start.result;
 
   const jobResult = await pollUntilDone<AdvisorJobResult>(async () => {
     const statusRes = await fetch(apiUrl(`/api/advisor/jobs/${start.jobId}`));

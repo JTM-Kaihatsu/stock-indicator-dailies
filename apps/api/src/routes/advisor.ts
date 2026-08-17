@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 
+import { getCachedAdvice } from '../advisorCache.ts';
 import { getAdvisorJob, startAdvisorJob } from '../advisorJobs.ts';
 
 export const advisor = new Hono();
@@ -13,8 +14,12 @@ advisor.post('/advisor/start', async (c) => {
     return c.json({ ok: false, reason: 'Invalid or missing ticker' }, 400);
   }
 
-  // No cache-hit-inline path (unlike /daily/start); every suggestion is a
-  // fresh research call by design.
+  // A cache hit resolves immediately, inline; a miss kicks off a fresh
+  // research job. Same cache-hit-inline shape as /daily/start, mainly to
+  // avoid repeated slow, web-search-backed calls during testing and demos.
+  const cached = await getCachedAdvice(ticker);
+  if (cached) return c.json({ ok: true, result: cached });
+
   const jobId = startAdvisorJob(ticker);
   return c.json({ ok: true, jobId });
 });
