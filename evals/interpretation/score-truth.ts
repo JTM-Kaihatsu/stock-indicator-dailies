@@ -7,7 +7,7 @@
  * Reads the ground-truth CSV (default eval-interpretation-w-ground-truth.csv),
  * builds an IndicatorReading for the vlm / fetched / truth columns of each
  * labeled row, and reports how well the VLM read and the fetched read each match
- * the truth — direction, derived signal, qualified, and barsAgo error. Rows with
+ * the truth; direction, derived signal, qualified, and barsAgo error. Rows with
  * no truth label (e.g. the failed META capture) are skipped. No model calls.
  */
 import { readFileSync } from 'node:fs';

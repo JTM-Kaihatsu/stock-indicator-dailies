@@ -8,13 +8,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --experimental-strip-types --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "next": "^15.3.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "@stock-indicator-dailies/shared": "*"
+    "@stock-indicator-dailies/shared": "*",
+    "@stock-indicator-dailies/eval-backtest": "*"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

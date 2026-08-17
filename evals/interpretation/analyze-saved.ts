@@ -1,6 +1,6 @@
 /**
  * Re-run the machine columns (VLM + fetched reads) against an ALREADY-CAPTURED
- * image on disk — without re-capturing, which would change the chart and
+ * image on disk; without re-capturing, which would change the chart and
  * invalidate hand-labeled ground truth.
  *
  *   npm run analyze-saved -w @stock-indicator-dailies/eval-interpretation -- GOOG
@@ -35,14 +35,14 @@ for (const ticker of tickers) {
 
   const result = await analyzeChart({ ticker, image: { base64, mediaType: 'image/png' }, provider });
   if (!result.ok) {
-    console.error(`${ticker}: VLM failed — ${result.errors.join('; ')}`);
+    console.error(`${ticker}: VLM failed; ${result.errors.join('; ')}`);
     continue;
   }
   const bars = await yahooDataSource.fetchDailyBars(ticker, '1y');
   const fetched = computeReadings(bars);
   const comparisons = compareReadings(result.verdict.readings, fetched, {}, ticker);
 
-  console.log(`\n### ${ticker}  (visibleRange: ${result.verdict.visibleRange ?? '—'})`);
+  console.log(`\n### ${ticker}  (visibleRange: ${result.verdict.visibleRange ?? 'N/A'})`);
   for (const c of comparisons) {
     const vBars = c.vlm.crossover === 'NONE' ? '' : (c.vlm.barsAgo ?? '');
     const fBars = c.fetched.crossover === 'NONE' ? '' : (c.fetched.barsAgo ?? '');

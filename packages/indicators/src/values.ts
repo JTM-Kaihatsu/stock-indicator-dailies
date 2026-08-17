@@ -1,7 +1,7 @@
 /**
  * Indicator values at a single bar. Two things produce this shape and must
  * agree: our own computation over the price series, and the numbers TradingView
- * renders in its legend — which is exactly what calibration checks.
+ * renders in its legend; which is exactly what calibration checks.
  */
 export interface IndicatorValues {
   macd: {
@@ -13,9 +13,9 @@ export interface IndicatorValues {
     histogram: number;
   };
   stochastic: {
-    /** "%K" plot — the faster line. */
+    /** "%K" plot; the faster line. */
     percentK: number;
-    /** "%D" plot — the signal line. */
+    /** "%D" plot; the signal line. */
     percentD: number;
   };
   /** "MA" plot value of the SMA study. */

@@ -8,7 +8,7 @@ import {
   type Verdict,
 } from '@stock-indicator-dailies/shared';
 import { ChartAcquisitionError, type ChartAgent } from '@stock-indicator-dailies/agent';
-import { analyzeChart, type VlmProvider } from '@stock-indicator-dailies/vlm';
+import { analyzeChart, isOutageError, OUTAGE_MESSAGE, type VlmProvider } from '@stock-indicator-dailies/vlm';
 import {
   computeLastBar,
   computeReadings,
@@ -18,7 +18,7 @@ import {
 } from '@stock-indicator-dailies/indicators';
 
 /**
- * The deterministic read — computed from price data, the accurate signal source.
+ * The deterministic read; computed from price data, the accurate signal source.
  * Shown alongside the VLM read as a cross-check, and the headline of the report.
  */
 export interface DeterministicRead {
@@ -49,16 +49,16 @@ export interface DailyTimings {
 
 export interface DailyReport {
   ticker: string;
-  /** The VLM's read — the AI second opinion / cross-check. */
+  /** The VLM's read; the AI second opinion / cross-check. */
   verdict: Verdict;
-  /** The computed read from price data — the accurate, headline signal. Absent if the data fetch failed. */
+  /** The computed read from price data; the accurate, headline signal. Absent if the data fetch failed. */
   deterministic?: DeterministicRead;
   /** Non-fatal notes, e.g. VLM/derived disagreement, or the data fetch failing. */
   warnings: string[];
   timings: DailyTimings;
   /**
    * The chart the reads were derived from. Surfaced so the user can verify the
-   * call against the source image — the PRD's human-in-the-loop requirement.
+   * call against the source image; the PRD's human-in-the-loop requirement.
    */
   image: ChartImage;
   /** Raw model output, retained for debugging and eval. */
@@ -73,10 +73,15 @@ export type DailyResult =
       /** `ChartAcquisitionFailure` for capture, or `invalid-verdict` for analysis. */
       reason: string;
       errors: string[];
+      /**
+       * A friendly, user-facing message when one applies (e.g. a provider
+       * outage). Distinct from `errors`, which carry the raw technical detail.
+       */
+      userMessage?: string;
       timings: DailyTimings;
       /**
        * The chart at the moment of failure, when the capture agent could still
-       * grab one (e.g. studies didn't render, wrong interval) — so a failure log
+       * grab one (e.g. studies didn't render, wrong interval); so a failure log
        * can show *what was on screen*, not just the error string.
        */
       image?: ChartImage;
@@ -99,7 +104,7 @@ export interface RunDailyOptions extends ParseVerdictOptions {
  * One "Daily": capture the chart, interpret it, and return a verdict.
  *
  * Failures are returned rather than thrown, and tagged with the stage that
- * failed — a capture failure (expired session, missing study, wrong interval)
+ * failed; a capture failure (expired session, missing study, wrong interval)
  * needs a different response than the model returning unparseable output.
  */
 export async function runDaily(
@@ -153,12 +158,15 @@ export async function runDaily(
   try {
     result = await analyzeChart({ ticker, image, provider: input.provider }, options);
   } catch (err) {
-    // A thrown provider error (network, truncation, auth) — surface it cleanly.
+    // A thrown provider error (network, truncation, auth); surface it cleanly.
+    // An outage/connectivity failure gets a friendly, actionable message.
+    const outage = isOutageError(err);
     return {
       ok: false,
       stage: 'analysis',
-      reason: 'provider-error',
+      reason: outage ? 'provider-unavailable' : 'provider-error',
       errors: [err instanceof Error ? err.message : String(err)],
+      ...(outage ? { userMessage: OUTAGE_MESSAGE } : {}),
       timings: timings(captureMs, now() - analyzeStarted),
     };
   }
@@ -176,7 +184,7 @@ export async function runDaily(
 
   const warnings = [...result.warnings];
 
-  // --- 3. Deterministic read (best-effort — a data-fetch failure is non-fatal) ---
+  // --- 3. Deterministic read (best-effort; a data-fetch failure is non-fatal) ---
   const detStarted = now();
   let deterministic: DeterministicRead | undefined;
   try {

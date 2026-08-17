@@ -1,0 +1,18 @@
+{
+  "name": "@stock-indicator-dailies/advisor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Claude tool-use loop that researches a ticker's company via web_search and proposes indicator-lever settings changes with a rationale.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.114.0",
+    "@stock-indicator-dailies/shared": "*"
+  }
+}

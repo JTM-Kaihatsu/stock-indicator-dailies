@@ -2,14 +2,14 @@
  * One-time interactive login.
  *
  * Opens a real (headed) browser at the charting provider so YOU can sign in by
- * hand — including via Google SSO. The resulting session is persisted to the
+ * hand; including via Google SSO. The resulting session is persisted to the
  * profile directory and reused by every later agent run, so the agent never
  * handles a password and no automated sign-in is ever attempted.
  *
  *   npm run login -w @stock-indicator-dailies/agent
  *
  * The script polls for a real auth session and tells you the moment you're
- * signed in — a visible chart does NOT mean you're logged in, since TradingView
+ * signed in; a visible chart does NOT mean you're logged in, since TradingView
  * serves charts to anonymous visitors.
  */
 import { chromium, type BrowserContext } from 'playwright';
@@ -28,7 +28,7 @@ console.log('  3. Wait for this script to print "SIGNED IN", then close the wind
 console.log('Google SSO will NOT work here: Google blocks sign-in in any');
 console.log('automation-controlled browser ("this browser or app may not be secure").');
 console.log('If you signed up via Google, set a password on the account and use it.\n');
-console.log('NOTE: seeing a chart does NOT mean you are signed in — TradingView');
+console.log('NOTE: seeing a chart does NOT mean you are signed in; TradingView');
 console.log('      shows charts to anonymous visitors too.\n');
 
 const context = await chromium.launchPersistentContext(profileDir, {
@@ -49,7 +49,7 @@ const poll = setInterval(async () => {
     if (await hasAuthSession(context as BrowserContext)) {
       if (!announced) {
         announced = true;
-        console.log('✅ SIGNED IN — session captured. You can close the browser window now.');
+        console.log('✅ SIGNED IN; session captured. You can close the browser window now.');
       }
     } else if (announced) {
       announced = false;
@@ -77,6 +77,6 @@ if (signedInAtClose) {
   console.log('Future agent runs will reuse it. Re-run this if it ever expires.');
 } else {
   console.log('\n❌ No signed-in session was detected before the window closed.');
-  console.log('   Nothing is broken — just re-run and complete the sign-in.');
+  console.log('   Nothing is broken; just re-run and complete the sign-in.');
   process.exitCode = 1;
 }

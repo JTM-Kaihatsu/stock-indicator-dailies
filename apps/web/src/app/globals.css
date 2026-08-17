@@ -82,6 +82,18 @@ body {
 .read:hover .tip, .read:focus-within .tip { opacity: 1; visibility: visible; transform: translateY(0); }
 @media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
 
+/* --- Inline info icon (settings field explainers) --- */
+.info-icon {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; margin-left: 6px; border-radius: 50%;
+  border: 1px solid var(--faint); color: var(--faint);
+  font-family: var(--mono); font-size: 10px; font-style: italic; line-height: 1;
+  cursor: default; outline: none;
+}
+.info-icon:hover, .info-icon:focus-visible { border-color: var(--accent); color: var(--accent); }
+.info-icon:hover .tip, .info-icon:focus-within .tip { opacity: 1; visibility: visible; transform: translateY(0); }
+.info-icon .tip { bottom: auto; top: calc(100% + 8px); left: auto; right: -8px; }
+
 /* --- Agreement badge --- */
 .agree { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; text-align: center; }
 .agree-yes { color: var(--buy); }
@@ -107,6 +119,43 @@ body {
 }
 .badge b { color: var(--text); font-weight: 600; }
 
+/* --- Indicator settings panel --- */
+/* Deliberately plain/low-emphasis; Historical Testing (.backtest-panel,
+   below) gets the boxed treatment instead, since that's the section meant
+   to draw attention. */
+.settings-panel {
+  margin-bottom: 20px;
+}
+.settings-toggle {
+  background: none; border: none; color: var(--text); font-family: var(--sans);
+  font-size: 14px; font-weight: 600; cursor: pointer; padding: 4px 0;
+}
+.settings-badge-active { color: var(--accent); border-color: var(--accent); }
+.settings-group { margin-top: 16px; }
+.settings-group:first-child { margin-top: 0; }
+.settings-group-title {
+  text-transform: uppercase; letter-spacing: .08em; font-size: 11px;
+  font-weight: 600; color: var(--faint);
+}
+.settings-group-hint { font-size: 12px; color: var(--muted); margin: 4px 0 10px; max-width: 520px; }
+.settings-group-hint p + p { margin-top: 10px; }
+.settings-field {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 6px 0; border-bottom: 1px solid var(--border);
+}
+.settings-field:last-child { border-bottom: none; }
+.settings-subfield { padding-left: 16px; }
+.settings-field label { font-size: 13px; color: var(--muted); }
+.settings-field input[type="number"] {
+  font-family: var(--mono); background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; width: 80px;
+}
+.settings-field input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+.settings-confirm {
+  margin-top: 12px; padding: 10px 12px; background: var(--hold-bg);
+  border-left: 2px solid var(--hold); border-radius: 0 6px 6px 0; font-size: 13px;
+}
+
 /* --- Ticker input --- */
 .ticker-form {
   display: flex; gap: 10px; align-items: center; margin-bottom: 28px;
@@ -131,6 +180,7 @@ body {
 /* --- Loading skeleton --- */
 .loading-wrap { text-align: center; padding: 60px 20px; }
 .loading-text { color: var(--muted); font-size: 15px; margin-top: 12px; }
+.loading-status { color: var(--faint); font-size: 13px; margin-top: 6px; max-width: 320px; margin-left: auto; margin-right: auto; }
 .elapsed { font-family: var(--mono); font-size: 13px; color: var(--faint); margin-top: 4px; }
 .spinner {
   width: 36px; height: 36px; border: 3px solid var(--border);
@@ -146,6 +196,57 @@ body {
 }
 .error-card h3 { font-size: 15px; margin-bottom: 6px; }
 .error-card p { font-size: 13px; color: var(--muted); }
+
+/* --- Historical testing / backtest --- */
+/* Boxed/prominent; this is the section meant to draw the eye, unlike the
+   now-plain .settings-panel above. */
+.backtest-panel {
+  margin-top: 28px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 18px;
+}
+.backtest-stats { display: flex; gap: 16px; margin: 14px 0; }
+.backtest-stat {
+  flex: 1; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px;
+}
+.backtest-stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); }
+.backtest-stat-value { font-family: var(--mono); font-size: 22px; font-weight: 700; margin-top: 4px; }
+.backtest-stat-value.backtest-stat-empty { color: var(--faint); font-weight: 400; }
+.backtest-stat-value.pos { color: var(--buy); }
+.backtest-stat-value.neg { color: var(--sell); }
+.trade-list { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; margin-top: 10px; }
+.trade-list th {
+  text-align: left; color: var(--faint); font-weight: 600; padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.trade-list td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.trade-list-current td { font-weight: 700; color: var(--text); border-top: 2px solid var(--border); }
+
+/* --- Scenario comparison --- */
+.compare-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px 18px; margin-top: 16px;
+}
+.compare-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.compare-row:last-child { border-bottom: none; }
+.compare-label { font-size: 13px; color: var(--muted); }
+.compare-values { font-family: var(--mono); font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.compare-arrow { color: var(--faint); }
+.compare-delta { font-weight: 700; padding: 2px 8px; border-radius: 6px; font-size: 12px; }
+.compare-delta.pos { color: var(--buy); background: var(--buy-bg); }
+.compare-delta.neg { color: var(--sell); background: var(--sell-bg); }
+
+/* --- AI suggestion --- */
+.advisor-panel { margin-top: 28px; }
+.advisor-rationale {
+  font-size: 13px; color: var(--text); line-height: 1.6;
+  background: var(--surface-2); border-radius: 8px; padding: 12px 14px; margin: 10px 0;
+}
+.advisor-diff-empty { font-size: 13px; color: var(--muted); margin-top: 8px; }
 
 /* --- Footer --- */
 footer {

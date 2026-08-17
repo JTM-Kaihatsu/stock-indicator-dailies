@@ -19,7 +19,7 @@ daily.post('/daily/start', async (c) => {
   const ticker = parseTicker(body.ticker);
   if (!ticker) return c.json({ ok: false, reason: 'Invalid or missing ticker' }, 400);
 
-  // A cache hit resolves immediately, inline — no job, no polling, no risk
+  // A cache hit resolves immediately, inline; no job, no polling, no risk
   // of any gateway timeout, since this returns in well under a second.
   const cached = await getCachedReport(ticker);
   if (cached) return c.json({ ok: true, report: cached });

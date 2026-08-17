@@ -4,7 +4,7 @@ node_modules/
 .pnp.js
 .yarn/
 
-# Env & secrets — NEVER commit real credentials
+# Env & secrets; NEVER commit real credentials
 .env
 .env.*
 !.env.example
@@ -21,7 +21,7 @@ dist/
 /playwright/.cache/
 /blob-report/
 
-# Persistent browser profile — holds the signed-in session. Treat as a secret.
+# Persistent browser profile; holds the signed-in session. Treat as a secret.
 # Unanchored on purpose: must match at any depth, not just the repo root.
 .agent-profile/
 .agent-profile-linux/
@@ -56,3 +56,6 @@ Thumbs.db
 
 # Handoff / working documents
 *.docx
+
+# Exported spreadsheets (ground-truth labeling, etc.)
+*.numbers

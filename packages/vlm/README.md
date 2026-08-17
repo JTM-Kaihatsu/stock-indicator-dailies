@@ -1,36 +1,36 @@
 # @stock-indicator-dailies/vlm
 
-The VLM analysis layer — everything between a chart screenshot and a validated
+The VLM analysis layer; everything between a chart screenshot and a validated
 `Verdict`, split so the deterministic parts are unit-tested and the flaky,
 model-dependent part is isolated behind an interface.
 
 ## What's here
 
-- **`prompt.ts`** — `buildSystemPrompt()` / `buildUserInstruction()`. The prompt is
+- **`prompt.ts`**; `buildSystemPrompt()` / `buildUserInstruction()`. The prompt is
   assembled from `@stock-indicator-dailies/shared` constants (indicator params,
   Stochastic bands, 3-month window), so what the model is told can never drift from
   what the agent configures or what the evals label against.
-- **`extract.ts`** — `extractJson()`. Recovers a JSON value from raw model text,
+- **`extract.ts`**; `extractJson()`. Recovers a JSON value from raw model text,
   tolerating ```` ```json ```` fences and surrounding prose.
-- **`provider.ts`** — `VlmProvider` interface + `ChartImage` / `VlmRequest` types. The
+- **`provider.ts`**; `VlmProvider` interface + `ChartImage` / `VlmRequest` types. The
   provider-agnostic seam; concrete Gemini/GPT adapters plug in here.
-- **`analyze.ts`** — `interpretChartResponse()` (raw text → validated result) and
+- **`analyze.ts`**; `interpretChartResponse()` (raw text → validated result) and
   `analyzeChart()` (build prompt → call provider → interpret).
 
 ## Trust boundaries
 
-- The requested **ticker is authoritative** — injected into the payload, never taken
+- The requested **ticker is authoritative**; injected into the payload, never taken
   from the model's echo.
-- The overall **signal is authoritative** — recomputed by `parseVerdict` /
+- The overall **signal is authoritative**; recomputed by `parseVerdict` /
   `deriveSignal` from the readings; the model's own overall call is only cross-checked.
 - The **provider** is the only component that touches the network or the real model.
-  In tests it's a fake that returns canned strings — no keys, no network, not flaky.
+  In tests it's a fake that returns canned strings; no keys, no network, not flaky.
 
 ## Providers
 
-- **`providers/claude.ts`** — `ClaudeVlmProvider`, backed by `@anthropic-ai/sdk`. Sends
+- **`providers/claude.ts`**; `ClaudeVlmProvider`, backed by `@anthropic-ai/sdk`. Sends
   the chart image + prompt to Claude (default `claude-sonnet-5`) and returns the model's
-  text. Unit-tested with an injected fake client — no network, no key. A live call needs
+  text. Unit-tested with an injected fake client; no network, no key. A live call needs
   `VLM_API_KEY` set and bills your Anthropic account.
 
 ```ts

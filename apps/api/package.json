@@ -16,6 +16,9 @@
     "@stock-indicator-dailies/daily": "*",
     "@stock-indicator-dailies/shared": "*",
     "@stock-indicator-dailies/agent": "*",
-    "@stock-indicator-dailies/vlm": "*"
+    "@stock-indicator-dailies/vlm": "*",
+    "@stock-indicator-dailies/indicators": "*",
+    "@stock-indicator-dailies/eval-backtest": "*",
+    "@stock-indicator-dailies/advisor": "*"
   }
 }

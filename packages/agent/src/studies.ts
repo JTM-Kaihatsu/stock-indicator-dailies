@@ -3,7 +3,7 @@ import type { ExpectedStudy } from './profiles/tradingview.ts';
 /**
  * Structural validation of the captured chart: confirm every required study is
  * actually on the chart with the expected parameters *before* the image goes to
- * the VLM. This is the PRD's "DOM volatility" mitigation — if the saved layout
+ * the VLM. This is the PRD's "DOM volatility" mitigation; if the saved layout
  * changed or failed to load, we fail loudly instead of inferring from a chart
  * that is missing an indicator.
  */
@@ -19,7 +19,7 @@ export interface StudyValidation {
   missing: string[];
   /**
    * Labels of studies whose name matched but whose plotted values had not
-   * rendered — the legend name is a *prefix* match, so a blank, unrendered pane
+   * rendered; the legend name is a *prefix* match, so a blank, unrendered pane
    * still matches the name. Only reported when a `values` map is supplied.
    */
   notRendered: string[];
@@ -30,8 +30,8 @@ export interface StudyValidation {
 /**
  * Check the chart's legend against the expected studies.
  *
- * A study is "found" only when its name/params pattern matches AND — when a
- * `values` map (legend title → live number) is supplied — every one of its
+ * A study is "found" only when its name/params pattern matches AND; when a
+ * `values` map (legend title → live number) is supplied; every one of its
  * {@link ExpectedStudy.valueTitles} has actually rendered a finite value. The
  * name check alone is a prefix match, so it passes even when the plots are still
  * blank; the value check is what proves the study actually painted.

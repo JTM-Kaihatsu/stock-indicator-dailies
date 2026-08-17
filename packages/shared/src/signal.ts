@@ -2,12 +2,12 @@ import { RECENCY_WINDOW_DAYS } from './indicators.ts';
 import type { IndicatorReading, IndicatorSignal, Signal } from './types.ts';
 
 export interface DeriveSignalOptions {
-  /**
-   * Minimum number of BUY readings required to emit BUY. Defaults to 3 —
-   * BUY requires unanimity across all three indicators.
-   */
+  /** Minimum number of BUY readings required to emit BUY. Defaults to 2. */
   buyConsensus?: number;
-  /** Minimum number of SELL readings required to emit SELL. Defaults to 2. */
+  /**
+   * Minimum number of SELL readings required to emit SELL. Defaults to 3;
+   * SELL requires unanimity across all three indicators.
+   */
   sellConsensus?: number;
   /**
    * A crossover older than this many daily bars no longer counts as an active
@@ -19,7 +19,7 @@ export interface DeriveSignalOptions {
 /**
  * Turn one indicator's crossover facts into a directional signal.
  *
- * This is the deterministic "judgment" layer. The VLM reports what it saw — a
+ * This is the deterministic "judgment" layer. The VLM reports what it saw; a
  * clean crossover, its direction, how many bars ago, and whether it met the
  * zone/slope condition. The recency window is applied *here*, in code, so it
  * stays tunable and unit-tested rather than baked into the model's output.
@@ -57,10 +57,17 @@ export function tallySignals(signals: readonly IndicatorSignal[]): SignalTally {
 /**
  * Combine per-indicator signals into an overall Buy/Sell/Hold recommendation.
  *
- * Policy — asymmetric, risk-averse:
- *   - SELL if at least `sellConsensus` indicators read SELL (default 2).
- *   - BUY  if at least `buyConsensus` indicators read BUY   (default 3 — unanimity).
+ * Policy:
+ *   - SELL if at least `sellConsensus` indicators read SELL (default 3; unanimity).
+ *   - BUY  if at least `buyConsensus` indicators read BUY   (default 2).
  *   - HOLD otherwise.
+ *
+ * Backtesting (see evals/backtest) found the previous asymmetric policy
+ * (BUY needing unanimity, SELL needing only 2-of-3) exited positions on
+ * weak confirmation while requiring near-unanimity to re-enter, chronically
+ * underperforming buy-and-hold on trending stocks. Requiring unanimity on
+ * the *exit* side instead reduces premature/whipsaw sells, while BUY at
+ * 2-of-3 lets the strategy actually participate in trends.
  *
  * SELL is evaluated first, so if the thresholds are ever lowered such that both
  * could match, the protective (exit) signal wins.
@@ -69,8 +76,8 @@ export function combineSignals(
   signals: readonly IndicatorSignal[],
   options: DeriveSignalOptions = {},
 ): Signal {
-  const buyConsensus = options.buyConsensus ?? 3;
-  const sellConsensus = options.sellConsensus ?? 2;
+  const buyConsensus = options.buyConsensus ?? 2;
+  const sellConsensus = options.sellConsensus ?? 3;
   const { buys, sells } = tallySignals(signals);
 
   if (sells >= sellConsensus) return 'SELL';

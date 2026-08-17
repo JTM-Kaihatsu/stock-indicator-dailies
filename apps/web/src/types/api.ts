@@ -41,9 +41,19 @@ export interface DailyReport {
 
 export type DailyResult =
   | { ok: true; report: DailyReport }
-  | { ok: false; stage: string; reason: string; errors: string[]; timings: DailyTimings };
+  | {
+      ok: false;
+      stage: string;
+      reason: string;
+      errors: string[];
+      /** A friendly, user-facing message when one applies (e.g. a provider
+       * outage); distinct from `reason`/`errors`, which carry raw technical
+       * detail. Absent for ordinary failures. */
+      userMessage?: string;
+      timings: DailyTimings;
+    };
 
-/** Response from POST /api/daily/start — a cache hit resolves inline, a
+/** Response from POST /api/daily/start; a cache hit resolves inline, a
  * miss returns a job id to poll instead. */
 export type StartResponse =
   | { ok: true; report: DailyReport }

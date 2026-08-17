@@ -2,10 +2,10 @@ import Anthropic from '@anthropic-ai/sdk';
 
 import type { VlmProvider, VlmRequest } from '../provider.ts';
 
-/** Default model — Sonnet 5: high-res vision + strong structured output. */
+/** Default model; Sonnet 5: high-res vision + strong structured output. */
 export const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5';
 /**
- * Ceiling, not a target — you're billed on actual output. Must comfortably fit
+ * Ceiling, not a target; you're billed on actual output. Must comfortably fit
  * both the adaptive-thinking budget (on by default for Sonnet 5) AND the JSON
  * verdict; 1024 truncated the JSON once thinking + three fuller rationales grew.
  */
@@ -14,7 +14,7 @@ export const DEFAULT_MAX_TOKENS = 4096;
  * Effort caps how deep adaptive thinking (and overall token spend) goes. Sonnet 5
  * defaults to `high`, which ran its adaptive thinking nearly unbounded and pushed
  * time-to-signal to ~30s in the first eval. `budget_tokens` is rejected on Sonnet
- * 5 (400) — effort is the supported lever. We keep thinking ON (an independent
+ * 5 (400); effort is the supported lever. We keep thinking ON (an independent
  * read still benefits from some reasoning) but bound it. `low` is the default; the
  * eval measures the accuracy cost against the calibrated fetched read.
  */
@@ -22,8 +22,19 @@ export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export const DEFAULT_EFFORT: EffortLevel = 'low';
 
 /**
+ * Per-request timeout. The Anthropic SDK defaults to a 10-minute timeout with 2
+ * retries, so a call during an API outage can hang ~30 minutes. A single
+ * vision+low-effort read completes in well under 30s, so a tight cap fails fast
+ * during an outage instead of hanging. On timeout the SDK throws, which runDaily
+ * surfaces as a clean analysis-stage failure.
+ */
+export const DEFAULT_TIMEOUT_MS = 90_000;
+/** Retries on timeout / 429 / 5xx. Kept low so an outage can't multiply the wait. */
+export const DEFAULT_MAX_RETRIES = 1;
+
+/**
  * The slice of the Anthropic SDK this provider depends on. Declaring it as an
- * interface lets tests inject a fake client — no network, no API key, not flaky.
+ * interface lets tests inject a fake client; no network, no API key, not flaky.
  */
 export interface AnthropicLike {
   messages: {
@@ -60,12 +71,16 @@ export interface ClaudeVlmProviderOptions {
   /** Adaptive-thinking / spend cap. Defaults to {@link DEFAULT_EFFORT} (`low`). */
   effort?: EffortLevel;
   /**
-   * Whether adaptive thinking runs at all. Defaults to `adaptive` — we cap it
+   * Whether adaptive thinking runs at all. Defaults to `adaptive`; we cap it
    * with `effort` rather than turning it off, since a chart read still benefits
    * from some reasoning and disabling thinking on Sonnet 5 has known failure
    * modes (reasoning leaking into the response text).
    */
   thinking?: 'adaptive' | 'disabled';
+  /** Per-request timeout in ms. Defaults to {@link DEFAULT_TIMEOUT_MS} (90s). */
+  timeoutMs?: number;
+  /** SDK retries on timeout/429/5xx. Defaults to {@link DEFAULT_MAX_RETRIES} (1). */
+  maxRetries?: number;
   /** Inject a client (or fake) instead of constructing a real SDK instance. */
   client?: AnthropicLike;
 }
@@ -90,7 +105,11 @@ export class ClaudeVlmProvider implements VlmProvider {
     this.#thinking = options.thinking ?? 'adaptive';
     this.#client =
       options.client ??
-      (new Anthropic({ apiKey: options.apiKey ?? process.env.VLM_API_KEY }) as unknown as AnthropicLike);
+      (new Anthropic({
+        apiKey: options.apiKey ?? process.env.VLM_API_KEY,
+        timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,
+      }) as unknown as AnthropicLike);
   }
 
   async complete(request: VlmRequest): Promise<string> {
@@ -120,7 +139,7 @@ export class ClaudeVlmProvider implements VlmProvider {
 
     if (response.stop_reason === 'max_tokens') {
       throw new Error(
-        `Claude response was truncated (stop_reason=max_tokens) at maxTokens=${this.#maxTokens} — ` +
+        `Claude response was truncated (stop_reason=max_tokens) at maxTokens=${this.#maxTokens}; ` +
           `raise maxTokens. Thinking tokens share this budget.`,
       );
     }

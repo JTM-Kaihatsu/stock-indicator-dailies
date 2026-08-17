@@ -1,4 +1,4 @@
-import type { IndicatorKey, Signal } from '@stock-indicator-dailies/shared';
+import type { DeriveSignalOptions, IndicatorKey, Signal } from '@stock-indicator-dailies/shared';
 import { deriveIndicatorSignal } from '@stock-indicator-dailies/shared';
 import type { DailyReport } from '@/types/api';
 import { SignalPill } from './SignalPill';
@@ -16,7 +16,7 @@ function sigClass(s: string): string {
 /**
  * Resolve the overall recommendation from the computed and AI signals.
  * Asymmetric and risk-averse: either side calling SELL is enough to exit,
- * but BUY needs both to agree — computed alone calling HOLD keeps it at
+ * but BUY needs both to agree; computed alone calling HOLD keeps it at
  * HOLD even if the AI read is more bullish.
  */
 function resolveOverall(detSignal: Signal | null, vlmSignal: Signal): Signal {
@@ -27,7 +27,7 @@ function resolveOverall(detSignal: Signal | null, vlmSignal: Signal): Signal {
   return 'HOLD';
 }
 
-export function ReportCard({ report }: { report: DailyReport }) {
+export function ReportCard({ report, options }: { report: DailyReport; options?: DeriveSignalOptions }) {
   const { ticker, verdict, deterministic, image, warnings, timings } = report;
   const detSignal = deterministic?.signal ?? null;
   const vlmSignal = verdict.signal;
@@ -37,13 +37,15 @@ export function ReportCard({ report }: { report: DailyReport }) {
   const detByKey = new Map((deterministic?.readings ?? []).map((r) => [r.indicator, r]));
 
   // The disagreement note tracks the per-indicator DIFFERS badges below, not
-  // the overall signal — the two aren't the same thing once the overall
+  // the overall signal; the two aren't the same thing once the overall
   // policy can resolve to a single value even when individual reads differ.
+  // Uses the same `options` IndicatorRow renders with, so the note never
+  // contradicts what the per-row badges show.
   const anyDiffers = INDICATORS.some((key) => {
     const det = detByKey.get(key);
     const vlm = vlmByKey.get(key);
     if (!det || !vlm) return false;
-    return deriveIndicatorSignal(det) !== deriveIndicatorSignal(vlm);
+    return deriveIndicatorSignal(det, options) !== deriveIndicatorSignal(vlm, options);
   });
 
   return (
@@ -53,7 +55,7 @@ export function ReportCard({ report }: { report: DailyReport }) {
           <div className="eyebrow">Stock Indicator Dailies</div>
           <h1 style={{ fontFamily: 'var(--mono)', fontSize: 40, fontWeight: 600, letterSpacing: '-.01em', margin: '2px 0 0' }}>{ticker}</h1>
           <div className="tabular" style={{ color: 'var(--muted)', fontSize: 13 }}>
-            daily bars · as of {deterministic?.asOf ?? '—'}
+            daily bars · as of {deterministic?.asOf ?? 'N/A'}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -67,7 +69,7 @@ export function ReportCard({ report }: { report: DailyReport }) {
               {detSignal ? (
                 <b className={sigClass(detSignal)} style={{ fontFamily: 'var(--mono)' }}>{detSignal}</b>
               ) : (
-                <b style={{ fontFamily: 'var(--mono)' }}>—</b>
+                <b style={{ fontFamily: 'var(--mono)' }}>N/A</b>
               )}
             </span>
             <span>
@@ -86,6 +88,7 @@ export function ReportCard({ report }: { report: DailyReport }) {
             detReading={detByKey.get(key)}
             vlmReading={vlmByKey.get(key)}
             deterministic={deterministic}
+            options={options}
           />
         ))}
       </section>

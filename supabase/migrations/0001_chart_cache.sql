@@ -1,7 +1,7 @@
 -- Chart cache: one row per ticker, overwritten on every fresh fetch.
 -- A row is considered fresh for 24h from `retrieved_at`; the API checks that
 -- window at read time and treats an expired row as a miss (no separate
--- cleanup job — the next lookup for that ticker just overwrites it).
+-- cleanup job; the next lookup for that ticker just overwrites it).
 create table if not exists chart_cache (
   ticker text primary key,
   retrieved_at timestamptz not null default now(),

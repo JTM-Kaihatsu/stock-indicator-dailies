@@ -2,7 +2,7 @@ import type { ChartImage } from '@stock-indicator-dailies/shared';
 
 import { ChartAcquisitionError, type ChartAcquisitionFailure, type ChartAgent } from './agent.ts';
 
-/** A 1x1 PNG — enough to stand in for a chart in tests. */
+/** A 1x1 PNG; enough to stand in for a chart in tests. */
 export const PLACEHOLDER_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 

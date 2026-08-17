@@ -7,7 +7,7 @@ import type { FactComparison } from './fact-score.ts';
 import type { ChartEvalResult, EvalRun } from './harness.ts';
 
 /**
- * Export a run as CSV — one row per (ticker, indicator) — for manual labeling.
+ * Export a run as CSV; one row per (ticker, indicator); for manual labeling.
  *
  * Both reads are laid out side by side (`vlm_*` and `fetched_*`) with their
  * agreement flags, and the `truth_*` / `notes` columns are left BLANK: the user
@@ -75,10 +75,10 @@ function comparisonRow(ticker: string, c: FactComparison, suggestion?: Suggestio
     c.directionMatch,
     c.bothCrossed ? c.barsAgoGap : '',
     c.signalMatch,
-    '', // truth_crossover — user fills
-    '', // truth_barsAgo — user fills
-    '', // truth_qualified — user fills
-    '', // notes — user fills
+    '', // truth_crossover; user fills
+    '', // truth_barsAgo; user fills
+    '', // truth_qualified; user fills
+    '', // notes; user fills
     suggestion?.vlm ?? '',
     suggestion?.fetched ?? '',
     suggestion?.truth ?? '',
@@ -87,13 +87,13 @@ function comparisonRow(ticker: string, c: FactComparison, suggestion?: Suggestio
     .join(',');
 }
 
-/** A failed chart still gets a row: the failure in `notes`, and — when a
- * diagnostic image was saved — the `image` column points at it so it can be
+/** A failed chart still gets a row: the failure in `notes`, and; when a
+ * diagnostic image was saved; the `image` column points at it so it can be
  * eyeballed. */
 function failureRow(r: ChartEvalResult): string {
   const image = r.imagePath ? `${IMAGE_DIR}/${r.ticker}.FAILED.png` : '';
   const cells = COLUMNS.map((col) =>
-    col === 'ticker' ? r.ticker : col === 'image' ? image : col === 'notes' ? `FAILED — ${r.error}` : '',
+    col === 'ticker' ? r.ticker : col === 'image' ? image : col === 'notes' ? `FAILED; ${r.error}` : '',
   );
   return cells.map(cell).join(',');
 }

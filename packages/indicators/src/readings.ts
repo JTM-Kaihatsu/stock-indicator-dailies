@@ -25,7 +25,7 @@ function reading(
 }
 
 /**
- * Ground-truth per-indicator FACTS computed from the price series — the same
+ * Ground-truth per-indicator FACTS computed from the price series; the same
  * `{crossover, barsAgo, qualified}` the VLM reports, so the two can be compared
  * directly. This is the event-capable oracle (it sees history, unlike the
  * single-bar legend oracle).
@@ -36,7 +36,7 @@ export function computeReadings(bars: readonly Bar[]): IndicatorReading[] {
 
   // --- MACD: qualified if the cross was below zero (bullish) / above zero (bearish) ---
   // Dead zone: if the cross is within MACD_ZERO_DEADZONE_PCT of the recent
-  // range from zero, it's too close to call — treat as qualified either way.
+  // range from zero, it's too close to call; treat as qualified either way.
   const macdS = macdSeries(closes, macd.fastLength, macd.slowLength, macd.signalSmoothing);
   const macdX = detectCrossover(macdS.macd, macdS.signal);
   const macdValAtCross = macdX.direction !== 'NONE' ? macdS.macd[macdX.atIndex]! : 0;
@@ -86,7 +86,7 @@ export function computeReadings(bars: readonly Bar[]): IndicatorReading[] {
   ];
 }
 
-/** The indicator values at the last bar — used to calibrate against the legend. */
+/** The indicator values at the last bar; used to calibrate against the legend. */
 export function computeLastBar(bars: readonly Bar[]): IndicatorValues {
   const closes = bars.map((b) => b.close);
   const { macd, smaP, stoch } = {

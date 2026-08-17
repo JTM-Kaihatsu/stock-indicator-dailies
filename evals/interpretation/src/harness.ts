@@ -16,8 +16,8 @@ import { compareReadings, summarize, type AgreementSummary, type FactComparison 
 /**
  * The batch interpretation harness.
  *
- * For each ticker it runs the real pipeline — capture the chart, run the VLM,
- * and compute the `fetched` read from price data — then records both reads and
+ * For each ticker it runs the real pipeline; capture the chart, run the VLM,
+ * and compute the `fetched` read from price data; then records both reads and
  * their agreement with {@link compareReadings}. Neither read is treated as
  * ground truth: the run exports both so the user can label the real answer by
  * hand. Every dependency is injected, so the whole thing runs offline in tests
@@ -41,13 +41,13 @@ export interface EvalOptions extends ParseVerdictOptions {
   /** OHLC history to request. Default `1y`. */
   range?: string;
   /**
-   * When set, the captured chart PNG is written to `<imageDir>/<TICKER>.png` —
+   * When set, the captured chart PNG is written to `<imageDir>/<TICKER>.png`;
    * the evidence image for hand-labeling. The directory must already exist.
    */
   imageDir?: string;
 }
 
-/** One chart's outcome — both reads plus their agreement, or the stage that failed. */
+/** One chart's outcome; both reads plus their agreement, or the stage that failed. */
 export interface ChartEvalResult {
   ticker: string;
   ok: boolean;
@@ -60,11 +60,11 @@ export interface ChartEvalResult {
   vlm?: IndicatorReading[];
   /** The read computed from fetched price data. */
   fetched?: IndicatorReading[];
-  /** What the model said it saw on the axis — observability only. */
+  /** What the model said it saw on the axis; observability only. */
   visibleRange?: string;
   captureMs: number;
   analyzeMs: number;
-  /** capture + analyze — the PRD's time-to-signal metric. */
+  /** capture + analyze; the PRD's time-to-signal metric. */
   totalMs: number;
   withinTarget: boolean;
 }
@@ -136,14 +136,14 @@ async function evalOne(
     const captureMs = now() - captureStart;
     const reason = err instanceof ChartAcquisitionError ? err.reason : 'unknown';
     // A rejected chart (blank studies, wrong interval) often still carries the
-    // image it was rejected on — save it so the failure can be eyeballed.
+    // image it was rejected on; save it so the failure can be eyeballed.
     const diagnostic =
       err instanceof ChartAcquisitionError && err.image && options.imageDir
         ? saveImage(options.imageDir, `${ticker}.FAILED`, err.image)
         : undefined;
     return fail(
       'capture',
-      `${reason} — ${err instanceof Error ? err.message : String(err)}`,
+      `${reason}; ${err instanceof Error ? err.message : String(err)}`,
       captureMs,
       0,
       diagnostic,
@@ -167,7 +167,7 @@ async function evalOne(
     return fail('analysis', result.errors.join('; '), captureMs, analyzeMs, imagePath);
   }
 
-  // --- Fetched read (computed from price data — a cross-check, not truth) ---
+  // --- Fetched read (computed from price data; a cross-check, not truth) ---
   let fetched: IndicatorReading[];
   try {
     const bars = await dataSource.fetchDailyBars(ticker, range);

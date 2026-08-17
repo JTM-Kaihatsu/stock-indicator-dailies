@@ -1,4 +1,4 @@
-import type { IndicatorKey, IndicatorReading, IndicatorSignal } from '@stock-indicator-dailies/shared';
+import type { DeriveSignalOptions, IndicatorKey, IndicatorReading, IndicatorSignal } from '@stock-indicator-dailies/shared';
 import { deriveIndicatorSignal } from '@stock-indicator-dailies/shared';
 import type { DeterministicRead } from '@/types/api';
 
@@ -21,7 +21,7 @@ function sigClass(s: IndicatorSignal): string {
   return 'sig-neutral';
 }
 
-const num = (n: number, dp = 2) => Number.isFinite(n) ? n.toFixed(dp) : '—';
+const num = (n: number, dp = 2) => Number.isFinite(n) ? n.toFixed(dp) : 'N/A';
 
 function computedTip(indicator: IndicatorKey, det: DeterministicRead | undefined): string {
   if (!det) return '';
@@ -49,15 +49,17 @@ export function IndicatorRow({
   detReading,
   vlmReading,
   deterministic,
+  options,
 }: {
   indicator: IndicatorKey;
   detReading: IndicatorReading | undefined;
   vlmReading: IndicatorReading | undefined;
   deterministic: DeterministicRead | undefined;
+  options?: DeriveSignalOptions;
 }) {
   const meta = INDICATOR_META[indicator];
-  const detSig = detReading ? deriveIndicatorSignal(detReading) : 'NEUTRAL' as IndicatorSignal;
-  const vlmSig = vlmReading ? deriveIndicatorSignal(vlmReading) : 'NEUTRAL' as IndicatorSignal;
+  const detSig = detReading ? deriveIndicatorSignal(detReading, options) : 'NEUTRAL' as IndicatorSignal;
+  const vlmSig = vlmReading ? deriveIndicatorSignal(vlmReading, options) : 'NEUTRAL' as IndicatorSignal;
   const match = detReading && vlmReading ? detSig === vlmSig : false;
   const hasBoth = !!(detReading && vlmReading);
 
@@ -75,10 +77,10 @@ export function IndicatorRow({
       {vlmReading ? (
         <ReadCell label="AI read" signal={vlmSig} fact={factLabel(vlmReading)} tip={vlmReading.rationale ?? ''} />
       ) : (
-        <div className="read-empty"><span className="read-label">AI read</span><span className="fact">&mdash;</span></div>
+        <div className="read-empty"><span className="read-label">AI read</span><span className="fact">N/A</span></div>
       )}
       <div className={`agree ${hasBoth ? (match ? 'agree-yes' : 'agree-no') : 'agree-na'}`}>
-        {hasBoth ? (match ? 'match' : 'differs') : '—'}
+        {hasBoth ? (match ? 'match' : 'differs') : 'N/A'}
       </div>
     </div>
   );

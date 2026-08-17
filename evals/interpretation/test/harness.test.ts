@@ -15,7 +15,7 @@ import type { Bar, DataSource } from '@stock-indicator-dailies/indicators';
 
 import { runEval } from '../src/harness.ts';
 
-/** A provider that echoes a fixed verdict JSON — no network, no billing. */
+/** A provider that echoes a fixed verdict JSON; no network, no billing. */
 class StubProvider implements VlmProvider {
   readonly name = 'stub';
   #json: string;
@@ -34,7 +34,7 @@ class ThrowingProvider implements VlmProvider {
   }
 }
 
-/** Deterministic synthetic bars — enough length for every indicator to warm up. */
+/** Deterministic synthetic bars; enough length for every indicator to warm up. */
 function fakeBars(n = 80): Bar[] {
   return Array.from({ length: n }, (_, i) => {
     const close = 100 + 20 * Math.sin(i / 5) + i * 0.1;
