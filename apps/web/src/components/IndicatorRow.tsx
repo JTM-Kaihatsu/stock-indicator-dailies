@@ -23,14 +23,43 @@ function sigClass(s: IndicatorSignal): string {
 
 const num = (n: number, dp = 2) => Number.isFinite(n) ? n.toFixed(dp) : 'N/A';
 
-function computedTip(indicator: IndicatorKey, det: DeterministicRead | undefined): string {
-  if (!det) return '';
-  const v = det.values;
-  if (indicator === 'macd')
-    return `MACD ${num(v.macd.macd)} · signal ${num(v.macd.signal)} · hist ${num(v.macd.histogram)}`;
-  if (indicator === 'slowStochastic')
-    return `%K ${num(v.stochastic.percentK)} · %D ${num(v.stochastic.percentD)}`;
+function valuesLine(indicator: IndicatorKey, v: DeterministicRead['values']): string {
+  if (indicator === 'macd') return `MACD ${num(v.macd.macd)} · signal ${num(v.macd.signal)} · hist ${num(v.macd.histogram)}`;
+  if (indicator === 'slowStochastic') return `%K ${num(v.stochastic.percentK)} · %D ${num(v.stochastic.percentD)}`;
   return `SMA ${num(v.sma)} · close ${num(v.close)}`;
+}
+
+/** One-sentence explanation of the deterministic read, in the same style as
+ * the AI's own rationale; built from the crossover facts rather than
+ * narrated, since there's no chart context to describe. */
+function computedRationale(indicator: IndicatorKey, reading: IndicatorReading, v: DeterministicRead['values']): string {
+  const bullish = reading.crossover === 'BULLISH';
+  const ago = reading.barsAgo;
+
+  if (reading.crossover === 'NONE') {
+    if (indicator === 'macd') return `No MACD/signal crossover in view; currently ${num(v.macd.macd)} vs ${num(v.macd.signal)}.`;
+    if (indicator === 'slowStochastic') return `No %K/%D crossover in view; currently ${num(v.stochastic.percentK)} vs ${num(v.stochastic.percentD)}.`;
+    return `Price hasn't crossed the SMA recently; currently ${num(v.close)} vs ${num(v.sma)}.`;
+  }
+
+  if (indicator === 'macd') {
+    const zone = reading.qualified ? (bullish ? 'below zero' : 'above zero') : (bullish ? 'already above zero' : 'already below zero');
+    const verdict = reading.qualified ? 'a fresh reversal' : "doesn't qualify as a fresh reversal";
+    return `MACD crossed ${bullish ? 'above' : 'below'} signal ${ago}d ago while ${zone}, ${verdict}; now ${num(v.macd.macd)} vs ${num(v.macd.signal)}.`;
+  }
+  if (indicator === 'slowStochastic') {
+    const zone = bullish ? 'oversold (<20)' : 'overbought (>80)';
+    const verdict = reading.qualified ? `from ${zone}, a ${bullish ? 'buy' : 'sell'} setup` : `but not from ${zone}, so it doesn't qualify`;
+    return `%K crossed ${bullish ? 'above' : 'below'} %D ${ago}d ago ${verdict}; now ${num(v.stochastic.percentK)} vs ${num(v.stochastic.percentD)}.`;
+  }
+  const slope = bullish ? 'rising' : 'falling';
+  const verdict = reading.qualified ? `a ${bullish ? 'bullish' : 'bearish'} setup` : `but the SMA isn't ${slope}, so it doesn't qualify`;
+  return `Price crossed ${bullish ? 'above' : 'below'} the SMA ${ago}d ago, ${verdict}; now ${num(v.close)} vs ${num(v.sma)}.`;
+}
+
+function computedTip(indicator: IndicatorKey, reading: IndicatorReading | undefined, det: DeterministicRead | undefined): string {
+  if (!det || !reading) return '';
+  return `${computedRationale(indicator, reading, det.values)}\n${valuesLine(indicator, det.values)}`;
 }
 
 function ReadCell({ label, signal, fact, tip }: { label: string; signal: IndicatorSignal; fact: string; tip: string }) {
@@ -70,7 +99,7 @@ export function IndicatorRow({
         <span className="ind-params">{meta.params}</span>
       </div>
       {detReading ? (
-        <ReadCell label="Computed" signal={detSig} fact={factLabel(detReading)} tip={computedTip(indicator, deterministic)} />
+        <ReadCell label="Computed" signal={detSig} fact={factLabel(detReading)} tip={computedTip(indicator, detReading, deterministic)} />
       ) : (
         <div className="read-empty"><span className="read-label">Computed</span><span className="fact">unavailable</span></div>
       )}

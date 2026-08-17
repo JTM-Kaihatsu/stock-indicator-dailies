@@ -75,10 +75,11 @@ body {
   position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 10;
   background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
   padding: 8px 10px; font-family: var(--mono); font-size: 12px; color: var(--text);
-  width: max-content; max-width: 280px; white-space: normal;
+  width: max-content; max-width: 280px; white-space: pre-line;
   opacity: 0; visibility: hidden; transform: translateY(3px); transition: opacity .12s, transform .12s;
   box-shadow: 0 8px 24px rgba(0,0,0,.28);
 }
+.tip.tip-wide { max-width: 340px; }
 .read:hover .tip, .read:focus-within .tip { opacity: 1; visibility: visible; transform: translateY(0); }
 @media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
 

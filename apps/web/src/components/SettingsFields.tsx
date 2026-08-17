@@ -7,11 +7,11 @@ const num = (v: string, fallback: number) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-export function InfoIcon({ text }: { text: string }) {
+export function InfoIcon({ text, wide }: { text: string; wide?: boolean }) {
   return (
     <span className="info-icon" tabIndex={0}>
       i
-      <span className="tip">{text}</span>
+      <span className={`tip${wide ? ' tip-wide' : ''}`}>{text}</span>
     </span>
   );
 }
