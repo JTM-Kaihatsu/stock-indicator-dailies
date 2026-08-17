@@ -4,21 +4,8 @@ import type { DailyReport } from '@/types/api';
 import { SignalPill } from './SignalPill';
 import { IndicatorRow } from './IndicatorRow';
 import { ChartImage } from './ChartImage';
-import { InfoIcon } from './SettingsFields';
 
 const INDICATORS: IndicatorKey[] = ['macd', 'slowStochastic', 'sma'];
-
-const CHEAT_SHEET = `How BUY/SELL/HOLD is derived:
-
-MACD (8, 17, 9): BUY when the MACD line crosses above its signal line while below the zero line (a reversal, not a continuation). SELL on the mirror case: crossing below signal while above zero. A cross very close to zero counts either way.
-
-Slow Stochastic (14, 5, 3): BUY when %K crosses above %D while oversold (%K < 20). SELL when %K crosses below %D while overbought (%K > 80).
-
-10-day SMA: BUY when price crosses above a rising SMA. SELL when price crosses below a falling SMA.
-
-Recency: a crossover only counts if it happened within the last 3 days; older ones are ignored (treated as no signal).
-
-Overall: SELL if all 3 indicators say SELL (unanimity). BUY if at least 2 of 3 say BUY. Otherwise HOLD. Tune these thresholds in Indicator Settings above.`;
 
 function sigClass(s: string): string {
   if (s === 'BUY') return 'sig-buy';
@@ -93,10 +80,7 @@ export function ReportCard({ report, options }: { report: DailyReport; options?:
       </header>
 
       <section style={{ marginTop: 28 }}>
-        <div className="section-label" style={{ display: 'inline-flex', alignItems: 'center' }}>
-          Indicators · computed vs AI · hover for detail
-          <InfoIcon text={CHEAT_SHEET} wide />
-        </div>
+        <div className="section-label">Indicators · computed vs AI · hover for detail</div>
         {INDICATORS.map((key) => (
           <IndicatorRow
             key={key}

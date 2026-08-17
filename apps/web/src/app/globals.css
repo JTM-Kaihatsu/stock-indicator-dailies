@@ -79,7 +79,6 @@ body {
   opacity: 0; visibility: hidden; transform: translateY(3px); transition: opacity .12s, transform .12s;
   box-shadow: 0 8px 24px rgba(0,0,0,.28);
 }
-.tip.tip-wide { max-width: 340px; }
 .read:hover .tip, .read:focus-within .tip { opacity: 1; visibility: visible; transform: translateY(0); }
 @media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
 
