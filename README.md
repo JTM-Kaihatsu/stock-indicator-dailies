@@ -28,7 +28,7 @@ Language Model (VLM) reads it back to you as a **Buy / Sell / Hold** signal.
             ▼                                                         ▼
   ┌───────────────────┐   interprets crossovers vs. signal   ┌───────────────────┐
   │  VLM Analysis     │◀─────────────────────────────────────│  Chart image      │
-  │  (Gemini/GPT)     │   criteria → structured JSON          └───────────────────┘
+  │  (Claude)         │   criteria → structured JSON          └───────────────────┘
   └───────────────────┘
             │
             ▼
@@ -37,58 +37,74 @@ Language Model (VLM) reads it back to you as a **Buy / Sell / Hold** signal.
 
 ## Signal criteria
 
-The signal is derived from three indicators with fixed parameters.
+The signal is derived from three indicators with fixed chart parameters, but a tunable
+decision policy; the consensus thresholds and recency window are all adjustable from the
+web UI's Indicator Settings panel (defaults shown below).
 
 | Indicator          | Buy signal                                                        | Sell signal                                                        |
 | ------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------ |
 | **MACD (8, 17, 9)**  | Bullish crossover (MACD line crosses **above** signal) below zero | Bearish crossover (MACD line crosses **below** signal) above zero  |
-| **Slow Stoch (14, 5)** | %K crosses **above** %D while oversold (< 20)                   | %K crosses **below** %D while overbought (> 80)                    |
-| **10-day SMA**       | Price closes **above** the 10-day SMA with upward slope           | Price closes **below** the 10-day SMA with downward slope          |
+| **Slow Stoch (14, 5, 3)** | %K crosses **above** %D while oversold (< 20)                | %K crosses **below** %D while overbought (> 80)                    |
+| **10-day SMA**       | Price crosses **above** the 10-day SMA while it's sloping up      | Price crosses **below** the 10-day SMA while it's sloping down     |
 
-Indicator parameters: MACD fast 8 / slow 17 / signal 9 · Slow Stochastic %K 14 / %D 5 · SMA period 10.
+A crossover only counts if it happened within the last 3 days (default); older ones read as
+no signal. The three per-indicator reads are then combined: **SELL** requires unanimity
+(3 of 3), **BUY** requires only 2 of 3, otherwise **HOLD**; backtesting showed this
+asymmetric policy (easy to exit, harder to re-enter) outperforms a symmetric one more
+consistently. See `evals/backtest` and the in-app Historical Testing panel to validate any
+policy change against real history before trusting it.
 
 ## Tech stack
 
-| Layer          | Choice                          | Purpose                                          |
-| -------------- | ------------------------------- | ------------------------------------------------ |
-| Frontend       | Next.js                         | Responsive dashboard + Daily Report cards        |
-| Agentic layer  | Playwright + light orchestration| Log in, configure indicators, capture chart      |
-| AI layer       | Frontier VLM (Gemini/GPT-class) | Multimodal image reasoning, JSON-structured output |
-| Database       | Supabase                        | User preferences & "Daily" history               |
-| Evals          | SSIM + labeled ground truth     | Guard against retrieval failures & model drift   |
+| Layer          | Choice                                                | Purpose                                                |
+| -------------- | ------------------------------------------------------| ------------------------------------------------------ |
+| Frontend       | Next.js (Vercel)                                      | Dashboard, Indicator Settings, Historical Testing UI   |
+| API            | Hono (Render)                                         | Pipeline orchestration, backtest, AI-advisor endpoints |
+| Agentic layer  | Playwright                                            | Log in, configure indicators, capture chart            |
+| AI layer       | Claude (vision read + `web_search` tool-use advisor)  | Chart interpretation; settings-tuning research          |
+| Database       | Supabase                                              | Chart cache, AI-suggestion cache, failure logs           |
+| Evals          | Labeled ground truth + walk-forward backtest          | Guard against interpretation drift & bad policy changes |
 
 ## Repository layout
 
 ```
 stock-indicator-dailies/
 ├── apps/
-│   └── web/                 # Next.js dashboard (frontend)
+│   ├── web/             # Next.js dashboard (frontend, deployed on Vercel)
+│   └── api/              # Hono API: pipeline orchestration, caching, job/poll routes (deployed on Render)
 ├── packages/
-│   ├── agent/               # Playwright browser-automation layer
-│   ├── vlm/                 # VLM analysis + prompts (Gemini/GPT-class)
-│   └── shared/              # Shared types & signal-criteria definitions
+│   ├── agent/            # Playwright browser-automation layer
+│   ├── vlm/              # Claude vision analysis + prompts
+│   ├── advisor/          # Claude + web_search settings-tuning advisor
+│   ├── daily/             # Daily pipeline orchestration (capture -> analyze -> report)
+│   ├── indicators/        # Deterministic indicator math (MACD/Stochastic/SMA/ATR/ADX)
+│   └── shared/            # Shared types & signal-criteria definitions
 ├── evals/
-│   ├── retrieval/           # SSIM-based chart-retrieval eval (target ≥ 95%)
-│   └── interpretation/      # Buy/Sell/Hold vs. labeled ground truth
-├── supabase/                # Schema & migrations
-└── docs/                    # PRD, architecture, roadmap
+│   ├── interpretation/   # Buy/Sell/Hold vs. labeled ground truth
+│   ├── backtest/          # Walk-forward backtest of the policy vs. buy-and-hold
+│   └── retrieval/         # SSIM-based chart-retrieval eval (target >= 95%); not started
+├── supabase/              # Schema & migrations
+└── docs/                  # PRD, architecture, roadmap
 ```
-
-> **Status:** Docs & structure only. Application code lands in later commits; see [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Getting started
 
-Prerequisites: Node.js 20+, npm, and a Playwright-capable environment. AI + DB integration
-require a VLM API key (Gemini/GPT-class) and a Supabase project (see [`.env.example`](.env.example)).
+Prerequisites: Node.js 22+, npm, and a Playwright-capable environment. AI integration requires
+a Claude API key; the chart and AI-suggestion caches require a Supabase project (see
+[`.env.example`](.env.example) for the full list).
 
 ```bash
 git clone https://github.com/JTM-Kaihatsu/stock-indicator-dailies.git
 cd stock-indicator-dailies
 cp .env.example .env.local   # then fill in your keys
-```
+npm install
 
-Scaffolding for `apps/web` and the packages is not yet in place. Once added, per-package
-setup instructions will live in their respective READMEs.
+npm run dev:api    # Hono API on :3001
+npm run dev:web    # Next.js dashboard on :3000, in a second terminal
+
+npm test           # full test suite across every package
+npm run typecheck  # every workspace
+```
 
 ## Security & privacy
 
