@@ -48,22 +48,29 @@ export async function getCachedReport(ticker: string): Promise<DailyReport | nul
   return { ...data.report, image };
 }
 
-/** Persist a successful report, overwriting any prior row for the ticker. */
+/** Persist a successful report, overwriting any prior row for the ticker.
+ * Best-effort, like {@link logFailure}: caching is an optimization, not part
+ * of the actual result, so a Supabase hiccup here must never turn an
+ * already-successful analysis into a reported failure for the caller. */
 export async function cacheReport(report: DailyReport): Promise<void> {
   const db = getClient();
   if (!db) return;
 
-  const imagePath = `${report.ticker}.png`;
-  const uploaded = await uploadImage(db, imagePath, report.image);
-  if (!uploaded) return;
+  try {
+    const imagePath = `${report.ticker}.png`;
+    const uploaded = await uploadImage(db, imagePath, report.image);
+    if (!uploaded) return;
 
-  const { image: _image, ...rest } = report;
-  await db.from('chart_cache').upsert({
-    ticker: report.ticker,
-    retrieved_at: new Date().toISOString(),
-    report: rest,
-    image_path: imagePath,
-  });
+    const { image: _image, ...rest } = report;
+    await db.from('chart_cache').upsert({
+      ticker: report.ticker,
+      retrieved_at: new Date().toISOString(),
+      report: rest,
+      image_path: imagePath,
+    });
+  } catch {
+    // Best-effort; never let caching itself fail an otherwise-successful request.
+  }
 }
 
 /** Log a failed run for later review. Never throws; a logging failure must

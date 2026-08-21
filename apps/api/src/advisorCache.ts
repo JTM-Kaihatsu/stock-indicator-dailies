@@ -48,15 +48,22 @@ export async function getCachedAdvice(ticker: string): Promise<AdvisorResult | n
   return { rationale: data.rationale, settings: data.settings };
 }
 
-/** Persist a fresh suggestion, overwriting any prior row for the ticker. */
+/** Persist a fresh suggestion, overwriting any prior row for the ticker.
+ * Best-effort: caching is an optimization, not part of the actual result,
+ * so a Supabase hiccup here must never turn an already-successful research
+ * call into a reported failure for the caller. */
 export async function cacheAdvice(ticker: string, result: AdvisorResult): Promise<void> {
   const db = getClient();
   if (!db) return;
 
-  await db.from('advisor_cache').upsert({
-    ticker,
-    retrieved_at: new Date().toISOString(),
-    rationale: result.rationale,
-    settings: result.settings,
-  });
+  try {
+    await db.from('advisor_cache').upsert({
+      ticker,
+      retrieved_at: new Date().toISOString(),
+      rationale: result.rationale,
+      settings: result.settings,
+    });
+  } catch {
+    // Best-effort; never let caching itself fail an otherwise-successful request.
+  }
 }
