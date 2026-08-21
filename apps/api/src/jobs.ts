@@ -9,8 +9,14 @@ import { runPipeline } from './pipeline.ts';
  * outrun that. Instead, `/daily/start` kicks off the run here and returns
  * immediately with a job id; the client polls `/daily/jobs/:id` (each poll
  * is fast, never close to any gateway timeout) until it reports done.
+ *
+ * TTL is longer than the default 5 minutes: the pipeline serializes on a
+ * single browser session (see pipeline.ts), so a request queued behind
+ * others, plus a slow capture, can legitimately take a while. The job must
+ * outlive the client's own poll timeout (see lib/polling.ts) or a still-
+ * running job gets pruned out from under a client still waiting on it.
  */
-const store = createJobStore<DailyResult>();
+const store = createJobStore<DailyResult>(6 * 60 * 1000);
 
 /** Starts a pipeline run in the background; returns immediately with a job id. */
 export function startJob(ticker: string): string {

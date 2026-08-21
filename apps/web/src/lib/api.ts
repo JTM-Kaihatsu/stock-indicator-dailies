@@ -11,9 +11,11 @@ function emptyTimings(): DailyTimings {
   return { captureMs: 0, analyzeMs: 0, deterministicMs: 0, totalMs: 0, withinTarget: false };
 }
 
-function failure(reason: string): DailyResult {
-  return { ok: false, stage: 'capture', reason, errors: [reason], timings: emptyTimings() };
+function failure(reason: string, userMessage?: string): DailyResult {
+  return { ok: false, stage: 'capture', reason, errors: [reason], ...(userMessage ? { userMessage } : {}), timings: emptyTimings() };
 }
+
+const POLL_TIMEOUT_MESSAGE = 'Timed out waiting for the job to finish';
 
 /**
  * Kicks off analysis and resolves once it's done; a cache hit resolves
@@ -38,6 +40,14 @@ export async function analyzeDaily(ticker: string): Promise<DailyResult> {
       return (await statusRes.json()) as JobStatusResponse;
     });
   } catch (err) {
-    return failure(err instanceof Error ? err.message : 'Polling failed');
+    const message = err instanceof Error ? err.message : 'Polling failed';
+    // The pipeline serializes on a single browser session, so a slow or
+    // queued run can outlast even this generous a client-side wait without
+    // ever actually failing server-side; the job may finish moments later.
+    const userMessage =
+      message === POLL_TIMEOUT_MESSAGE
+        ? "This is taking longer than usual, so we stopped waiting; the analysis may still finish in the background. Try the same ticker again in a minute; it'll load instantly if it already completed."
+        : undefined;
+    return failure(message, userMessage);
   }
 }

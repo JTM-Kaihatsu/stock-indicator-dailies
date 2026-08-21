@@ -4,8 +4,15 @@ export function sleep(ms: number): Promise<void> {
 
 export interface PollOptions {
   intervalMs?: number;
-  /** Generous ceiling; guards against polling forever if something
-   * server-side genuinely never resolves a job. */
+  /**
+   * Generous ceiling; guards against polling forever if something
+   * server-side genuinely never resolves a job. The daily pipeline runs on
+   * a single serialized browser session (see apps/api/src/pipeline.ts), so
+   * concurrent requests queue behind each other; a capture alone has been
+   * observed taking 150s+ even without queueing. Must stay comfortably
+   * under the job store's own TTL (see apps/api/src/jobs.ts), or a slow-but-
+   * still-legitimate job could get pruned before this ever sees it finish.
+   */
   maxMs?: number;
 }
 
@@ -20,7 +27,7 @@ export async function pollUntilDone<T>(
   options: PollOptions = {},
 ): Promise<T> {
   const intervalMs = options.intervalMs ?? 2000;
-  const maxMs = options.maxMs ?? 3 * 60 * 1000;
+  const maxMs = options.maxMs ?? 4.5 * 60 * 1000;
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     await sleep(intervalMs);
