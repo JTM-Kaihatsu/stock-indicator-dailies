@@ -172,8 +172,26 @@ export class TradingViewChartAgent implements ChartAgent {
       );
     }
 
-    const buffer = await chart.screenshot({ type: 'png' });
-    return { base64: buffer.toString('base64'), mediaType: 'image/png' };
+    // A settle wait, not a redundant one: a popup that just closed (dismissed
+    // above) can still be mid-exit-transition, and the chart container can
+    // still be reflowing as the overlay/backdrop is removed. Playwright's own
+    // screenshot has a stability wait that will time out chasing a layout
+    // that's still actively moving; giving it a settled starting point avoids
+    // racing that transition (observed live: "waiting for element to be
+    // stable" timing out at ~28s right after a popup dismissal).
+    await page.waitForTimeout(500);
+    try {
+      const buffer = await chart.screenshot({ type: 'png', timeout: 45_000 });
+      return { base64: buffer.toString('base64'), mediaType: 'image/png' };
+    } catch (err) {
+      // Not a ChartAcquisitionError by default, so without this it bubbles up
+      // as a raw Playwright error and lands in run-daily.ts's generic
+      // "reason: unknown" bucket, indistinguishable from any other crash.
+      throw new ChartAcquisitionError(
+        'timeout',
+        `timed out screenshotting the chart (layout never settled): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /**
