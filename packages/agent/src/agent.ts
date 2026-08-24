@@ -21,6 +21,13 @@ export type ChartAcquisitionFailure =
   | 'unknown-ticker'
   /** Timed out waiting for the chart to render. */
   | 'timeout'
+  /**
+   * A promotional popup/modal was still covering the chart after repeated
+   * dismissal attempts, right before the screenshot would have been taken.
+   * Distinct from `chart-not-found`/`studies-not-rendered`: the chart itself
+   * rendered fine, but the image would show it partially or fully obscured.
+   */
+  | 'popup-blocking'
   /** Anything else. */
   | 'unknown';
 

@@ -1,5 +1,7 @@
 import {
   deriveSignal,
+  isOutageError,
+  OUTAGE_MESSAGE,
   SUCCESS_TARGETS,
   type ChartImage,
   type IndicatorReading,
@@ -8,7 +10,7 @@ import {
   type Verdict,
 } from '@stock-indicator-dailies/shared';
 import { ChartAcquisitionError, type ChartAgent } from '@stock-indicator-dailies/agent';
-import { analyzeChart, isOutageError, OUTAGE_MESSAGE, type VlmProvider } from '@stock-indicator-dailies/vlm';
+import { analyzeChart, type VlmProvider } from '@stock-indicator-dailies/vlm';
 import {
   computeLastBar,
   computeReadings,

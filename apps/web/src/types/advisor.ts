@@ -20,7 +20,15 @@ export interface AdvisorProposal {
   settings: ProposedSettings;
 }
 
-export type AdvisorJobResult = { ok: true; result: AdvisorProposal } | { ok: false; reason: string };
+export type AdvisorJobResult =
+  | { ok: true; result: AdvisorProposal }
+  | {
+      ok: false;
+      reason: string;
+      /** Whether this looks like Claude being unavailable rather than a
+       * one-off failure; drives the retry cooldown and status-page hint. */
+      outage: boolean;
+    };
 
 /** A cache hit resolves inline with the result; a miss returns a job id to
  * poll instead. Same shape as StartResponse for the daily pipeline. */

@@ -5,6 +5,7 @@ import { analyzeDaily } from '@/lib/api';
 import type { DailyReport } from '@/types/api';
 import { DEFAULT_LIVE_SETTINGS, loadSettings, saveSettings, toLiveOptions, type LiveSettings } from '@/lib/settings';
 import { recomputeReport } from '@/lib/recompute';
+import { dailyFailureMessage } from '@/lib/errorMessages';
 import { TickerInput } from '@/components/TickerInput';
 import { ReportCard } from '@/components/ReportCard';
 import { LoadingState } from '@/components/LoadingState';
@@ -42,10 +43,11 @@ export default function Home() {
       if (result.ok) {
         setReport(recomputeReport(result.report, liveSettings));
       } else {
-        setError(result.userMessage ?? `${result.stage}: ${result.reason}`);
+        setError(dailyFailureMessage(result));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Network error');
+      const message = err instanceof Error ? err.message : 'Network error';
+      setError(`Failed while connecting to the analysis service: ${message}`);
     } finally {
       setLoading(false);
     }

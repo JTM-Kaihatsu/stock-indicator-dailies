@@ -196,6 +196,8 @@ body {
 }
 .error-card h3 { font-size: 15px; margin-bottom: 6px; }
 .error-card p { font-size: 13px; color: var(--muted); }
+.error-card a { color: var(--accent); }
+.error-card a:hover { text-decoration: none; }
 
 /* --- Historical testing / backtest --- */
 /* Boxed/prominent; this is the section meant to draw the eye, unlike the

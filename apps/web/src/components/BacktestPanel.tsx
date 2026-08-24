@@ -14,7 +14,9 @@ import {
 import type { BacktestResult } from '@/types/backtest';
 import { TradeList } from './TradeList';
 import { BacktestOnlySettingsFields, InfoIcon, LiveSettingsFields } from './SettingsFields';
-import { AiSuggestionPanel } from './AiSuggestionPanel';
+import { AiSuggestionPanel, type AcceptResult } from './AiSuggestionPanel';
+
+type RunOutcome = { ok: true; result: BacktestResult } | { ok: false; reason: string };
 
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
@@ -40,37 +42,40 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
 
   const currentSettings = mergeSettings(policy, backtestOnly);
 
-  /** Fetches one backtest and surfaces an error, without touching
-   * baseline/scenario slot state; callers decide where the result goes. */
-  async function runFor(settings: IndicatorSettings): Promise<BacktestResult | null> {
+  /** Fetches one backtest, without touching baseline/scenario/error state;
+   * callers decide where a result goes and whether/how to surface a
+   * failure (the generic banner here, or routed to the AI Suggestion
+   * panel when the run was triggered by accepting a suggestion). */
+  async function runFor(settings: IndicatorSettings): Promise<RunOutcome> {
     try {
       const res = await runBacktest(ticker, toBacktestOptions(settings));
-      if (!res.ok) {
-        setError(res.reason);
-        return null;
-      }
-      return res.result;
+      if (!res.ok) return { ok: false, reason: res.reason };
+      return { ok: true, result: res.result };
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Network error');
-      return null;
+      return { ok: false, reason: err instanceof Error ? err.message : 'Network error' };
     }
   }
 
   /** Establishes the baseline using the settings active in the report above
    * (default backtest-only filters, current live policy). Returns the
-   * result so callers can chain a second run off it. Guarded by baseline
-   * already being null, so it only ever runs once. */
-  async function establishBaseline(): Promise<BacktestResult | null> {
+   * outcome so callers can chain a second run off it. Guarded by baseline
+   * already being null, so it only ever runs once. Always surfaces its own
+   * failure via the generic banner (unlike the scenario run triggered by
+   * an AI-suggestion accept): the baseline is foundational to the whole
+   * section, not something specific to the AI Suggestion panel. */
+  async function establishBaseline(): Promise<RunOutcome> {
     setLoading(true);
     setError(null);
     const defaultSettings = mergeSettings(liveSettings, DEFAULT_BACKTEST_ONLY_SETTINGS);
-    const result = await runFor(defaultSettings);
-    if (result) {
-      setBaseline(result);
+    const outcome = await runFor(defaultSettings);
+    if (outcome.ok) {
+      setBaseline(outcome.result);
       setBaselineSettings(defaultSettings);
+    } else {
+      setError(outcome.reason);
     }
     setLoading(false);
-    return result;
+    return outcome;
   }
 
   // Auto-run the baseline as soon as the section opens. It always reflects
@@ -87,20 +92,27 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
     setLoading(true);
     setError(null);
     const settings = mergeSettings(policy, backtestOnly);
-    const result = await runFor(settings);
-    if (result) {
+    const outcome = await runFor(settings);
+    if (outcome.ok) {
       if (!baseline) {
-        setBaseline(result);
+        setBaseline(outcome.result);
         setBaselineSettings(settings);
       } else {
-        setScenario(result);
+        setScenario(outcome.result);
         setScenarioSettings(settings);
       }
+    } else {
+      setError(outcome.reason);
     }
     setLoading(false);
   }
 
-  async function acceptAiSuggestion(proposed: IndicatorSettings) {
+  /** Triggered by "Accept AI Suggestion". A failure here is reported by the
+   * AI Suggestion panel itself, not the generic banner above: everything
+   * already on screen (overall read, baseline) stays exactly as it was, and
+   * the failure is scoped to "this specific suggestion couldn't be tested,"
+   * not "Historical Testing is broken." */
+  async function acceptAiSuggestion(proposed: IndicatorSettings): Promise<AcceptResult> {
     const nextPolicy: LiveSettings = {
       buyConsensus: proposed.buyConsensus,
       sellConsensus: proposed.sellConsensus,
@@ -122,19 +134,18 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
     // report was generated, so if there is no baseline yet (e.g. the
     // auto-run above is still in flight or failed), establish it first.
     if (!baseline) {
-      const baselineResult = await establishBaseline();
-      if (!baselineResult) return;
+      const baselineOutcome = await establishBaseline();
+      if (!baselineOutcome.ok) return { ok: false, reason: baselineOutcome.reason };
     }
 
     setLoading(true);
-    setError(null);
     const settings = mergeSettings(nextPolicy, nextBacktestOnly);
-    const result = await runFor(settings);
-    if (result) {
-      setScenario(result);
-      setScenarioSettings(settings);
-    }
+    const outcome = await runFor(settings);
     setLoading(false);
+    if (!outcome.ok) return { ok: false, reason: outcome.reason };
+    setScenario(outcome.result);
+    setScenarioSettings(settings);
+    return { ok: true };
   }
 
   return (

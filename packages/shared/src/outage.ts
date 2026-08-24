@@ -1,16 +1,10 @@
 /**
- * User-facing handling for a Claude / LLM-provider outage.
- *
- * The provider is capped at one retry (see ClaudeVlmProvider), so on a genuine
- * outage the request fails fast instead of hanging. When that happens we want to
- * show the user a plain message with where to check provider status, rather than
- * a stack trace. This constant is the single source of that copy so the CLI, the
- * HTML report, and the web UI all say the same thing.
+ * User-facing handling for a Claude / LLM-provider outage. Shared between
+ * the chart-interpretation VLM path (packages/vlm) and the AI-suggestion
+ * advisor path (packages/advisor), since both call the same provider and
+ * both need the same "is this an outage" classification and the same
+ * status-page links, even though each stage phrases its own message.
  */
-export const OUTAGE_MESSAGE =
-  "We're sorry, an error occurred in connecting with Claude as the LLM provider " +
-  'for interpreting the chart, and it retried once already. It is suggested that ' +
-  'you check https://downdetector.com/status/claude-ai/ and https://status.claude.com/';
 
 /** Status pages worth surfacing as links in a richer UI. */
 export const PROVIDER_STATUS_LINKS = [
@@ -19,7 +13,17 @@ export const PROVIDER_STATUS_LINKS = [
 ];
 
 /**
- * Whether an error looks like a provider outage / connectivity failure — as
+ * The chart-interpretation stage's outage message. This constant is the
+ * single source of that copy so the CLI, the HTML report, and the web UI
+ * all say the same thing on a chart-read outage.
+ */
+export const OUTAGE_MESSAGE =
+  "We're sorry, an error occurred in connecting with Claude as the LLM provider " +
+  'for interpreting the chart, and it retried once already. It is suggested that ' +
+  'you check https://downdetector.com/status/claude-ai/ and https://status.claude.com/';
+
+/**
+ * Whether an error looks like a provider outage / connectivity failure; as
  * opposed to a bad request, truncation, or unparseable output. Covers connection
  * errors, timeouts, and 5xx / overloaded (529) responses. Structural (checks
  * status / name / message) so it doesn't couple to a specific SDK error class.

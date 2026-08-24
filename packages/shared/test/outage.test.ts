@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isOutageError, OUTAGE_MESSAGE } from '../src/outage.ts';
+import { isOutageError, OUTAGE_MESSAGE } from '../src/index.ts';
 
 test('the message names Claude and both status links', () => {
   assert.match(OUTAGE_MESSAGE, /Claude/);
