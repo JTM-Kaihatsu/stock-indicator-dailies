@@ -30,22 +30,29 @@ interface AdvisorCacheRow {
 
 /** Look up a fresh cached suggestion for `ticker`. `null` on a miss, an
  * expired row, or when Supabase isn't configured; all treated the same by
- * the caller. */
+ * the caller. Also `null` on a Supabase-side failure: called directly in
+ * the /advisor/start route handler, so an unguarded throw here would crash
+ * that request outright instead of degrading to "no cache, research fresh."
+ * Same reasoning as getCachedReport in cache.ts. */
 export async function getCachedAdvice(ticker: string): Promise<AdvisorResult | null> {
   const db = getClient();
   if (!db) return null;
 
-  const { data, error } = await db
-    .from('advisor_cache')
-    .select('ticker, retrieved_at, rationale, settings')
-    .eq('ticker', ticker)
-    .maybeSingle<AdvisorCacheRow>();
-  if (error || !data) return null;
+  try {
+    const { data, error } = await db
+      .from('advisor_cache')
+      .select('ticker, retrieved_at, rationale, settings')
+      .eq('ticker', ticker)
+      .maybeSingle<AdvisorCacheRow>();
+    if (error || !data) return null;
 
-  const ageMs = Date.now() - new Date(data.retrieved_at).getTime();
-  if (ageMs > CACHE_WINDOW_HOURS * 60 * 60 * 1000) return null;
+    const ageMs = Date.now() - new Date(data.retrieved_at).getTime();
+    if (ageMs > CACHE_WINDOW_HOURS * 60 * 60 * 1000) return null;
 
-  return { rationale: data.rationale, settings: data.settings };
+    return { rationale: data.rationale, settings: data.settings };
+  } catch {
+    return null;
+  }
 }
 
 /** Persist a fresh suggestion, overwriting any prior row for the ticker.

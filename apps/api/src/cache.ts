@@ -27,25 +27,36 @@ interface ChartCacheRow {
 }
 
 /** Look up a fresh cached report for `ticker`. `null` on a miss, an expired
- * row, or when Supabase isn't configured; all treated the same by the caller. */
+ * row, or when Supabase isn't configured; all treated the same by the
+ * caller. Also `null` on a Supabase-side failure (network blip, transient
+ * error): this is called both directly in the /daily/start route and
+ * inside runExclusive, neither of which wraps it, so an unguarded throw
+ * here used to bypass every well-behaved error path in runDaily entirely
+ * and surface as an opaque "capture: unknown" with nothing logged to
+ * capture_failures. A cache lookup failing should degrade to "treat it as
+ * a miss and capture fresh," never crash the whole request. */
 export async function getCachedReport(ticker: string): Promise<DailyReport | null> {
   const db = getClient();
   if (!db) return null;
 
-  const { data, error } = await db
-    .from('chart_cache')
-    .select('ticker, retrieved_at, report, image_path')
-    .eq('ticker', ticker)
-    .maybeSingle<ChartCacheRow>();
-  if (error || !data) return null;
+  try {
+    const { data, error } = await db
+      .from('chart_cache')
+      .select('ticker, retrieved_at, report, image_path')
+      .eq('ticker', ticker)
+      .maybeSingle<ChartCacheRow>();
+    if (error || !data) return null;
 
-  const ageMs = Date.now() - new Date(data.retrieved_at).getTime();
-  if (ageMs > CACHE_WINDOW_HOURS * 60 * 60 * 1000) return null;
+    const ageMs = Date.now() - new Date(data.retrieved_at).getTime();
+    if (ageMs > CACHE_WINDOW_HOURS * 60 * 60 * 1000) return null;
 
-  const image = await downloadImage(db, data.image_path);
-  if (!image) return null;
+    const image = await downloadImage(db, data.image_path);
+    if (!image) return null;
 
-  return { ...data.report, image };
+    return { ...data.report, image };
+  } catch {
+    return null;
+  }
 }
 
 /** Persist a successful report, overwriting any prior row for the ticker.
