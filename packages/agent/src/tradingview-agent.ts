@@ -223,74 +223,111 @@ export class TradingViewChartAgent implements ChartAgent {
   }
 }
 
-/** Broad, generic "this looks like an overlay/modal/popup" selector set;
- * shared between the dismissal attempts and the final blocking check, so
- * the two stay in sync (a class dismissPopups doesn't recognize should
- * also not silently pass the pre-screenshot check). Case-insensitive `i`
- * flags because TradingView's own class names aren't consistent about it. */
+/**
+ * TradingView renders essentially every dialog/popup/tooltip/dropdown into
+ * this single root container (an "overlay manager" pattern common in large
+ * SPAs), confirmed live against a real, recurring promo popup that no
+ * amount of broadening the class-name selectors alone ever caught. It's a
+ * plain, semantic id (not a build-hash like the CSS-module classes
+ * elsewhere on the page), so it's reasonably safe to rely on.
+ *
+ * Scoping to it fixes two failure modes found by direct testing:
+ *  1. `.first()` on a broad, page-wide "class contains modal/overlay/..."
+ *     selector picks the first DOM-order match across the *whole page*,
+ *     which is very often a hidden dialog template for some other feature
+ *     (this SPA has many), not the one actually on screen. Checking that
+ *     hidden element's visibility correctly returns false, so the real,
+ *     visible popup elsewhere in DOM order is never even examined.
+ *  2. A page-wide close-button search can match a genuinely visible but
+ *     unrelated "close"-labeled button elsewhere on the chart's own
+ *     toolbar, and clicking it hangs on Playwright's actionability checks
+ *     (observed live: a 30s timeout on `.click()`) instead of erroring
+ *     immediately, since Playwright waits for wrong the target to become
+ *     "actionable" (i.e never), rather than fast-failing.
+ * Falls back to an unscoped page-wide search when the root isn't present,
+ * in case some other popup type (e.g. a cookie banner) renders outside it.
+ */
+const OVERLAY_ROOT_SELECTOR = '#overlap-manager-root';
+
+/** Case-insensitive `i` flags because TradingView's own class names aren't
+ * consistent about it. `:visible` is a Playwright selector-engine
+ * extension (not standard CSS); combined with scoping to the overlay root
+ * (or, in the fallback, checked via `.count()` instead of `.first()`), this
+ * is what actually finds the one that's on screen instead of a same-named
+ * hidden element elsewhere in the DOM. */
 const OVERLAY_SELECTORS = [
-  '[class*="overlay" i]',
-  '[class*="modal" i]',
-  '[class*="popup" i]',
-  '[class*="promo" i]',
-  '[role="dialog"]',
-  '[role="alertdialog"]',
+  '[class*="overlay" i]:visible',
+  '[class*="modal" i]:visible',
+  '[class*="popup" i]:visible',
+  '[class*="promo" i]:visible',
+  '[role="dialog"]:visible',
+  '[role="alertdialog"]:visible',
 ];
+
+const CLOSE_SELECTORS = [
+  '[data-name="close"]:visible',
+  '[aria-label*="close" i]:visible',
+  '[class*="close" i]:visible',
+  'button:text-is("×"):visible',
+  '[role="button"]:text-is("×"):visible',
+  'button:text-is("✕"):visible',
+  '[role="button"]:text-is("✕"):visible',
+];
+
+// No bare "OK": :text() does case-insensitive substring matching, so a
+// short, common word risks matching unrelated visible page text once this
+// is scoped to the whole page rather than just the overlay root (feature
+// tooltips like the "Magnet mode is on" one aren't always rendered inside
+// #overlap-manager-root the way modals are).
+const DISMISS_TEXTS = ['Decline offer', 'No, thanks', 'Maybe later', 'Not now', 'Got it!', 'Got it', 'Dismiss'];
+
+/** Prefixes each selector with the overlay root when it's present on the
+ * page, so a match is guaranteed to be an actual dialog/popup, not some
+ * unrelated visible "close"/"modal"-classed element in the main chart UI. */
+async function scopedSelectors(page: Page, selectors: string[]): Promise<string[]> {
+  const hasRoot = (await page.locator(OVERLAY_ROOT_SELECTOR).count()) > 0;
+  if (!hasRoot) return selectors;
+  return selectors.map((s) => `${OVERLAY_ROOT_SELECTOR} ${s}`);
+}
 
 /**
  * Dismiss TradingView popups/modals that can appear over the chart (upsell
- * offers, feature announcements, cookie banners). Clicks known dismiss buttons
- * and close icons, and falls back to pressing Escape. Swallows all failures;
- * a popup that isn't there is not an error. Called repeatedly (see
- * #waitForStudies and the pre-screenshot passes), so it's cheap and
+ * offers, feature announcements, cookie banners). Clicks known dismiss
+ * buttons and close icons, and falls back to pressing Escape. Swallows all
+ * failures; a popup that isn't there is not an error. Called repeatedly
+ * (see #waitForStudies and the pre-screenshot passes), so it's cheap and
  * idempotent by design, not a one-shot attempt.
  */
 async function dismissPopups(page: Page): Promise<void> {
-  // Text-based, not `button:has-text(...)`; TradingView's upsell modals style
-  // these as plain <div>s, not <button> elements, so a tag-scoped selector
-  // silently never matches. `:text()` matches any element by its text content.
-  const dismissTexts = ['Decline offer', 'No, thanks', 'Maybe later', 'Not now'];
-
-  for (const text of dismissTexts) {
+  for (const text of DISMISS_TEXTS) {
     try {
-      const el = page.locator(`:text("${text}")`).first();
-      if (await el.isVisible({ timeout: 200 })) {
-        await el.click();
+      const el = page.locator(`:text("${text}"):visible`).first();
+      if ((await el.count()) > 0) {
+        await el.click({ timeout: 2000 });
         await page.waitForTimeout(300);
       }
     } catch {
-      // not present or already gone
+      // not present, already gone, or didn't become actionable in time
     }
   }
 
-  // Generic modal close buttons/icons, by attribute or by a lone "×"/"✕"
-  // glyph (the common icon-only close button that doesn't carry any
-  // close-ish class or aria-label at all).
-  const closeSelectors = [
-    '[data-name="close"]',
-    '[aria-label*="close" i]',
-    '[class*="close" i]',
-    'button:text-is("×")',
-    '[role="button"]:text-is("×")',
-    'button:text-is("✕")',
-    '[role="button"]:text-is("✕")',
-  ];
+  const closeSelectors = await scopedSelectors(page, CLOSE_SELECTORS);
   for (const selector of closeSelectors) {
     try {
       const btn = page.locator(selector).first();
-      if (await btn.isVisible({ timeout: 200 })) {
-        await btn.click();
+      if ((await btn.count()) > 0) {
+        await btn.click({ timeout: 2000 });
         await page.waitForTimeout(300);
       }
     } catch {
-      // not present or already gone
+      // not present, already gone, or didn't become actionable in time
     }
   }
 
   // Fallback: Escape key closes most overlay dialogs
   try {
-    const overlay = page.locator(OVERLAY_SELECTORS.join(', ')).first();
-    if (await overlay.isVisible({ timeout: 200 })) {
+    const overlaySelectors = await scopedSelectors(page, OVERLAY_SELECTORS);
+    if ((await page.locator(overlaySelectors.join(', ')).count()) > 0) {
       await page.keyboard.press('Escape');
       await page.waitForTimeout(300);
     }
@@ -302,11 +339,14 @@ async function dismissPopups(page: Page): Promise<void> {
 /** Whether anything overlay-shaped is still visible over the chart, after
  * dismissal attempts. Used as the fail-closed check right before the final
  * screenshot: dismissPopups swallows failures by design, so this is what
- * actually catches the case where a popup's markup didn't match any of its
- * selectors and it's still sitting there. */
+ * actually catches the case where a popup is still sitting there. `.count()`,
+ * not `.first().isVisible()`: every candidate selector already has
+ * `:visible` baked in (see OVERLAY_SELECTORS), so any match at all is by
+ * definition something currently on screen. */
 async function hasVisiblePopup(page: Page): Promise<boolean> {
   try {
-    return await page.locator(OVERLAY_SELECTORS.join(', ')).first().isVisible({ timeout: 200 });
+    const overlaySelectors = await scopedSelectors(page, OVERLAY_SELECTORS);
+    return (await page.locator(overlaySelectors.join(', ')).count()) > 0;
   } catch {
     return false;
   }
