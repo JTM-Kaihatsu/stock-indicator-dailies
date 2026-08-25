@@ -250,6 +250,32 @@ body {
 }
 .advisor-diff-empty { font-size: 13px; color: var(--muted); margin-top: 8px; }
 
+/* --- Auth corner pill --- */
+/* Fixed to the viewport, not .wrap's centered column, so it stays a
+   subtle, out-of-the-way affordance in the top-right corner regardless of
+   scroll position or content width. */
+.auth-corner { position: fixed; top: 16px; right: 20px; z-index: 50; }
+.auth-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--sans); font-size: 12px; font-weight: 600;
+  color: var(--muted); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; padding: 6px 14px; cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.auth-pill:hover, .auth-pill[aria-expanded="true"] { color: var(--text); border-color: var(--accent); }
+.auth-pill svg { width: 13px; height: 13px; flex-shrink: 0; }
+.auth-pill-label { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auth-popover {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px; width: 280px; max-width: calc(100vw - 40px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.28);
+}
+@media (max-width: 620px) {
+  .auth-corner { top: 12px; right: 12px; }
+  .auth-pill-label { max-width: 90px; }
+}
+
 /* --- Footer --- */
 footer {
   margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border);
