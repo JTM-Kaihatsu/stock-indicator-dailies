@@ -1,5 +1,6 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { AdvisorResult, ProposedSettings } from '@stock-indicator-dailies/advisor';
+
+import { getSupabaseClient as getClient } from './supabaseClient.ts';
 
 /** A cached row is fresh for this long from `retrieved_at`; older is a miss.
  * A week, not chart_cache's 24h: a company's research profile doesn't go
@@ -7,19 +8,6 @@ import type { AdvisorResult, ProposedSettings } from '@stock-indicator-dailies/a
  * all is mainly to avoid repeated slow, web-search-backed calls during
  * testing and demos. */
 const CACHE_WINDOW_HOURS = 24 * 7;
-
-let client: SupabaseClient | undefined;
-
-/** Lazily construct the Supabase client. Undefined when unconfigured, so the
- * cache degrades to a no-op rather than crashing the request. */
-function getClient(): SupabaseClient | undefined {
-  if (client) return client;
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return undefined;
-  client = createClient(url, key);
-  return client;
-}
 
 interface AdvisorCacheRow {
   ticker: string;

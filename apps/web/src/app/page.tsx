@@ -11,6 +11,7 @@ import { ReportCard } from '@/components/ReportCard';
 import { LoadingState } from '@/components/LoadingState';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { BacktestPanel } from '@/components/BacktestPanel';
+import { AuthPanel } from '@/components/AuthPanel';
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
@@ -55,6 +56,7 @@ export default function Home() {
 
   return (
     <div className="wrap">
+      <AuthPanel />
       <SettingsPanel settings={liveSettings} onApply={applySettings} />
       <TickerInput onSubmit={handleSubmit} disabled={loading} />
 

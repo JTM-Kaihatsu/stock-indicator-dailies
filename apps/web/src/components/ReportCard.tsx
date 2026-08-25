@@ -1,5 +1,5 @@
-import type { DeriveSignalOptions, IndicatorKey, Signal } from '@stock-indicator-dailies/shared';
-import { deriveIndicatorSignal } from '@stock-indicator-dailies/shared';
+import type { DeriveSignalOptions, IndicatorKey } from '@stock-indicator-dailies/shared';
+import { deriveIndicatorSignal, resolveDualOverall } from '@stock-indicator-dailies/shared';
 import type { DailyReport } from '@/types/api';
 import { SignalPill } from './SignalPill';
 import { IndicatorRow } from './IndicatorRow';
@@ -13,25 +13,14 @@ function sigClass(s: string): string {
   return 'sig-neutral';
 }
 
-/**
- * Resolve the overall recommendation from the computed and AI signals.
- * Asymmetric and risk-averse: either side calling SELL is enough to exit,
- * but BUY needs both to agree; computed alone calling HOLD keeps it at
- * HOLD even if the AI read is more bullish.
- */
-function resolveOverall(detSignal: Signal | null, vlmSignal: Signal): Signal {
-  if (detSignal === null) return vlmSignal; // no computed data to defer to
-  if (detSignal === 'SELL' || vlmSignal === 'SELL') return 'SELL';
-  if (detSignal === 'HOLD') return 'HOLD';
-  if (detSignal === 'BUY' && vlmSignal === 'BUY') return 'BUY';
-  return 'HOLD';
-}
-
 export function ReportCard({ report, options }: { report: DailyReport; options?: DeriveSignalOptions }) {
   const { ticker, verdict, deterministic, image, warnings, timings } = report;
   const detSignal = deterministic?.signal ?? null;
   const vlmSignal = verdict.signal;
-  const overallSignal = resolveOverall(detSignal, vlmSignal);
+  // A completed report's AI/chart read is always present, so the "still
+  // pending" null case resolveDualOverall exists for (a watchlist ticker
+  // with no capture yet) can never actually happen here.
+  const overallSignal = resolveDualOverall(detSignal, vlmSignal)!;
 
   const vlmByKey = new Map(verdict.readings.map((r) => [r.indicator, r]));
   const detByKey = new Map((deterministic?.readings ?? []).map((r) => [r.indicator, r]));

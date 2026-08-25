@@ -3,16 +3,11 @@ import { Hono } from 'hono';
 import { getCachedReport } from '../cache.ts';
 import { getJob, startJob } from '../jobs.ts';
 import { pendingCount } from '../pipeline.ts';
+import { parseTicker } from '../ticker.ts';
 
 export const daily = new Hono();
 
 daily.get('/health', (c) => c.json({ ok: true, pending: pendingCount() }));
-
-function parseTicker(raw?: string): string | null {
-  const t = raw?.trim().toUpperCase();
-  if (!t || !/^[A-Z]{1,5}(\.[A-Z]{1,2})?$/.test(t)) return null;
-  return t;
-}
 
 daily.post('/daily/start', async (c) => {
   const body = await c.req.json<{ ticker?: string }>().catch(() => ({}) as { ticker?: string });

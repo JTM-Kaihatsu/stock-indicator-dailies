@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { yahooDataSource } from '@stock-indicator-dailies/indicators';
 import { runBacktest, type BacktestOptions } from '@stock-indicator-dailies/eval-backtest';
 
+import { parseTicker } from '../ticker.ts';
+
 /**
  * Regression-testing endpoint: replay the deterministic policy over real
  * history for a ticker and report whether following it would have beaten
@@ -20,7 +22,6 @@ interface BacktestBody {
   options?: BacktestOptions;
 }
 
-const TICKER_PATTERN = /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/;
 const RANGE_PATTERN = /^\d+[dmoy]$|^ytd$|^max$/;
 
 /** Clamp a caller-supplied option to a sane range so this endpoint can't be
@@ -54,8 +55,8 @@ function clampOptions(raw: BacktestOptions | undefined): BacktestOptions {
 
 backtestRoute.post('/backtest', async (c) => {
   const body = await c.req.json<BacktestBody>().catch(() => ({}) as BacktestBody);
-  const ticker = body.ticker?.trim().toUpperCase();
-  if (!ticker || !TICKER_PATTERN.test(ticker)) {
+  const ticker = parseTicker(body.ticker);
+  if (!ticker) {
     return c.json({ ok: false, reason: 'Invalid or missing ticker' }, 400);
   }
   const range = body.range && RANGE_PATTERN.test(body.range) ? body.range : '2y';
