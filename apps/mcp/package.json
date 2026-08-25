@@ -1,0 +1,20 @@
+{
+  "name": "@stock-indicator-dailies/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local stdio MCP server exposing the daily-signal pipeline as thin tools.",
+  "scripts": {
+    "start": "node --experimental-strip-types --env-file-if-exists=../../.env.local src/server.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.24.0",
+    "@stock-indicator-dailies/daily": "*",
+    "@stock-indicator-dailies/shared": "*",
+    "@stock-indicator-dailies/agent": "*",
+    "@stock-indicator-dailies/vlm": "*"
+  }
+}
