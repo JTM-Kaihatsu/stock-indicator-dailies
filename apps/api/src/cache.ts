@@ -1,23 +1,12 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ChartImage } from '@stock-indicator-dailies/shared';
 import type { DailyReport, DailyResult } from '@stock-indicator-dailies/daily';
+
+import { getSupabaseClient as getClient } from './supabaseClient.ts';
 
 /** A cached row is fresh for this long from `retrieved_at`; older is a miss. */
 const CACHE_WINDOW_HOURS = 24;
 const BUCKET = 'chart-cache';
-
-let client: SupabaseClient | undefined;
-
-/** Lazily construct the Supabase client. Undefined when unconfigured, so the
- * cache degrades to a no-op rather than crashing the pipeline. */
-function getClient(): SupabaseClient | undefined {
-  if (client) return client;
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return undefined;
-  client = createClient(url, key);
-  return client;
-}
 
 interface ChartCacheRow {
   ticker: string;

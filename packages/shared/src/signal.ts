@@ -96,3 +96,26 @@ export function deriveSignal(
   const signals = readings.map((reading) => deriveIndicatorSignal(reading, options));
   return combineSignals(signals, options);
 }
+
+/**
+ * Combine a deterministic-path overall signal with a chart/AI-read overall
+ * signal into one final recommendation. Not the same operation as
+ * {@link combineSignals}: that folds three per-indicator signals into one
+ * overall signal; this folds two already-final overall signals (the
+ * computed read and the AI read) into one. Asymmetric and risk-averse:
+ * either side calling SELL is enough to exit, but BUY needs both to agree;
+ * a HOLD from the computed side keeps the result at HOLD even when the AI
+ * read is more bullish.
+ *
+ * `null` means "no read yet" (e.g. a watchlist ticker still pending its
+ * first capture); the result is `null` only when the AI side is null, since
+ * that's the read that's always present once a capture succeeds at all.
+ */
+export function resolveDualOverall(detSignal: Signal | null, aiSignal: Signal | null): Signal | null {
+  if (aiSignal === null) return null;
+  if (detSignal === null) return aiSignal;
+  if (detSignal === 'SELL' || aiSignal === 'SELL') return 'SELL';
+  if (detSignal === 'HOLD') return 'HOLD';
+  if (detSignal === 'BUY' && aiSignal === 'BUY') return 'BUY';
+  return 'HOLD';
+}

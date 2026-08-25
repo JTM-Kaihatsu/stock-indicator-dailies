@@ -2,15 +2,14 @@ import { Hono } from 'hono';
 
 import { getCachedAdvice } from '../advisorCache.ts';
 import { getAdvisorJob, startAdvisorJob } from '../advisorJobs.ts';
+import { parseTicker } from '../ticker.ts';
 
 export const advisor = new Hono();
 
-const TICKER_PATTERN = /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/;
-
 advisor.post('/advisor/start', async (c) => {
   const body = await c.req.json<{ ticker?: string }>().catch(() => ({}) as { ticker?: string });
-  const ticker = body.ticker?.trim().toUpperCase();
-  if (!ticker || !TICKER_PATTERN.test(ticker)) {
+  const ticker = parseTicker(body.ticker);
+  if (!ticker) {
     return c.json({ ok: false, reason: 'Invalid or missing ticker' }, 400);
   }
 

@@ -1,16 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { recomputeReport } from '@stock-indicator-dailies/shared';
 import { analyzeDaily } from '@/lib/api';
 import type { DailyReport } from '@/types/api';
 import { DEFAULT_LIVE_SETTINGS, loadSettings, saveSettings, toLiveOptions, type LiveSettings } from '@/lib/settings';
-import { recomputeReport } from '@/lib/recompute';
 import { dailyFailureMessage } from '@/lib/errorMessages';
 import { TickerInput } from '@/components/TickerInput';
 import { ReportCard } from '@/components/ReportCard';
 import { LoadingState } from '@/components/LoadingState';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { BacktestPanel } from '@/components/BacktestPanel';
+import { AuthPanel } from '@/components/AuthPanel';
+import { SignalHistoryPanel } from '@/components/SignalHistoryPanel';
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
@@ -29,7 +31,7 @@ export default function Home() {
   function applySettings(newSettings: LiveSettings) {
     saveSettings(newSettings);
     setLiveSettings(newSettings);
-    setReport((current) => (current ? recomputeReport(current, newSettings) : current));
+    setReport((current) => (current ? recomputeReport(current, toLiveOptions(newSettings)) : current));
   }
 
   async function handleSubmit(t: string) {
@@ -41,7 +43,7 @@ export default function Home() {
     try {
       const result = await analyzeDaily(t);
       if (result.ok) {
-        setReport(recomputeReport(result.report, liveSettings));
+        setReport(recomputeReport(result.report, toLiveOptions(liveSettings)));
       } else {
         setError(dailyFailureMessage(result));
       }
@@ -55,6 +57,7 @@ export default function Home() {
 
   return (
     <div className="wrap">
+      <AuthPanel />
       <SettingsPanel settings={liveSettings} onApply={applySettings} />
       <TickerInput onSubmit={handleSubmit} disabled={loading} />
 
@@ -71,6 +74,7 @@ export default function Home() {
         <>
           <ReportCard report={report} options={toLiveOptions(liveSettings)} />
           <BacktestPanel ticker={report.ticker} liveSettings={liveSettings} />
+          <SignalHistoryPanel ticker={report.ticker} />
         </>
       )}
     </div>

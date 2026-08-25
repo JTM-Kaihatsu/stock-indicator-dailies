@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "stock-indicator-dailies": {
+      "command": "node",
+      "args": ["--experimental-strip-types", "--env-file-if-exists=.env.local", "apps/mcp/src/server.ts"]
+    }
+  }
+}
