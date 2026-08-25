@@ -12,6 +12,9 @@ export interface WatchlistDashboardRow {
   ai: Signal | null;
   asOf: string | null;
   pending: boolean;
+  /** Since when the Overall signal has held its current value; null if
+   * there's no history yet. */
+  lastChangedAt: string | null;
 }
 
 export type WatchlistResponse =

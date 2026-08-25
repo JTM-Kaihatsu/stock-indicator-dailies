@@ -3,6 +3,7 @@ import { runDaily, type DailyResult } from '@stock-indicator-dailies/daily';
 import { ClaudeVlmProvider } from '@stock-indicator-dailies/vlm';
 
 import { cacheReport, getCachedReport, logFailure } from './cache.ts';
+import { logSignalHistory } from './signalHistory.ts';
 
 let agent: TradingViewChartAgent | undefined;
 let provider: ClaudeVlmProvider | undefined;
@@ -55,7 +56,9 @@ async function runExclusive(ticker: string): Promise<DailyResult> {
   ensureInitialized();
   const result = await runDaily({ ticker, agent: agent!, provider: provider! });
   if (result.ok) {
-    await cacheReport(result.report);
+    // Independent, both best-effort: run concurrently rather than
+    // sequentially awaiting each.
+    await Promise.all([cacheReport(result.report), logSignalHistory(result.report)]);
   } else {
     await logFailure(ticker, result);
   }

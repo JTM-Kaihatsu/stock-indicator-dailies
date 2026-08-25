@@ -61,7 +61,10 @@ export function WatchlistDashboard({ accessToken }: { accessToken: string }) {
     setNewTicker('');
     setRows((prev) => {
       const withoutDuplicate = (prev ?? []).filter((r) => r.ticker !== ticker);
-      return [...withoutDuplicate, { ticker, overall: null, computed: null, ai: null, asOf: null, pending: true }];
+      return [
+        ...withoutDuplicate,
+        { ticker, overall: null, computed: null, ai: null, asOf: null, pending: true, lastChangedAt: null },
+      ];
     });
     void pollUntilResolved(ticker);
   }
@@ -74,6 +77,11 @@ export function WatchlistDashboard({ accessToken }: { accessToken: string }) {
   function cell(signal: WatchlistDashboardRow['overall'], pending: boolean) {
     if (signal) return <SignalPill signal={signal} size="sm" />;
     return <span className="fact">{pending ? 'pending' : 'N/A'}</span>;
+  }
+
+  function lastChanged(row: WatchlistDashboardRow) {
+    if (!row.lastChangedAt) return <span className="fact">N/A</span>;
+    return <span className="fact">{row.lastChangedAt.slice(0, 10)}</span>;
   }
 
   return (
@@ -113,6 +121,7 @@ export function WatchlistDashboard({ accessToken }: { accessToken: string }) {
               <th>Computed</th>
               <th>AI</th>
               <th>As of</th>
+              <th>Last changed</th>
               <th />
             </tr>
           </thead>
@@ -124,6 +133,7 @@ export function WatchlistDashboard({ accessToken }: { accessToken: string }) {
                 <td>{cell(row.computed, row.pending)}</td>
                 <td>{cell(row.ai, row.pending)}</td>
                 <td className="fact">{row.asOf ?? 'N/A'}</td>
+                <td>{lastChanged(row)}</td>
                 <td>
                   <button type="button" className="settings-toggle" onClick={() => handleRemove(row.ticker)} aria-label={`Remove ${row.ticker}`}>
                     ×

@@ -7,6 +7,7 @@ import { parseTicker } from '../ticker.ts';
 import { addToWatchlist, getWatchlist, removeFromWatchlist } from '../watchlist.ts';
 import { requireAuth } from '../authMiddleware.ts';
 import { runDailyWatchlistJob } from '../scheduler.ts';
+import { getLastChangedMap } from '../signalHistory.ts';
 
 export const watchlistRoute = new Hono();
 
@@ -17,6 +18,9 @@ export interface WatchlistDashboardRow {
   ai: Signal | null;
   asOf: string | null;
   pending: boolean;
+  /** Since when the Overall signal has held its current value; null if
+   * there's no history yet (e.g. still pending its first capture). */
+  lastChangedAt: string | null;
 }
 
 // requireAuth is applied per-route below, not via a blanket `/watchlist/*`
@@ -26,12 +30,15 @@ export interface WatchlistDashboardRow {
 watchlistRoute.get('/watchlist', requireAuth, async (c) => {
   const userId = c.get('userId');
   const entries = await getWatchlist(userId);
+  const tickers = entries.map((e) => e.ticker);
+  const lastChangedMap = await getLastChangedMap(tickers);
 
   const rows: WatchlistDashboardRow[] = await Promise.all(
     entries.map(async ({ ticker }): Promise<WatchlistDashboardRow> => {
+      const lastChangedAt = lastChangedMap.get(ticker) ?? null;
       const report = await getCachedReport(ticker);
       if (!report) {
-        return { ticker, overall: null, computed: null, ai: null, asOf: null, pending: true };
+        return { ticker, overall: null, computed: null, ai: null, asOf: null, pending: true, lastChangedAt };
       }
       const computed = report.deterministic?.signal ?? null;
       const ai = report.verdict.signal;
@@ -42,6 +49,7 @@ watchlistRoute.get('/watchlist', requireAuth, async (c) => {
         ai,
         asOf: report.deterministic?.asOf ?? null,
         pending: false,
+        lastChangedAt,
       };
     }),
   );

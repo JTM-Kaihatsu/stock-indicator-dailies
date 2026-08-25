@@ -7,6 +7,7 @@ import { daily } from './routes/daily.ts';
 import { backtestRoute } from './routes/backtest.ts';
 import { advisor } from './routes/advisor.ts';
 import { watchlistRoute } from './routes/watchlist.ts';
+import { historyRoute } from './routes/history.ts';
 import { startDailyScheduler, runDailyWatchlistJob } from './scheduler.ts';
 
 const app = new Hono();
@@ -17,6 +18,7 @@ app.route('/api', daily);
 app.route('/api', backtestRoute);
 app.route('/api', advisor);
 app.route('/api', watchlistRoute);
+app.route('/api', historyRoute);
 
 const port = Number(process.env.PORT) || 3001;
 console.log(`stock-indicator-dailies API listening on :${port}`);
