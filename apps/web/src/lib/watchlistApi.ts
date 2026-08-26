@@ -49,6 +49,22 @@ export async function updateWatchlistSettings(
   return res.json();
 }
 
+/** Persists this ticker's last-run scenario/custom Historical Testing
+ * settings, so revisiting the ticker's page can restore and auto-rerun it.
+ * Independent of the live sensitivity override above (a separate column). */
+export async function updateScenarioSettings(
+  accessToken: string,
+  ticker: string,
+  scenarioSettings: Record<string, unknown>,
+): Promise<WatchlistMutationResponse> {
+  const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}`), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ scenarioSettings }),
+  });
+  return res.json();
+}
+
 /** The full recomputed report for one watchlisted ticker, using that
  * ticker's stored sensitivity override. Powers the single-stock result
  * page. Also doubles as the retry mechanism: a call here that finds no

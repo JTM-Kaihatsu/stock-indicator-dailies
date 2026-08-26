@@ -55,42 +55,44 @@ export function WatchlistDashboard({ accessToken }: { accessToken: string }) {
           No tickers yet. <Link href="/watchlist" className="auth-popover-link" style={{ display: 'inline', marginTop: 0 }}>Manage Watchlist →</Link>
         </div>
       ) : (
-        <table className="trade-list">
-          <thead>
-            <tr>
-              <th>Ticker</th>
-              <th>Overall</th>
-              <th>Computed</th>
-              <th>AI</th>
-              <th>As of</th>
-              <th>Last changed</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.ticker}>
-                <td className="tabular" style={{ fontWeight: 700, fontSize: 15 }}>
-                  <Link href={`/watchlist/${row.ticker}`} style={{ color: 'inherit', textDecoration: 'none' }}>
-                    {row.ticker}
-                  </Link>
-                </td>
-                {row.status === 'failed' ? (
-                  <td colSpan={5} className="fact" style={{ color: 'var(--sell)' }}>
-                    Failure — click the stock ticker to retry.
-                  </td>
-                ) : (
-                  <>
-                    <td>{cell(row.overall, row.status === 'running', { fontSize: 15 })}</td>
-                    <td>{cell(row.computed, row.status === 'running', { bold: false })}</td>
-                    <td>{cell(row.ai, row.status === 'running', { bold: false })}</td>
-                    <td className="fact">{row.asOf ?? 'N/A'}</td>
-                    <td>{lastChanged(row)}</td>
-                  </>
-                )}
+        <div className="trade-list-scroll">
+          <table className="trade-list">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Overall</th>
+                <th>Computed</th>
+                <th>AI</th>
+                <th>As of</th>
+                <th>Last changed</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.ticker}>
+                  <td className="tabular" style={{ fontWeight: 700, fontSize: 15 }}>
+                    <Link href={`/watchlist/${row.ticker}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                      {row.ticker}
+                    </Link>
+                  </td>
+                  {row.status === 'failed' ? (
+                    <td colSpan={5} className="fact" style={{ color: 'var(--sell)' }}>
+                      Failure — click the stock ticker to retry.
+                    </td>
+                  ) : (
+                    <>
+                      <td>{cell(row.overall, row.status === 'running', { fontSize: 15 })}</td>
+                      <td>{cell(row.computed, row.status === 'running', { bold: false })}</td>
+                      <td>{cell(row.ai, row.status === 'running', { bold: false })}</td>
+                      <td className="fact">{row.asOf ?? 'N/A'}</td>
+                      <td>{lastChanged(row)}</td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

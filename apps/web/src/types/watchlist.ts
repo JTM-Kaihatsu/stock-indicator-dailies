@@ -33,7 +33,7 @@ export type WatchlistMutationResponse =
   | { ok: false; reason: string };
 
 export type WatchlistReportResponse =
-  | { ok: true; report: DailyReport; settings: WatchlistSettings | null }
+  | { ok: true; report: DailyReport; settings: WatchlistSettings | null; scenarioSettings: Record<string, unknown> | null }
   | { ok: false; reason: string; pending: true }
   /** Rate-limited: too soon since the last attempt to try again. `userMessage`
    * is present when the last failure looked like a provider/TradingView

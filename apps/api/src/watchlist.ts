@@ -8,12 +8,18 @@ export interface WatchlistRow {
   addedAt: string;
   /** Per-stock sensitivity override; null means "use app defaults." */
   settings: DeriveSignalOptions | null;
+  /** This ticker's last-run scenario/custom Historical Testing settings
+   * (the full 9-field IndicatorSettings shape); null means none saved yet.
+   * Opaque here — never interpreted server-side, just stored and returned
+   * verbatim for the frontend to auto-rerun. */
+  scenarioSettings: Record<string, unknown> | null;
 }
 
 interface WatchlistTickerRecord {
   ticker: string;
   added_at: string;
   settings: DeriveSignalOptions | null;
+  scenario_settings: Record<string, unknown> | null;
 }
 
 /** A user's watchlisted tickers, in their chosen display order (see
@@ -27,12 +33,17 @@ export async function getWatchlist(userId: string): Promise<WatchlistRow[]> {
   try {
     const { data, error } = await db
       .from('watchlist_tickers')
-      .select('ticker, added_at, settings')
+      .select('ticker, added_at, settings, scenario_settings')
       .eq('user_id', userId)
       .order('sort_order', { ascending: true })
       .returns<WatchlistTickerRecord[]>();
     if (error || !data) return [];
-    return data.map((row) => ({ ticker: row.ticker, addedAt: row.added_at, settings: row.settings ?? null }));
+    return data.map((row) => ({
+      ticker: row.ticker,
+      addedAt: row.added_at,
+      settings: row.settings ?? null,
+      scenarioSettings: row.scenario_settings ?? null,
+    }));
   } catch {
     return [];
   }
@@ -108,6 +119,20 @@ export async function updateWatchlistSettings(userId: string, ticker: string, se
 
   try {
     await db.from('watchlist_tickers').update({ settings }).eq('user_id', userId).eq('ticker', ticker);
+  } catch {
+    // Best-effort.
+  }
+}
+
+/** Updates only the scenario/custom backtest settings for an existing row;
+ * does not touch `settings` (the live sensitivity override) or added_at.
+ * A no-op if the row doesn't exist. */
+export async function updateScenarioSettings(userId: string, ticker: string, settings: Record<string, unknown>): Promise<void> {
+  const db = getSupabaseClient();
+  if (!db) return;
+
+  try {
+    await db.from('watchlist_tickers').update({ scenario_settings: settings }).eq('user_id', userId).eq('ticker', ticker);
   } catch {
     // Best-effort.
   }

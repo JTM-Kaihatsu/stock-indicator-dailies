@@ -41,3 +41,16 @@ export async function requestAiSuggestion(ticker: string): Promise<AdvisorPropos
   if (!jobResult.ok) throw new AdvisorRequestError(jobResult.reason, jobResult.outage);
   return jobResult.result;
 }
+
+/** Read-only peek at a cached suggestion for `ticker`; never triggers fresh
+ * research. `null` on a miss or any failure — a caller uses this only to
+ * seed a default display, so there's nothing actionable in an error here. */
+export async function fetchCachedAdvice(ticker: string): Promise<AdvisorProposal | null> {
+  try {
+    const res = await fetch(apiUrl(`/api/advisor/cached/${encodeURIComponent(ticker)}`));
+    const data: { ok: boolean; result?: AdvisorProposal | null } = await res.json();
+    return data.ok ? (data.result ?? null) : null;
+  } catch {
+    return null;
+  }
+}

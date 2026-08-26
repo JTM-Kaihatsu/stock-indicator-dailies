@@ -4,7 +4,7 @@ import { outageMessageFor, recomputeReport, resolveDualOverall, type DeriveSigna
 import { getCachedReport, getLatestFailure } from '../cache.ts';
 import { canAttempt, isRunning, runPipeline } from '../pipeline.ts';
 import { parseTicker } from '../ticker.ts';
-import { addToWatchlist, getWatchlist, removeFromWatchlist, reorderWatchlist, updateWatchlistSettings } from '../watchlist.ts';
+import { addToWatchlist, getWatchlist, removeFromWatchlist, reorderWatchlist, updateScenarioSettings, updateWatchlistSettings } from '../watchlist.ts';
 import { requireAuth } from '../authMiddleware.ts';
 import { runDailyWatchlistJob } from '../scheduler.ts';
 import { getLastChangedMap } from '../signalHistory.ts';
@@ -38,6 +38,22 @@ function parseSettings(raw: unknown): DeriveSignalOptions | null {
   if (typeof r.sellConsensus === 'number' && Number.isFinite(r.sellConsensus)) out.sellConsensus = r.sellConsensus;
   if (typeof r.recencyDays === 'number' && Number.isFinite(r.recencyDays)) out.recencyDays = r.recencyDays;
   return Object.keys(out).length > 0 ? out : null;
+}
+
+/** Validates the full 9-field scenario/custom Historical Testing shape sent
+ * by the frontend's IndicatorSettings; stored and returned opaquely (never
+ * interpreted server-side), so this only guards against a malformed blob
+ * silently corrupting the stored value, not full type fidelity. */
+function parseIndicatorSettings(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const requiredNumeric = ['buyConsensus', 'sellConsensus', 'recencyDays', 'persistenceBars', 'minHoldingDays', 'atrPeriod', 'adxPeriod'];
+  if (!requiredNumeric.every((key) => typeof r[key] === 'number' && Number.isFinite(r[key]))) return null;
+  const out: Record<string, unknown> = {};
+  for (const key of requiredNumeric) out[key] = r[key];
+  out.atrMultiplier = typeof r.atrMultiplier === 'number' && Number.isFinite(r.atrMultiplier) ? r.atrMultiplier : undefined;
+  out.adxThreshold = typeof r.adxThreshold === 'number' && Number.isFinite(r.adxThreshold) ? r.adxThreshold : undefined;
+  return out;
 }
 
 // requireAuth is applied per-route below, not via a blanket `/watchlist/*`
@@ -114,11 +130,22 @@ watchlistRoute.patch('/watchlist/:ticker', requireAuth, async (c) => {
   const ticker = parseTicker(c.req.param('ticker'));
   if (!ticker) return c.json({ ok: false, reason: 'Invalid ticker' }, 400);
 
-  const body = await c.req.json<{ settings?: unknown }>().catch(() => ({}) as { settings?: unknown });
-  const settings = parseSettings(body.settings) ?? {};
-  await updateWatchlistSettings(userId, ticker, settings);
+  const body = await c.req.json<{ settings?: unknown; scenarioSettings?: unknown }>().catch(() => ({}) as { settings?: unknown; scenarioSettings?: unknown });
 
-  return c.json({ ok: true, ticker, settings });
+  // Both fields are independent and optional: a caller may update just the
+  // live sensitivity override, just the scenario/custom backtest settings,
+  // or both in one request.
+  if (body.settings !== undefined) {
+    const settings = parseSettings(body.settings) ?? {};
+    await updateWatchlistSettings(userId, ticker, settings);
+  }
+  if (body.scenarioSettings !== undefined) {
+    const scenarioSettings = parseIndicatorSettings(body.scenarioSettings);
+    if (!scenarioSettings) return c.json({ ok: false, reason: 'Invalid scenarioSettings' }, 400);
+    await updateScenarioSettings(userId, ticker, scenarioSettings);
+  }
+
+  return c.json({ ok: true, ticker });
 });
 
 watchlistRoute.get('/watchlist/:ticker/report', requireAuth, async (c) => {
@@ -133,7 +160,7 @@ watchlistRoute.get('/watchlist/:ticker/report', requireAuth, async (c) => {
   const cached = await getCachedReport(ticker);
   if (cached) {
     const report = recomputeReport(cached, entry.settings ?? {});
-    return c.json({ ok: true, report, settings: entry.settings });
+    return c.json({ ok: true, report, settings: entry.settings, scenarioSettings: entry.scenarioSettings });
   }
 
   // No fresh cache: this is also the retry mechanism described to the user
