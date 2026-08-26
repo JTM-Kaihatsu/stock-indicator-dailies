@@ -45,8 +45,8 @@ body {
 
 /* --- Section labels --- */
 .eyebrow, .section-label {
-  text-transform: uppercase; letter-spacing: .12em; word-spacing: .4em; font-size: 14px;
-  color: var(--faint); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .12em; word-spacing: .4em; font-size: 22px;
+  color: var(--text); font-weight: 600;
 }
 .section-label { margin-bottom: 10px; }
 
@@ -161,14 +161,14 @@ body {
   display: flex; gap: 10px; align-items: center; margin-bottom: 28px;
 }
 .ticker-input {
-  font-family: var(--mono); font-size: 28px; font-weight: 600; line-height: 1;
+  font-family: var(--mono); font-size: 20px; font-weight: 600; line-height: 1;
   letter-spacing: -.01em; text-transform: uppercase;
   background: var(--surface); color: var(--text);
   border: 1px solid var(--border); border-radius: 10px;
   padding: 10px 16px; width: 200px; outline: none;
 }
 .ticker-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(131,165,152,.25); }
-.ticker-input::placeholder { color: var(--faint); text-transform: none; font-size: 18px; font-weight: 400; }
+.ticker-input::placeholder { color: var(--faint); text-transform: none; font-size: 14px; font-weight: 400; }
 .analyze-btn {
   font-family: var(--sans); font-size: 15px; font-weight: 600;
   background: var(--accent); color: var(--ground); border: none; border-radius: 10px;
@@ -286,7 +286,7 @@ body {
 
 /* --- Site title --- */
 .site-title {
-  text-align: center; font-size: 32px; font-weight: 700; color: var(--text);
+  text-align: center; font-size: 40px; font-weight: 700; color: var(--text);
   margin-bottom: 28px; text-transform: uppercase; letter-spacing: .15em; word-spacing: .5em;
 }
 
@@ -301,8 +301,9 @@ footer {
   .ind-row { grid-template-columns: 1fr 1fr; }
   .ind-name { grid-column: 1 / -1; }
   .agree { grid-column: 1 / -1; text-align: left; }
-  .ticker-input { font-size: 22px; width: 140px; }
+  .ticker-input { font-size: 18px; width: 140px; }
   header { flex-direction: column; }
   .headline { text-align: left !important; }
-  .site-title { font-size: 22px; letter-spacing: .1em; word-spacing: .3em; }
+  .site-title { font-size: 26px; letter-spacing: .1em; word-spacing: .3em; }
+  .eyebrow, .section-label { font-size: 16px; word-spacing: .3em; }
 }
