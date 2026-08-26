@@ -71,7 +71,6 @@ export function SettingsPanel({
             <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
               <button type="button" className="analyze-btn" onClick={requestApply}>Apply</button>
               <button type="button" className="settings-toggle" onClick={resetToDefaults}>Reset to defaults</button>
-              <button type="button" className="settings-toggle" onClick={cancel}>Close</button>
             </div>
           )}
         </div>

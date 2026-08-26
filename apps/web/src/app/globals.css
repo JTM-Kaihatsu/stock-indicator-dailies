@@ -161,7 +161,7 @@ body {
   display: flex; gap: 10px; align-items: center; margin-bottom: 28px;
 }
 .ticker-input {
-  font-family: var(--mono); font-size: 28px; font-weight: 600;
+  font-family: var(--mono); font-size: 28px; font-weight: 600; line-height: 1;
   letter-spacing: -.01em; text-transform: uppercase;
   background: var(--surface); color: var(--text);
   border: 1px solid var(--border); border-radius: 10px;
@@ -271,9 +271,21 @@ body {
   padding: 14px 16px; width: 280px; max-width: calc(100vw - 40px);
   box-shadow: 0 8px 24px rgba(0,0,0,.28);
 }
+.auth-popover svg { width: 14px; height: 14px; flex-shrink: 0; }
+.auth-popover-link {
+  display: block; margin-top: 10px; font-family: var(--sans); font-size: 13px;
+  font-weight: 600; color: var(--accent); text-decoration: none;
+}
+.auth-popover-link:hover { text-decoration: underline; }
 @media (max-width: 620px) {
   .auth-corner { top: 12px; right: 12px; }
   .auth-pill-label { max-width: 90px; }
+}
+
+/* --- Site title --- */
+.site-title {
+  text-align: center; font-size: 22px; font-weight: 700; color: var(--text);
+  margin-bottom: 28px; letter-spacing: -.01em;
 }
 
 /* --- Footer --- */

@@ -58,8 +58,11 @@ export default function Home() {
   return (
     <div className="wrap">
       <AuthPanel />
-      <SettingsPanel settings={liveSettings} onApply={applySettings} />
+      <h1 className="site-title">Daily Stock Analysis</h1>
+
+      <div className="section-label">Lookup Stock Analysis</div>
       <TickerInput onSubmit={handleSubmit} disabled={loading} />
+      <SettingsPanel settings={liveSettings} onApply={applySettings} />
 
       {loading && <LoadingState ticker={ticker} />}
 
