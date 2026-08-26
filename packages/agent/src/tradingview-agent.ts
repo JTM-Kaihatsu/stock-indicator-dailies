@@ -10,6 +10,40 @@ import { resolveProfileDir } from './session.ts';
 import { extractIntervalToken } from './interval.ts';
 import { validateStudies } from './studies.ts';
 
+/**
+ * Standard flags for running headless Chromium under memory pressure
+ * (small/shared-CPU hosts like a Render web service, CI runners, Docker).
+ * Every capture launches a brand-new Chromium via
+ * `launchPersistentContext` (see `acquire` below) — properly closed in a
+ * `finally` either way, but TradingView is an unusually heavy, chart-
+ * rendering-intensive SPA to run headlessly, and a plain `chromium.launch`
+ * with no flags at all is tuned for a desktop environment, not a
+ * memory-constrained container:
+ *  - `--disable-dev-shm-usage`: containers often mount a tiny (~64MB)
+ *    /dev/shm; Chromium's default shared-memory usage there can crash the
+ *    renderer under load. This redirects that to /tmp instead.
+ *  - `--disable-gpu` / `--disable-software-rasterizer`: no GPU compositing
+ *    needed for a screenshot-only headless run; skips that process's
+ *    memory entirely.
+ *  - `--disable-extensions`, `--disable-background-networking`,
+ *    `--disable-background-timer-throttling`,
+ *    `--disable-backgrounding-occluded-windows`, `--no-first-run`: trims
+ *    Chromium subsystems this one-shot, single-tab capture never uses.
+ *  - `--js-flags=--max-old-space-size=256`: caps the *page's* V8 heap
+ *    (TradingView's own JS), independent of the Node process's own heap.
+ */
+const CHROMIUM_LOW_MEMORY_ARGS = [
+  '--disable-dev-shm-usage',
+  '--disable-gpu',
+  '--disable-software-rasterizer',
+  '--disable-extensions',
+  '--disable-background-networking',
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--no-first-run',
+  '--js-flags=--max-old-space-size=256',
+];
+
 export interface TradingViewChartAgentOptions {
   profileDir?: string;
   headless?: boolean;
@@ -59,6 +93,7 @@ export class TradingViewChartAgent implements ChartAgent {
       headless: this.#headless,
       viewport: { width: 1600, height: 1000 },
       deviceScaleFactor: this.#deviceScaleFactor,
+      args: CHROMIUM_LOW_MEMORY_ARGS,
     });
     try {
       return await this.#capture(context, ticker.toUpperCase());
