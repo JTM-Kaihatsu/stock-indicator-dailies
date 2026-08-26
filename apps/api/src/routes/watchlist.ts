@@ -1,15 +1,17 @@
 import { Hono } from 'hono';
-import { recomputeReport, resolveDualOverall, type DeriveSignalOptions, type Signal } from '@stock-indicator-dailies/shared';
+import { outageMessageFor, recomputeReport, resolveDualOverall, type DeriveSignalOptions, type Signal } from '@stock-indicator-dailies/shared';
 
-import { getCachedReport } from '../cache.ts';
-import { runPipeline } from '../pipeline.ts';
+import { getCachedReport, getLatestFailure } from '../cache.ts';
+import { canAttempt, isRunning, runPipeline } from '../pipeline.ts';
 import { parseTicker } from '../ticker.ts';
-import { addToWatchlist, getWatchlist, removeFromWatchlist, updateWatchlistSettings } from '../watchlist.ts';
+import { addToWatchlist, getWatchlist, removeFromWatchlist, reorderWatchlist, updateWatchlistSettings } from '../watchlist.ts';
 import { requireAuth } from '../authMiddleware.ts';
 import { runDailyWatchlistJob } from '../scheduler.ts';
 import { getLastChangedMap } from '../signalHistory.ts';
 
 export const watchlistRoute = new Hono();
+
+export type WatchlistTickerStatus = 'ready' | 'running' | 'failed';
 
 export interface WatchlistDashboardRow {
   ticker: string;
@@ -17,7 +19,7 @@ export interface WatchlistDashboardRow {
   computed: Signal | null;
   ai: Signal | null;
   asOf: string | null;
-  pending: boolean;
+  status: WatchlistTickerStatus;
   /** Since when the Overall signal has held its current value; null if
    * there's no history yet (e.g. still pending its first capture). */
   lastChangedAt: string | null;
@@ -53,7 +55,8 @@ watchlistRoute.get('/watchlist', requireAuth, async (c) => {
       const lastChangedAt = lastChangedMap.get(ticker) ?? null;
       const cached = await getCachedReport(ticker);
       if (!cached) {
-        return { ticker, overall: null, computed: null, ai: null, asOf: null, pending: true, lastChangedAt, settings };
+        const status: WatchlistTickerStatus = isRunning(ticker) ? 'running' : 'failed';
+        return { ticker, overall: null, computed: null, ai: null, asOf: null, status, lastChangedAt, settings };
       }
       const report = recomputeReport(cached, settings ?? {});
       const computed = report.deterministic?.signal ?? null;
@@ -64,7 +67,7 @@ watchlistRoute.get('/watchlist', requireAuth, async (c) => {
         computed,
         ai,
         asOf: report.deterministic?.asOf ?? null,
-        pending: false,
+        status: 'ready',
         lastChangedAt,
         settings,
       };
@@ -91,6 +94,21 @@ watchlistRoute.post('/watchlist', requireAuth, async (c) => {
   return c.json({ ok: true, ticker, pending: true });
 });
 
+// Registered before the `:ticker` param routes below so this static path
+// can never be shadowed by a ticker literally named "order" (Hono's router
+// prioritizes static segments regardless of registration order, but keeping
+// the more specific route first is the least surprising to read either way).
+watchlistRoute.patch('/watchlist/order', requireAuth, async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.json<{ tickers?: unknown }>().catch(() => ({}) as { tickers?: unknown });
+  if (!Array.isArray(body.tickers) || !body.tickers.every((t) => typeof t === 'string')) {
+    return c.json({ ok: false, reason: 'tickers must be an array of strings' }, 400);
+  }
+
+  await reorderWatchlist(userId, body.tickers);
+  return c.json({ ok: true });
+});
+
 watchlistRoute.patch('/watchlist/:ticker', requireAuth, async (c) => {
   const userId = c.get('userId');
   const ticker = parseTicker(c.req.param('ticker'));
@@ -113,10 +131,35 @@ watchlistRoute.get('/watchlist/:ticker/report', requireAuth, async (c) => {
   if (!entry) return c.json({ ok: false, reason: 'Not on your watchlist' }, 404);
 
   const cached = await getCachedReport(ticker);
-  if (!cached) return c.json({ ok: false, reason: 'pending', pending: true });
+  if (cached) {
+    const report = recomputeReport(cached, entry.settings ?? {});
+    return c.json({ ok: true, report, settings: entry.settings });
+  }
 
-  const report = recomputeReport(cached, entry.settings ?? {});
-  return c.json({ ok: true, report, settings: entry.settings });
+  // No fresh cache: this is also the retry mechanism described to the user
+  // ("clicking into a failed ticker retries it") — simply loading this
+  // endpoint attempts a fresh run whenever the cooldown allows it, no
+  // separate retry button/endpoint needed.
+  if (isRunning(ticker)) {
+    return c.json({ ok: false, reason: 'running', pending: true });
+  }
+  if (canAttempt(ticker)) {
+    void runPipeline(ticker); // stamps lastAttemptAt itself
+    return c.json({ ok: false, reason: 'running', pending: true });
+  }
+
+  // Rate-limited: too soon since the last attempt. Explain what happened
+  // last time instead of silently doing nothing.
+  const failure = await getLatestFailure(ticker);
+  const stage = failure?.stage ?? 'unknown';
+  const reason = failure?.reason ?? 'unknown';
+  return c.json({
+    ok: false,
+    pending: false,
+    stage,
+    reason,
+    userMessage: outageMessageFor(stage, reason) ?? undefined,
+  });
 });
 
 watchlistRoute.delete('/watchlist/:ticker', requireAuth, async (c) => {

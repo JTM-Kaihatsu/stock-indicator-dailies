@@ -1,37 +1,69 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchWatchlistTickerReport } from '@/lib/watchlistApi';
+import { sleep } from '@/lib/polling.ts';
 import { DEFAULT_LIVE_SETTINGS, toLiveOptions, type LiveSettings } from '@/lib/settings';
+import { stageLabel } from '@/lib/errorMessages';
 import { ReportCard } from '@/components/ReportCard';
 import { BacktestPanel } from '@/components/BacktestPanel';
 import { SignalHistoryPanel } from '@/components/SignalHistoryPanel';
 import type { DailyReport } from '@/types/api';
 
+// The server-side capture this may trigger isn't job/poll-tracked (it's
+// fire-and-forget from the report endpoint itself), so this is a plain
+// client-side poll rather than lib/polling.ts's pollUntilDone: a timeout
+// here should just leave the page showing "waiting," not throw.
+const POLL_INTERVAL_MS = 5000;
+const POLL_MAX_MS = 5 * 60 * 1000;
+
 type Status =
   | { kind: 'loading' }
   | { kind: 'pending' }
-  | { kind: 'error'; reason: string }
+  | { kind: 'failed'; stage: string; reason: string; userMessage?: string }
   | { kind: 'ready'; report: DailyReport; settings: LiveSettings };
 
 export default function WatchlistTickerPage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
   const { session, loading: authLoading } = useAuth();
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
+  // Guards the poll loop below against a stale response landing after the
+  // ticker changed (navigating from one watchlisted ticker's page to
+  // another re-uses this same component instance).
+  const requestId = useRef(0);
 
   useEffect(() => {
     if (!session) return;
+    const myRequestId = ++requestId.current;
     setStatus({ kind: 'loading' });
-    fetchWatchlistTickerReport(session.access_token, ticker).then((res) => {
-      if (!res.ok) {
-        if (res.pending) setStatus({ kind: 'pending' });
-        else setStatus({ kind: 'error', reason: res.reason });
-        return;
+
+    async function poll() {
+      const deadline = Date.now() + POLL_MAX_MS;
+      // First check happens immediately; this call is also what triggers a
+      // retry server-side when there's no fresh cache (see
+      // GET /watchlist/:ticker/report) — simply loading this page is the
+      // "retry" the user asked for, no separate button needed.
+      for (;;) {
+        const res = await fetchWatchlistTickerReport(session!.access_token, ticker);
+        if (requestId.current !== myRequestId) return; // ticker changed underneath us
+
+        if (res.ok) {
+          setStatus({ kind: 'ready', report: res.report, settings: { ...DEFAULT_LIVE_SETTINGS, ...(res.settings ?? {}) } });
+          return;
+        }
+        if (!res.pending) {
+          setStatus({ kind: 'failed', stage: res.stage, reason: res.reason, userMessage: res.userMessage });
+          return;
+        }
+        setStatus({ kind: 'pending' });
+        if (Date.now() >= deadline) return;
+        await sleep(POLL_INTERVAL_MS);
       }
-      setStatus({ kind: 'ready', report: res.report, settings: { ...DEFAULT_LIVE_SETTINGS, ...(res.settings ?? {}) } });
-    });
+    }
+
+    void poll();
   }, [session, ticker]);
 
   if (authLoading) return null;
@@ -59,15 +91,15 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
       {status.kind === 'loading' && <div className="settings-group-hint">Loading {ticker}...</div>}
 
       {status.kind === 'pending' && (
-        <div className="settings-group-hint">
-          {ticker} hasn&apos;t been captured yet; it&apos;ll show up here once the first run completes.
-        </div>
+        <div className="settings-group-hint">Running {ticker}&apos;s analysis — this page will update automatically.</div>
       )}
 
-      {status.kind === 'error' && (
+      {status.kind === 'failed' && (
         <div className="error-card">
-          <h3>Couldn&apos;t load {ticker}</h3>
-          <p>{status.reason}</p>
+          <h3>{ticker} failed</h3>
+          <p>
+            {status.userMessage ?? `Failed while ${stageLabel(status.stage)}: ${status.reason}. It'll retry automatically the next time you load this page.`}
+          </p>
         </div>
       )}
 

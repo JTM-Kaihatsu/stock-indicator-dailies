@@ -102,6 +102,35 @@ export async function logFailure(
   }
 }
 
+export interface LatestFailure {
+  stage: string;
+  reason: string;
+  occurredAt: string;
+}
+
+/** The most recent logged failure for `ticker`, for the watchlist retry UI
+ * to explain what went wrong. `null` on no failure on record, or any
+ * Supabase-side issue — same degrade-to-noop posture as everything else
+ * here; a missing failure detail just means a plainer message gets shown. */
+export async function getLatestFailure(ticker: string): Promise<LatestFailure | null> {
+  const db = getClient();
+  if (!db) return null;
+
+  try {
+    const { data, error } = await db
+      .from('capture_failures')
+      .select('stage, reason, occurred_at')
+      .eq('ticker', ticker)
+      .order('occurred_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ stage: string; reason: string; occurred_at: string }>();
+    if (error || !data) return null;
+    return { stage: data.stage, reason: data.reason, occurredAt: data.occurred_at };
+  } catch {
+    return null;
+  }
+}
+
 async function uploadImage(db: SupabaseClient, path: string, image: ChartImage): Promise<boolean> {
   const bytes = Buffer.from(image.base64, 'base64');
   const { error } = await db.storage.from(BUCKET).upload(path, bytes, {

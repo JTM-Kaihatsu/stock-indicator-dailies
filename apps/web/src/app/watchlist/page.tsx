@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { addTicker, fetchWatchlist, removeTicker, updateWatchlistSettings } from '@/lib/watchlistApi';
+import { addTicker, fetchWatchlist, removeTicker, reorderWatchlist, updateWatchlistSettings } from '@/lib/watchlistApi';
 import { DEFAULT_LIVE_SETTINGS, isDefault, type LiveSettings } from '@/lib/settings';
 import { LiveSettingsFields } from '@/components/SettingsFields';
 import type { WatchlistDashboardRow } from '@/types/watchlist';
@@ -26,6 +26,8 @@ export default function ManageWatchlistPage() {
   const [editingTicker, setEditingTicker] = useState<string | null>(null);
   const [editSettings, setEditSettings] = useState<LiveSettings>(DEFAULT_LIVE_SETTINGS);
   const [saving, setSaving] = useState(false);
+
+  const [dragTicker, setDragTicker] = useState<string | null>(null);
 
   useEffect(() => {
     if (!session) return;
@@ -57,7 +59,7 @@ export default function ManageWatchlistPage() {
       const withoutDuplicate = (prev ?? []).filter((r) => r.ticker !== ticker);
       return [
         ...withoutDuplicate,
-        { ticker, overall: null, computed: null, ai: null, asOf: null, pending: true, lastChangedAt: null, settings: settingsToSend ?? null },
+        { ticker, overall: null, computed: null, ai: null, asOf: null, status: 'running', lastChangedAt: null, settings: settingsToSend ?? null },
       ];
     });
   }
@@ -76,6 +78,37 @@ export default function ManageWatchlistPage() {
 
   function closeEditor() {
     setEditingTicker(null);
+  }
+
+  /** Native HTML5 drag-and-drop: no extra dependency needed for a single
+   * flat list. `dragTicker` tracks which row is being dragged; dropping
+   * reorders the local array optimistically, then persists the full new
+   * order. `onDragOver`'s preventDefault is required for onDrop to fire at
+   * all — that's a browser API quirk, not something specific to this code. */
+  function handleDragStart(ticker: string) {
+    setDragTicker(ticker);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+  }
+
+  async function handleDrop(targetTicker: string) {
+    const dragged = dragTicker;
+    setDragTicker(null);
+    if (!session || !dragged || dragged === targetTicker) return;
+
+    setRows((prev) => {
+      const current = prev ?? [];
+      const fromIndex = current.findIndex((r) => r.ticker === dragged);
+      const toIndex = current.findIndex((r) => r.ticker === targetTicker);
+      if (fromIndex === -1 || toIndex === -1) return current;
+      const next = [...current];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved!);
+      void reorderWatchlist(session.access_token, next.map((r) => r.ticker));
+      return next;
+    });
   }
 
   async function saveEditor(ticker: string) {
@@ -152,6 +185,7 @@ export default function ManageWatchlistPage() {
             <table className="trade-list">
               <thead>
                 <tr>
+                  <th />
                   <th>Ticker</th>
                   <th>Sensitivity</th>
                   <th />
@@ -163,7 +197,16 @@ export default function ManageWatchlistPage() {
                   const editing = editingTicker === row.ticker;
                   return (
                     <Fragment key={row.ticker}>
-                      <tr>
+                      <tr
+                        draggable
+                        onDragStart={() => handleDragStart(row.ticker)}
+                        onDragOver={handleDragOver}
+                        onDrop={() => handleDrop(row.ticker)}
+                        style={{ opacity: dragTicker === row.ticker ? 0.4 : 1 }}
+                      >
+                        <td className="drag-handle" aria-label={`Drag to reorder ${row.ticker}`} title="Drag to reorder">
+                          ☰
+                        </td>
                         <td className="tabular" style={{ fontWeight: 700 }}>{row.ticker}</td>
                         <td className="fact">{row.settings && !isDefault(resolvedSettings(row)) ? 'Custom' : 'Default'}</td>
                         <td>
@@ -179,7 +222,7 @@ export default function ManageWatchlistPage() {
                       </tr>
                       {editing && (
                         <tr>
-                          <td colSpan={4}>
+                          <td colSpan={5}>
                             <div style={{ padding: '8px 0' }}>
                               <LiveSettingsFields value={editSettings} onChange={setEditSettings} idPrefix={`edit-${row.ticker}-`} />
                               <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>

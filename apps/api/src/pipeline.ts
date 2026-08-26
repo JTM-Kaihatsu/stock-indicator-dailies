@@ -24,23 +24,67 @@ export function pendingCount(): number {
   return queueLength;
 }
 
+// Per-ticker tracking, independent of the queue above (which is anonymous):
+// lets callers (the watchlist routes) tell "queued or actively running" and
+// "attempted too recently to try again" apart from a genuine failure with
+// nothing in flight. Process-local, same accepted caveat as pendingCount.
+const runningTickers = new Set<string>();
+const lastAttemptAt = new Map<string, number>();
+const RETRY_COOLDOWN_MS = 30_000;
+
+/** Whether `ticker` is currently queued or actively running. */
+export function isRunning(ticker: string): boolean {
+  return runningTickers.has(ticker);
+}
+
+/** Whether enough time has passed since the last runPipeline call for this
+ * ticker to attempt another one; guards against a user's page-reload (or
+ * several open tabs) re-triggering a run for the same still-failing ticker
+ * every few seconds. Not tied to success/failure specifically, just "was an
+ * attempt made recently" — a fresh success naturally resolves via the cache
+ * check before this is ever consulted. */
+export function canAttempt(ticker: string): boolean {
+  const last = lastAttemptAt.get(ticker);
+  return last === undefined || Date.now() - last >= RETRY_COOLDOWN_MS;
+}
+
+/**
+ * Paced gap enforced between the END of one queued run and the START of
+ * the next, on top of runDaily's own human-like in-capture delays. Matters
+ * for bulk situations (adding several watchlist tickers at once, or the
+ * daily scheduler sweep) where several captures would otherwise fire
+ * back-to-back with zero gap; a lone ad-hoc request never pays this cost,
+ * since the delay lives in the queue handoff, not in the caller's own
+ * awaited result. Configurable since "how cautious to be" is a judgment
+ * call, not a fixed fact.
+ */
+const QUEUE_PACING_MS = Number(process.env.WATCHLIST_QUEUE_PACING_MS ?? 4000);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function runPipeline(ticker: string): Promise<DailyResult> {
   // Cache check happens before the browser-automation path entirely, and
   // before joining the queue; a hit never waits on anything in flight.
   const cached = await getCachedReport(ticker);
   if (cached) return { ok: true, report: cached };
 
+  runningTickers.add(ticker);
+  lastAttemptAt.set(ticker, Date.now());
   queueLength++;
   const run = queue.then(() => runExclusive(ticker));
-  // Swallow so one failed run doesn't wedge the chain for whoever's behind it.
+  // Swallow so one failed run doesn't wedge the chain for whoever's behind
+  // it; the pacing delay applies whether this run succeeded or failed.
   queue = run.then(
-    () => undefined,
-    () => undefined,
+    () => sleep(QUEUE_PACING_MS),
+    () => sleep(QUEUE_PACING_MS),
   );
   try {
     return await run;
   } finally {
     queueLength--;
+    runningTickers.delete(ticker);
   }
 }
 

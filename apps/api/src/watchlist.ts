@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DeriveSignalOptions } from '@stock-indicator-dailies/shared';
 
 import { getSupabaseClient } from './supabaseClient.ts';
@@ -15,9 +16,10 @@ interface WatchlistTickerRecord {
   settings: DeriveSignalOptions | null;
 }
 
-/** A user's watchlisted tickers, oldest-added first. Empty (not an error)
- * when Supabase isn't configured or the lookup fails; same degrade-to-noop
- * posture as cache.ts, so a Supabase hiccup here never crashes the request. */
+/** A user's watchlisted tickers, in their chosen display order (see
+ * reorderWatchlist). Empty (not an error) when Supabase isn't configured or
+ * the lookup fails; same degrade-to-noop posture as cache.ts, so a Supabase
+ * hiccup here never crashes the request. */
 export async function getWatchlist(userId: string): Promise<WatchlistRow[]> {
   const db = getSupabaseClient();
   if (!db) return [];
@@ -27,7 +29,7 @@ export async function getWatchlist(userId: string): Promise<WatchlistRow[]> {
       .from('watchlist_tickers')
       .select('ticker, added_at, settings')
       .eq('user_id', userId)
-      .order('added_at', { ascending: true })
+      .order('sort_order', { ascending: true })
       .returns<WatchlistTickerRecord[]>();
     if (error || !data) return [];
     return data.map((row) => ({ ticker: row.ticker, addedAt: row.added_at, settings: row.settings ?? null }));
@@ -36,19 +38,65 @@ export async function getWatchlist(userId: string): Promise<WatchlistRow[]> {
   }
 }
 
-/** Idempotent: adding an already-watchlisted ticker is a no-op, not an
- * error, thanks to the (user_id, ticker) primary key + upsert. */
+/** One past the highest sort_order this user currently has (0 if they have
+ * none yet), so a newly-added ticker lands at the end of the list. */
+async function nextSortOrder(db: SupabaseClient, userId: string): Promise<number> {
+  const { data } = await db
+    .from('watchlist_tickers')
+    .select('sort_order')
+    .eq('user_id', userId)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .maybeSingle<{ sort_order: number | null }>();
+  return (data?.sort_order ?? -1) + 1;
+}
+
+/** Re-adding an already-watchlisted ticker updates its sensitivity
+ * override rather than being ignored, so "add NVDA with different
+ * settings" from the Manage Watchlist form actually overwrites the old
+ * ones — without disturbing its added_at or its position in the list.
+ * A genuinely new ticker gets a fresh sort_order placing it at the end. */
 export async function addToWatchlist(userId: string, ticker: string, settings: DeriveSignalOptions | null = null): Promise<void> {
   const db = getSupabaseClient();
   if (!db) return;
 
   try {
-    await db.from('watchlist_tickers').upsert(
-      { user_id: userId, ticker, added_at: new Date().toISOString(), settings },
-      { onConflict: 'user_id,ticker', ignoreDuplicates: true },
-    );
+    const { data: existing } = await db
+      .from('watchlist_tickers')
+      .select('ticker')
+      .eq('user_id', userId)
+      .eq('ticker', ticker)
+      .maybeSingle();
+
+    if (existing) {
+      await db.from('watchlist_tickers').update({ settings }).eq('user_id', userId).eq('ticker', ticker);
+    } else {
+      const sortOrder = await nextSortOrder(db, userId);
+      await db.from('watchlist_tickers').insert({ user_id: userId, ticker, settings, sort_order: sortOrder });
+    }
   } catch {
     // Best-effort; never let a caching-adjacent write fail the request.
+  }
+}
+
+/** Applies a user-chosen display order: `tickers` is the full desired
+ * order, each getting its index as its new sort_order. Scoped to the
+ * caller's own rows, so a client can only ever reorder its own list.
+ * Tickers not in the caller's list (shouldn't happen from the UI, but not
+ * trusted either) are simply no-ops, since the `eq('user_id', ...)` guard
+ * means an update for a ticker the user doesn't have just matches nothing. */
+export async function reorderWatchlist(userId: string, tickers: string[]): Promise<void> {
+  const db = getSupabaseClient();
+  if (!db) return;
+
+  try {
+    await Promise.all(
+      tickers.map((ticker, index) =>
+        db.from('watchlist_tickers').update({ sort_order: index }).eq('user_id', userId).eq('ticker', ticker),
+      ),
+    );
+  } catch {
+    // Best-effort.
   }
 }
 

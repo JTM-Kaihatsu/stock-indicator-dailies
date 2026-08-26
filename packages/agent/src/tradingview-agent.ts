@@ -249,6 +249,26 @@ export class TradingViewChartAgent implements ChartAgent {
  */
 const OVERLAY_ROOT_SELECTOR = '#overlap-manager-root';
 
+/**
+ * Promo/notification toasts (e.g. "End of Summer sale awaits") render in a
+ * *separate* layer, a sibling of #overlap-manager-root under <body>
+ * (confirmed live: div.toastLayerChart-<hash> > section.toastList-<hash> >
+ * ...), not nested inside it. Scoping OVERLAY_ROOT_SELECTOR therefore can
+ * never see them, which is exactly why one kept surviving every previous
+ * fix here. TradingView's build hashes every other class on these elements,
+ * but consistently keeps the literal word "toast" in the class name itself
+ * (BEM-style: `toastLayerChart-h0NSCjCQ`), so that's the stable hook.
+ *
+ * The close icon inside each toast card has no stable selector at all (no
+ * aria-label, a hashed "iconOnly" button class shared with unrelated UI),
+ * so rather than hunting for it, this hides the entire toast layer outright
+ * via direct style manipulation. That's safe: it's a passive notification
+ * stack, not something the capture needs to interact with, just something
+ * that must not visually cover the chart.
+ */
+const TOAST_LAYER_SELECTOR = '[class*="toastLayerChart" i], [class*="toastList" i]';
+const TOAST_LAYER_VISIBLE_SELECTOR = '[class*="toastLayerChart" i]:visible, [class*="toastList" i]:visible';
+
 /** Case-insensitive `i` flags because TradingView's own class names aren't
  * consistent about it. `:visible` is a Playwright selector-engine
  * extension (not standard CSS); combined with scoping to the overlay root
@@ -299,6 +319,23 @@ async function scopedSelectors(page: Page, selectors: string[]): Promise<string[
  * idempotent by design, not a one-shot attempt.
  */
 async function dismissPopups(page: Page): Promise<void> {
+  try {
+    await page.evaluate((selector) => {
+      // Same `document`-via-`globalThis` pattern as readLegendTexts below,
+      // so this package's own tsconfig doesn't need the DOM lib.
+      const doc = (
+        globalThis as unknown as {
+          document: { querySelectorAll(selector: string): ArrayLike<{ style: { display: string } }> };
+        }
+      ).document;
+      Array.from(doc.querySelectorAll(selector)).forEach((el) => {
+        el.style.display = 'none';
+      });
+    }, TOAST_LAYER_SELECTOR);
+  } catch {
+    // page not ready yet, or nothing matched
+  }
+
   for (const text of DISMISS_TEXTS) {
     try {
       const el = page.locator(`:text("${text}"):visible`).first();
@@ -346,7 +383,11 @@ async function dismissPopups(page: Page): Promise<void> {
 async function hasVisiblePopup(page: Page): Promise<boolean> {
   try {
     const overlaySelectors = await scopedSelectors(page, OVERLAY_SELECTORS);
-    return (await page.locator(overlaySelectors.join(', ')).count()) > 0;
+    // The toast layer lives outside #overlap-manager-root (see
+    // TOAST_LAYER_SELECTOR), so it's checked unscoped, in addition to the
+    // scoped overlay selectors above, not instead of them.
+    const combined = [...overlaySelectors, TOAST_LAYER_VISIBLE_SELECTOR].join(', ');
+    return (await page.locator(combined).count()) > 0;
   } catch {
     return false;
   }

@@ -224,6 +224,8 @@ body {
 }
 .trade-list td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .trade-list-current td { font-weight: 700; color: var(--text); border-top: 2px solid var(--border); }
+.drag-handle { cursor: grab; color: var(--faint); width: 20px; user-select: none; }
+.drag-handle:active { cursor: grabbing; }
 
 /* --- Scenario comparison --- */
 .compare-card {
