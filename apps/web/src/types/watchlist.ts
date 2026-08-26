@@ -8,13 +8,15 @@ import type { DailyReport } from '@/types/api';
 
 export type WatchlistSettings = DeriveSignalOptions;
 
+export type WatchlistTickerStatus = 'ready' | 'running' | 'failed';
+
 export interface WatchlistDashboardRow {
   ticker: string;
   overall: Signal | null;
   computed: Signal | null;
   ai: Signal | null;
   asOf: string | null;
-  pending: boolean;
+  status: WatchlistTickerStatus;
   /** Since when the Overall signal has held its current value; null if
    * there's no history yet. */
   lastChangedAt: string | null;
@@ -32,4 +34,8 @@ export type WatchlistMutationResponse =
 
 export type WatchlistReportResponse =
   | { ok: true; report: DailyReport; settings: WatchlistSettings | null }
-  | { ok: false; reason: string; pending?: boolean };
+  | { ok: false; reason: string; pending: true }
+  /** Rate-limited: too soon since the last attempt to try again. `userMessage`
+   * is present when the last failure looked like a provider/TradingView
+   * outage, absent for an ordinary failure. */
+  | { ok: false; pending: false; stage: string; reason: string; userMessage?: string };

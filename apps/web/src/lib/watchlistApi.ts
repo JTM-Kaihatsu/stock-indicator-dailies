@@ -50,10 +50,24 @@ export async function updateWatchlistSettings(
 }
 
 /** The full recomputed report for one watchlisted ticker, using that
- * ticker's stored sensitivity override. Powers the single-stock result page. */
+ * ticker's stored sensitivity override. Powers the single-stock result
+ * page. Also doubles as the retry mechanism: a call here that finds no
+ * fresh cache attempts a new run itself (rate-limited), so simply loading
+ * this ticker's page is what "retrying it" means. */
 export async function fetchWatchlistTickerReport(accessToken: string, ticker: string): Promise<WatchlistReportResponse> {
   const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}/report`), {
     headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return res.json();
+}
+
+/** Persists a drag-reordered watchlist: `tickers` is the full desired
+ * order. */
+export async function reorderWatchlist(accessToken: string, tickers: string[]): Promise<WatchlistMutationResponse> {
+  const res = await fetch(apiUrl('/api/watchlist/order'), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ tickers }),
   });
   return res.json();
 }

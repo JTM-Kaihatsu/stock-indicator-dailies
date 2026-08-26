@@ -21,7 +21,10 @@ type RunOutcome = { ok: true; result: BacktestResult } | { ok: false; reason: st
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
 export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSettings: LiveSettings }) {
-  const [open, setOpen] = useState(false);
+  // Open by default: Historical Testing is core to the report, not an
+  // optional aside, on both the ad-hoc main-page report and a watchlisted
+  // ticker's page.
+  const [open, setOpen] = useState(true);
   // A local, sandboxed copy of the policy thresholds; starts from the
   // live report's current settings but is freely editable here without
   // touching the live report. Same "alternate universe" scoping as
