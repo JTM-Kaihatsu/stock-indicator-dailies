@@ -46,6 +46,25 @@ test('interval extraction returns null when no header is present', () => {
   assert.equal(extractIntervalToken(['SMA10close207.45', 'random text']), null);
 });
 
+test('all-caps decoys are not mistaken for an interval', () => {
+  // These strings fit `<token><CODE>` but are not headers: the bare ticker
+  // "META" (M+ETA), the exchange code, and the MACD legend. A header always
+  // carries the lowercase company name, so bare all-caps text must not match.
+  assert.equal(extractIntervalToken(['META']), null);
+  assert.equal(extractIntervalToken(['NASDAQ']), null);
+  assert.equal(extractIntervalToken(['MACD']), null);
+});
+
+test('the real META header wins over the bare-ticker decoy before it', () => {
+  // Captured verbatim from the live page, in DOM order: the bare ticker "META"
+  // appears first and used to match as "M" bars, masking a correctly-daily
+  // chart. The extractor must skip it and read the real header.
+  assert.equal(
+    extractIntervalToken(['META', 'MMetaPlatforms,Inc.1DNASDAQ', 'NASDAQ']),
+    '1D',
+  );
+});
+
 test('capture is scoped to the chart container, not the page', () => {
   assert.equal(TRADINGVIEW.selectors.chartContainer, '.chart-container');
 });
