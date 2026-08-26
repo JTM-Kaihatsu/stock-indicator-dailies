@@ -224,6 +224,14 @@ body {
 }
 .trade-list td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .trade-list-current td { font-weight: 700; color: var(--text); border-top: 2px solid var(--border); }
+
+/* Caps the main-page watchlist overview to 8 visible rows before
+   scrolling; the header stays pinned while scrolling so columns are
+   still readable past the first screenful. Height tuned empirically
+   against the actual rendered row height, not computed from font-size
+   alone (line-height/padding/border make that unreliable). */
+.trade-list-scroll { max-height: 316px; overflow-y: auto; }
+.trade-list-scroll thead th { position: sticky; top: 0; background: var(--ground); z-index: 1; }
 .drag-handle { cursor: grab; color: var(--faint); width: 20px; user-select: none; }
 .drag-handle:active { cursor: grabbing; }
 

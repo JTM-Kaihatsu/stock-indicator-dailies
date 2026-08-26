@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import type { DeriveSignalOptions, IndicatorKey } from '@stock-indicator-dailies/shared';
 import { deriveIndicatorSignal, resolveDualOverall } from '@stock-indicator-dailies/shared';
 import type { DailyReport } from '@/types/api';
@@ -13,8 +16,35 @@ function sigClass(s: string): string {
   return 'sig-neutral';
 }
 
-export function ReportCard({ report, options }: { report: DailyReport; options?: DeriveSignalOptions }) {
+export function ReportCard({
+  report,
+  options,
+  onAddToWatchlist,
+}: {
+  report: DailyReport;
+  options?: DeriveSignalOptions;
+  /** Only passed when the viewer is signed in; renders a small "Add to
+   * watchlist" button under the "daily bars" line. Omitted entirely when
+   * signed out, or on a watchlisted ticker's own page (which has no
+   * ad-hoc "add" concept — it's already on the list). */
+  onAddToWatchlist?: () => Promise<{ ok: boolean; reason?: string }>;
+}) {
   const { ticker, verdict, deterministic, image, warnings, timings } = report;
+  const [addState, setAddState] = useState<'idle' | 'adding' | 'added' | 'error'>('idle');
+  const [addError, setAddError] = useState<string | null>(null);
+
+  async function handleAdd() {
+    if (!onAddToWatchlist) return;
+    setAddState('adding');
+    setAddError(null);
+    const result = await onAddToWatchlist();
+    if (result.ok) {
+      setAddState('added');
+    } else {
+      setAddState('error');
+      setAddError(result.reason ?? 'Could not add to watchlist.');
+    }
+  }
   const detSignal = deterministic?.signal ?? null;
   const vlmSignal = verdict.signal;
   // A completed report's AI/chart read is always present, so the "still
@@ -46,6 +76,23 @@ export function ReportCard({ report, options }: { report: DailyReport; options?:
           <div className="tabular" style={{ color: 'var(--muted)', fontSize: 13 }}>
             daily bars · as of {deterministic?.asOf ?? 'N/A'}
           </div>
+          {onAddToWatchlist && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                className="settings-toggle"
+                onClick={handleAdd}
+                disabled={addState === 'adding' || addState === 'added'}
+              >
+                {addState === 'adding' ? 'Adding…' : addState === 'added' ? 'Added to watchlist ✓' : 'Add to watchlist'}
+              </button>
+              {addState === 'error' && (
+                <div className="error-card" style={{ marginTop: 8, padding: '10px 12px' }}>
+                  <p>{addError}</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div style={{ textAlign: 'right' }}>
           <span style={{ display: 'block', textTransform: 'uppercase', letterSpacing: '.1em', fontSize: 10, color: 'var(--faint)', marginBottom: 6 }}>

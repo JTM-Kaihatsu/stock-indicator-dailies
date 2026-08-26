@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { runBacktest } from '@/lib/backtestApi';
 import {
   DEFAULT_BACKTEST_ONLY_SETTINGS,
@@ -24,6 +24,8 @@ export function BacktestPanel({
   ticker,
   liveSettings,
   onApplyToWatchlist,
+  initialScenarioSettings,
+  onScenarioPersist,
 }: {
   ticker: string;
   liveSettings: LiveSettings;
@@ -33,6 +35,16 @@ export function BacktestPanel({
    * sensitivity override. Omitted on the ad-hoc main-page report, where
    * there's no watchlist entry to save to. */
   onApplyToWatchlist?: (settings: LiveSettings) => Promise<{ ok: boolean; reason?: string }>;
+  /** A watchlisted ticker's last-saved scenario/custom run, if any; used to
+   * auto-rerun the same comparison once the baseline is established, so
+   * revisiting the ticker's page restores what was last seen instead of
+   * starting blank. Omitted on the main page, which has nowhere to persist
+   * a scenario against. */
+  initialScenarioSettings?: IndicatorSettings | null;
+  /** Called whenever a scenario successfully completes (manual Run or an
+   * accepted AI suggestion), so the watchlisted ticker's stored scenario
+   * stays current. Omitted on the main page. */
+  onScenarioPersist?: (settings: IndicatorSettings) => void;
 }) {
   // Open by default: Historical Testing is core to the report, not an
   // optional aside, on both the ad-hoc main-page report and a watchlisted
@@ -59,6 +71,10 @@ export function BacktestPanel({
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+
+  // Guards the scenario auto-rerun below so it only ever fires once per
+  // mount, even though it depends on `baseline` becoming available first.
+  const scenarioAutoRunAttempted = useRef(false);
 
   const currentSettings = mergeSettings(policy, backtestOnly);
 
@@ -108,6 +124,42 @@ export function BacktestPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  function splitSettings(settings: IndicatorSettings): { policy: LiveSettings; backtestOnly: BacktestOnlySettings } {
+    return {
+      policy: { buyConsensus: settings.buyConsensus, sellConsensus: settings.sellConsensus, recencyDays: settings.recencyDays },
+      backtestOnly: {
+        persistenceBars: settings.persistenceBars,
+        minHoldingDays: settings.minHoldingDays,
+        atrMultiplier: settings.atrMultiplier,
+        atrPeriod: settings.atrPeriod,
+        adxThreshold: settings.adxThreshold,
+        adxPeriod: settings.adxPeriod,
+      },
+    };
+  }
+
+  // Once the baseline is established, restore and rerun the last-saved
+  // scenario (if any), so revisiting a watchlisted ticker's page reproduces
+  // the same custom-vs-baseline comparison the user last saw instead of
+  // starting blank. Only ever attempted once per mount.
+  useEffect(() => {
+    if (!baseline || !initialScenarioSettings || scenarioAutoRunAttempted.current || loading) return;
+    scenarioAutoRunAttempted.current = true;
+    const { policy: nextPolicy, backtestOnly: nextBacktestOnly } = splitSettings(initialScenarioSettings);
+    setPolicy(nextPolicy);
+    setBacktestOnly(nextBacktestOnly);
+    void (async () => {
+      setLoading(true);
+      const outcome = await runFor(initialScenarioSettings);
+      if (outcome.ok) {
+        setScenario(outcome.result);
+        setScenarioSettings(initialScenarioSettings);
+      }
+      setLoading(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseline, initialScenarioSettings, loading]);
+
   async function applyToWatchlist() {
     if (!onApplyToWatchlist) return;
     setApplying(true);
@@ -132,6 +184,7 @@ export function BacktestPanel({
       } else {
         setScenario(outcome.result);
         setScenarioSettings(settings);
+        onScenarioPersist?.(settings);
       }
     } else {
       setError(outcome.reason);
@@ -145,19 +198,7 @@ export function BacktestPanel({
    * the failure is scoped to "this specific suggestion couldn't be tested,"
    * not "Historical Testing is broken." */
   async function acceptAiSuggestion(proposed: IndicatorSettings): Promise<AcceptResult> {
-    const nextPolicy: LiveSettings = {
-      buyConsensus: proposed.buyConsensus,
-      sellConsensus: proposed.sellConsensus,
-      recencyDays: proposed.recencyDays,
-    };
-    const nextBacktestOnly: BacktestOnlySettings = {
-      persistenceBars: proposed.persistenceBars,
-      minHoldingDays: proposed.minHoldingDays,
-      atrMultiplier: proposed.atrMultiplier,
-      atrPeriod: proposed.atrPeriod,
-      adxThreshold: proposed.adxThreshold,
-      adxPeriod: proposed.adxPeriod,
-    };
+    const { policy: nextPolicy, backtestOnly: nextBacktestOnly } = splitSettings(proposed);
     setPolicy(nextPolicy);
     setBacktestOnly(nextBacktestOnly);
     setApplied(false);
@@ -179,6 +220,7 @@ export function BacktestPanel({
     if (!outcome.ok) return { ok: false, reason: outcome.reason };
     setScenario(outcome.result);
     setScenarioSettings(settings);
+    onScenarioPersist?.(settings);
     return { ok: true };
   }
 

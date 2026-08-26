@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AdvisorRequestError, requestAiSuggestion } from '@/lib/advisorApi';
-import { diffSettings, fromProposedSettings, type IndicatorSettings } from '@/lib/settings';
+import { AdvisorRequestError, fetchCachedAdvice, requestAiSuggestion } from '@/lib/advisorApi';
+import { FIELD_LABELS, diffSettings, fromProposedSettings, type IndicatorSettings } from '@/lib/settings';
 import type { AdvisorProposal } from '@/types/advisor';
 
 /** Cooldown after a failed request, so a user (or an outage) can't hammer
@@ -37,8 +37,22 @@ export function AiSuggestionPanel({
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const [accepting, setAccepting] = useState(false);
-  const [accepted, setAccepted] = useState(false);
   const [acceptError, setAcceptError] = useState<string | null>(null);
+
+  // Seed from any prior cached suggestion on mount, so an already-run
+  // suggestion (rationale + proposed settings) shows by default without
+  // requiring another click, on both the main page and a watchlisted
+  // ticker's page (the cache is global/ticker-keyed, not per-user).
+  useEffect(() => {
+    let cancelled = false;
+    void fetchCachedAdvice(ticker).then((cached) => {
+      if (!cancelled && cached) setProposal(cached);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker]);
 
   useEffect(() => {
     if (cooldownUntil <= Date.now()) return;
@@ -55,7 +69,6 @@ export function AiSuggestionPanel({
     setError(null);
     setErrorIsOutage(false);
     setProposal(null);
-    setAccepted(false);
     setAcceptError(null);
     try {
       setProposal(await requestAiSuggestion(ticker));
@@ -79,9 +92,7 @@ export function AiSuggestionPanel({
     setAcceptError(null);
     const result = await onAccept(fromProposedSettings(proposal.settings));
     setAccepting(false);
-    if (result.ok) {
-      setAccepted(true);
-    } else {
+    if (!result.ok) {
       setAcceptError(result.reason ?? 'Could not run Historical Testing with these settings.');
     }
   }
@@ -119,28 +130,26 @@ export function AiSuggestionPanel({
       {proposal && (
         <div style={{ marginTop: 12 }}>
           <div className="advisor-rationale">{proposal.rationale}</div>
-          {changedFields.length > 0 ? (
-            <div className="compare-card" style={{ marginTop: 0 }}>
-              {changedFields.map((f) => (
-                <div className="compare-row" key={f.key}>
-                  <span className="compare-label">{f.label}</span>
-                  <span className="compare-values">
-                    {f.from ?? 'off'} <span className="compare-arrow">→</span> {f.to ?? 'off'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="advisor-diff-empty">Matches your current settings; nothing to change.</div>
-          )}
-          {changedFields.length > 0 && (
-            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Proposed settings always render here as plain values, never
+           * collapsing into a "matches" message once applied — the numbers
+           * are exactly what's useful to see right after accepting. */}
+          <div className="compare-card" style={{ marginTop: 0 }}>
+            {(Object.keys(FIELD_LABELS) as Array<keyof IndicatorSettings>).map((key) => (
+              <div className="compare-row" key={key}>
+                <span className="compare-label">{FIELD_LABELS[key]}</span>
+                <span className="compare-values">{proposedSettings![key] ?? 'off'}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+            {changedFields.length > 0 ? (
               <button type="button" className="analyze-btn" onClick={accept} disabled={accepting}>
                 {accepting ? 'Running…' : 'Run Testing on AI Suggestions'}
               </button>
-              {accepted && !accepting && <span className="badge settings-badge-active">Applied ✓</span>}
-            </div>
-          )}
+            ) : (
+              <span className="badge settings-badge-active">✓ Currently applied</span>
+            )}
+          </div>
           {acceptError && (
             <div className="error-card" style={{ marginTop: 12 }}>
               <h3>Couldn&apos;t apply this suggestion</h3>

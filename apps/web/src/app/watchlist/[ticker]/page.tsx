@@ -4,9 +4,9 @@ import { use, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { recomputeReport } from '@stock-indicator-dailies/shared';
 import { useAuth } from '@/hooks/useAuth';
-import { fetchWatchlistTickerReport, updateWatchlistSettings } from '@/lib/watchlistApi';
+import { fetchWatchlistTickerReport, updateScenarioSettings, updateWatchlistSettings } from '@/lib/watchlistApi';
 import { sleep } from '@/lib/polling.ts';
-import { DEFAULT_LIVE_SETTINGS, toLiveOptions, type LiveSettings } from '@/lib/settings';
+import { DEFAULT_LIVE_SETTINGS, toLiveOptions, type IndicatorSettings, type LiveSettings } from '@/lib/settings';
 import { stageLabel } from '@/lib/errorMessages';
 import { ReportCard } from '@/components/ReportCard';
 import { SettingsPanel } from '@/components/SettingsPanel';
@@ -21,11 +21,22 @@ import type { DailyReport } from '@/types/api';
 const POLL_INTERVAL_MS = 5000;
 const POLL_MAX_MS = 5 * 60 * 1000;
 
+/** The server stores scenario_settings opaquely (never interpreted
+ * server-side); this is the one place that trusts its shape, guarded by a
+ * minimal runtime check since it ultimately came from parseIndicatorSettings
+ * on write. `null`/malformed both degrade to "nothing to restore." */
+function toIndicatorSettings(raw: Record<string, unknown> | null): IndicatorSettings | null {
+  if (!raw) return null;
+  const required: Array<keyof IndicatorSettings> = ['buyConsensus', 'sellConsensus', 'recencyDays', 'persistenceBars', 'minHoldingDays', 'atrPeriod', 'adxPeriod'];
+  if (!required.every((key) => typeof raw[key] === 'number')) return null;
+  return raw as unknown as IndicatorSettings;
+}
+
 type Status =
   | { kind: 'loading' }
   | { kind: 'pending' }
   | { kind: 'failed'; stage: string; reason: string; userMessage?: string }
-  | { kind: 'ready'; report: DailyReport; settings: LiveSettings };
+  | { kind: 'ready'; report: DailyReport; settings: LiveSettings; scenarioSettings: IndicatorSettings | null };
 
 export default function WatchlistTickerPage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
@@ -53,7 +64,12 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
         if (requestId.current !== myRequestId) return; // ticker changed underneath us
 
         if (res.ok) {
-          setStatus({ kind: 'ready', report: res.report, settings: { ...DEFAULT_LIVE_SETTINGS, ...(res.settings ?? {}) } });
+          setStatus({
+            kind: 'ready',
+            report: res.report,
+            settings: { ...DEFAULT_LIVE_SETTINGS, ...(res.settings ?? {}) },
+            scenarioSettings: toIndicatorSettings(res.scenarioSettings),
+          });
           return;
         }
         if (!res.pending) {
@@ -86,6 +102,17 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
         : prev,
     );
     return { ok: true };
+  }
+
+  /** Persists this ticker's last-run scenario/custom Historical Testing
+   * settings, called by BacktestPanel whenever a scenario run (manual or an
+   * accepted AI suggestion) completes, so revisiting this page restores and
+   * auto-reruns it instead of starting blank. Best-effort from the caller's
+   * perspective: BacktestPanel doesn't surface a failure here since the
+   * on-screen result is already correct either way. */
+  function persistScenarioSettings(newSettings: IndicatorSettings) {
+    if (!session) return;
+    void updateScenarioSettings(session.access_token, ticker, newSettings as unknown as Record<string, unknown>);
   }
 
   function applySettings(newSettings: LiveSettings) {
@@ -143,7 +170,13 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
             </div>
           )}
 
-          <BacktestPanel ticker={ticker} liveSettings={status.settings} onApplyToWatchlist={persistSettings} />
+          <BacktestPanel
+            ticker={ticker}
+            liveSettings={status.settings}
+            onApplyToWatchlist={persistSettings}
+            initialScenarioSettings={status.scenarioSettings}
+            onScenarioPersist={persistScenarioSettings}
+          />
           <SignalHistoryPanel ticker={ticker} />
         </>
       )}

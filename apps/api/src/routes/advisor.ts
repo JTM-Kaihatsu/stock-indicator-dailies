@@ -28,3 +28,14 @@ advisor.get('/advisor/jobs/:id', (c) => {
   if (!job) return c.json({ status: 'not-found' }, 404);
   return c.json(job);
 });
+
+// Read-only peek at a cached suggestion, never triggers fresh research. Lets
+// the AI Suggestion panel show a prior result by default on page load; a
+// miss just means "nothing to show yet," not an error.
+advisor.get('/advisor/cached/:ticker', async (c) => {
+  const ticker = parseTicker(c.req.param('ticker'));
+  if (!ticker) return c.json({ ok: false, reason: 'Invalid ticker' }, 400);
+
+  const cached = await getCachedAdvice(ticker);
+  return c.json({ ok: true, result: cached });
+});

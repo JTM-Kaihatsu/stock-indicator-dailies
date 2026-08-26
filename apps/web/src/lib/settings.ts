@@ -112,7 +112,7 @@ export interface SettingsDiffEntry {
   to: number | undefined;
 }
 
-const FIELD_LABELS: Record<keyof IndicatorSettings, string> = {
+export const FIELD_LABELS: Record<keyof IndicatorSettings, string> = {
   buyConsensus: 'BUY needs at least (of 3)',
   sellConsensus: 'SELL needs at least (of 3)',
   recencyDays: 'Recency window (days)',

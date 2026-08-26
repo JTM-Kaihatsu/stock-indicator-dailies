@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { recomputeReport } from '@stock-indicator-dailies/shared';
 import { analyzeDaily } from '@/lib/api';
+import { addTicker } from '@/lib/watchlistApi';
+import { useAuth } from '@/hooks/useAuth';
 import type { DailyReport } from '@/types/api';
 import { DEFAULT_LIVE_SETTINGS, loadSettings, saveSettings, toLiveOptions, type LiveSettings } from '@/lib/settings';
 import { dailyFailureMessage } from '@/lib/errorMessages';
@@ -15,6 +17,7 @@ import { AuthPanel } from '@/components/AuthPanel';
 import { SignalHistoryPanel } from '@/components/SignalHistoryPanel';
 
 export default function Home() {
+  const { session } = useAuth();
   const [loading, setLoading] = useState(false);
   const [ticker, setTicker] = useState('');
   const [report, setReport] = useState<DailyReport | null>(null);
@@ -75,7 +78,18 @@ export default function Home() {
 
       {report && (
         <>
-          <ReportCard report={report} options={toLiveOptions(liveSettings)} />
+          <ReportCard
+            report={report}
+            options={toLiveOptions(liveSettings)}
+            onAddToWatchlist={
+              session
+                ? async () => {
+                    const res = await addTicker(session.access_token, report.ticker);
+                    return res.ok ? { ok: true } : { ok: false, reason: res.reason };
+                  }
+                : undefined
+            }
+          />
           <BacktestPanel ticker={report.ticker} liveSettings={liveSettings} />
           <SignalHistoryPanel ticker={report.ticker} />
         </>
