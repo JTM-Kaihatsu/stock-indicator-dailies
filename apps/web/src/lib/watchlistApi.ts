@@ -1,4 +1,4 @@
-import type { WatchlistMutationResponse, WatchlistResponse } from '@/types/watchlist';
+import type { WatchlistMutationResponse, WatchlistReportResponse, WatchlistResponse, WatchlistSettings } from '@/types/watchlist';
 import { apiUrl } from './api.ts';
 
 /** Single-shot; the dashboard reads pre-computed data (populated by the
@@ -12,12 +12,17 @@ export async function fetchWatchlist(accessToken: string): Promise<WatchlistResp
 
 /** Returns immediately; the server fires a one-off capture in the
  * background rather than making the caller wait. Poll fetchWatchlist to
- * see it resolve. */
-export async function addTicker(accessToken: string, ticker: string): Promise<WatchlistMutationResponse> {
+ * see it resolve. `settings` seeds the ticker's sensitivity override at
+ * add time; omit (or pass app defaults) to use app defaults. */
+export async function addTicker(
+  accessToken: string,
+  ticker: string,
+  settings?: WatchlistSettings,
+): Promise<WatchlistMutationResponse> {
   const res = await fetch(apiUrl('/api/watchlist'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ ticker }),
+    body: JSON.stringify({ ticker, settings }),
   });
   return res.json();
 }
@@ -25,6 +30,29 @@ export async function addTicker(accessToken: string, ticker: string): Promise<Wa
 export async function removeTicker(accessToken: string, ticker: string): Promise<WatchlistMutationResponse> {
   const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}`), {
     method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return res.json();
+}
+
+/** Updates an existing watchlist entry's sensitivity override. */
+export async function updateWatchlistSettings(
+  accessToken: string,
+  ticker: string,
+  settings: WatchlistSettings,
+): Promise<WatchlistMutationResponse> {
+  const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}`), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ settings }),
+  });
+  return res.json();
+}
+
+/** The full recomputed report for one watchlisted ticker, using that
+ * ticker's stored sensitivity override. Powers the single-stock result page. */
+export async function fetchWatchlistTickerReport(accessToken: string, ticker: string): Promise<WatchlistReportResponse> {
+  const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}/report`), {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   return res.json();

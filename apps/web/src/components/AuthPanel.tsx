@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { WatchlistDashboard } from './WatchlistDashboard';
@@ -88,8 +89,9 @@ export function AuthPanel() {
     <>
       <div className="auth-corner" ref={rootRef}>
         <button type="button" className="auth-pill" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-          {signedIn ? <LogoutIcon /> : <LoginIcon />}
+          {!signedIn && <LoginIcon />}
           <span className="auth-pill-label">{signedIn ? user!.email : 'Log in'}</span>
+          {signedIn && <span aria-hidden="true">{open ? '▾' : '▸'}</span>}
         </button>
 
         {open && (
@@ -97,7 +99,11 @@ export function AuthPanel() {
             {signedIn ? (
               <>
                 <div className="settings-group-hint" style={{ margin: 0 }}>Signed in as {user!.email}</div>
-                <button type="button" className="analyze-btn" style={{ marginTop: 12, width: '100%' }} onClick={signOut}>
+                <Link href="/watchlist" className="auth-popover-link" onClick={() => setOpen(false)}>
+                  Manage Watchlist →
+                </Link>
+                <button type="button" className="analyze-btn" style={{ marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={signOut}>
+                  <LogoutIcon />
                   Sign out
                 </button>
               </>
