@@ -69,7 +69,13 @@ export function BacktestPanel({
   const [scenarioSettings, setScenarioSettings] = useState<IndicatorSettings | null>(null);
 
   const [applying, setApplying] = useState(false);
-  const [applied, setApplied] = useState(false);
+  // The policy last successfully persisted to the watchlist entry; starts
+  // at liveSettings since that's exactly what's already saved for this
+  // ticker. The apply button is disabled ("pressed") whenever the current
+  // policy still matches this, same diff-driven logic as the AI Suggestion
+  // panel's "Currently applied" state, and re-enables the moment policy
+  // drifts from it again — no separate one-shot "applied" flag to reset.
+  const [appliedSettings, setAppliedSettings] = useState<LiveSettings>(liveSettings);
   const [applyError, setApplyError] = useState<string | null>(null);
 
   // Guards the scenario auto-rerun below so it only ever fires once per
@@ -77,6 +83,10 @@ export function BacktestPanel({
   const scenarioAutoRunAttempted = useRef(false);
 
   const currentSettings = mergeSettings(policy, backtestOnly);
+  const settingsApplied =
+    policy.buyConsensus === appliedSettings.buyConsensus &&
+    policy.sellConsensus === appliedSettings.sellConsensus &&
+    policy.recencyDays === appliedSettings.recencyDays;
 
   /** Fetches one backtest, without touching baseline/scenario/error state;
    * callers decide where a result goes and whether/how to surface a
@@ -166,14 +176,13 @@ export function BacktestPanel({
     setApplyError(null);
     const result = await onApplyToWatchlist(policy);
     setApplying(false);
-    if (result.ok) setApplied(true);
+    if (result.ok) setAppliedSettings(policy);
     else setApplyError(result.reason ?? 'Could not save these settings.');
   }
 
   async function run() {
     setLoading(true);
     setError(null);
-    setApplied(false);
     setApplyError(null);
     const settings = mergeSettings(policy, backtestOnly);
     const outcome = await runFor(settings);
@@ -201,7 +210,6 @@ export function BacktestPanel({
     const { policy: nextPolicy, backtestOnly: nextBacktestOnly } = splitSettings(proposed);
     setPolicy(nextPolicy);
     setBacktestOnly(nextBacktestOnly);
-    setApplied(false);
     setApplyError(null);
 
     // The AI proposal always lands in the "Custom settings" slot, never
@@ -316,11 +324,15 @@ export function BacktestPanel({
               <TradeList result={baseline} />
 
               {onApplyToWatchlist && (
-                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <button type="button" className="settings-toggle" onClick={applyToWatchlist} disabled={applying}>
-                    {applying ? 'Saving…' : 'Apply to stock watchlist settings'}
+                <div style={{ marginTop: 12 }}>
+                  <button
+                    type="button"
+                    className={`analyze-btn${settingsApplied ? ' applied' : ''}`}
+                    onClick={applyToWatchlist}
+                    disabled={applying || settingsApplied}
+                  >
+                    {applying ? 'Saving…' : settingsApplied ? '✓ Settings applied to watchlist' : 'Apply to stock watchlist settings'}
                   </button>
-                  {applied && !applying && <span className="badge settings-badge-active">Saved ✓</span>}
                 </div>
               )}
               {applyError && (
