@@ -176,6 +176,14 @@ body {
 }
 .analyze-btn:hover { opacity: .85; }
 .analyze-btn:disabled { opacity: .4; cursor: not-allowed; }
+/* "Pressed"/already-done state (e.g. "Settings applied to watchlist"):
+   stays a visible button, but reads as inactive/sunken rather than dimmed,
+   same accent-on-surface treatment as .settings-badge-active. */
+.analyze-btn.applied {
+  background: var(--surface-2); color: var(--accent); border: 1px solid var(--accent);
+  opacity: 1; cursor: default;
+}
+.analyze-btn.applied:hover { opacity: 1; }
 
 /* --- Loading skeleton --- */
 .loading-wrap { text-align: center; padding: 60px 20px; }
