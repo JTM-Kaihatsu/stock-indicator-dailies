@@ -136,7 +136,7 @@ export function AiSuggestionPanel({
           {changedFields.length > 0 && (
             <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
               <button type="button" className="analyze-btn" onClick={accept} disabled={accepting}>
-                {accepting ? 'Running…' : 'Accept AI Suggestion'}
+                {accepting ? 'Running…' : 'Run Testing on AI Suggestions'}
               </button>
               {accepted && !accepting && <span className="badge settings-badge-active">Applied ✓</span>}
             </div>
@@ -145,7 +145,7 @@ export function AiSuggestionPanel({
             <div className="error-card" style={{ marginTop: 12 }}>
               <h3>Couldn&apos;t apply this suggestion</h3>
               <p>{acceptError}</p>
-              <p style={{ marginTop: 6 }}>The rationale and proposed settings above are still valid; you can try Accept again.</p>
+              <p style={{ marginTop: 6 }}>The rationale and proposed settings above are still valid; you can try again.</p>
             </div>
           )}
         </div>

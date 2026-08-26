@@ -20,7 +20,20 @@ type RunOutcome = { ok: true; result: BacktestResult } | { ok: false; reason: st
 
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
-export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSettings: LiveSettings }) {
+export function BacktestPanel({
+  ticker,
+  liveSettings,
+  onApplyToWatchlist,
+}: {
+  ticker: string;
+  liveSettings: LiveSettings;
+  /** Only passed when this panel is rendered for a watchlisted ticker;
+   * persists the currently-configured policy (buy/sell/recency, the same
+   * 3 fields LiveSettingsFields edits above) as that ticker's stored
+   * sensitivity override. Omitted on the ad-hoc main-page report, where
+   * there's no watchlist entry to save to. */
+  onApplyToWatchlist?: (settings: LiveSettings) => Promise<{ ok: boolean; reason?: string }>;
+}) {
   // Open by default: Historical Testing is core to the report, not an
   // optional aside, on both the ad-hoc main-page report and a watchlisted
   // ticker's page.
@@ -42,6 +55,10 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
   const [baselineSettings, setBaselineSettings] = useState<IndicatorSettings | null>(null);
   const [scenario, setScenario] = useState<BacktestResult | null>(null);
   const [scenarioSettings, setScenarioSettings] = useState<IndicatorSettings | null>(null);
+
+  const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   const currentSettings = mergeSettings(policy, backtestOnly);
 
@@ -91,9 +108,21 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  async function applyToWatchlist() {
+    if (!onApplyToWatchlist) return;
+    setApplying(true);
+    setApplyError(null);
+    const result = await onApplyToWatchlist(policy);
+    setApplying(false);
+    if (result.ok) setApplied(true);
+    else setApplyError(result.reason ?? 'Could not save these settings.');
+  }
+
   async function run() {
     setLoading(true);
     setError(null);
+    setApplied(false);
+    setApplyError(null);
     const settings = mergeSettings(policy, backtestOnly);
     const outcome = await runFor(settings);
     if (outcome.ok) {
@@ -131,6 +160,8 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
     };
     setPolicy(nextPolicy);
     setBacktestOnly(nextBacktestOnly);
+    setApplied(false);
+    setApplyError(null);
 
     // The AI proposal always lands in the "Custom settings" slot, never
     // "Strategy return". That pellet means the settings active when the
@@ -241,6 +272,20 @@ export function BacktestPanel({ ticker, liveSettings }: { ticker: string; liveSe
                 {baseline.stillHolding ? ' · still holding at end, marked to market' : ''}
               </div>
               <TradeList result={baseline} />
+
+              {onApplyToWatchlist && (
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <button type="button" className="settings-toggle" onClick={applyToWatchlist} disabled={applying}>
+                    {applying ? 'Saving…' : 'Apply to stock watchlist settings'}
+                  </button>
+                  {applied && !applying && <span className="badge settings-badge-active">Saved ✓</span>}
+                </div>
+              )}
+              {applyError && (
+                <div className="error-card" style={{ marginTop: 12 }}>
+                  <p>{applyError}</p>
+                </div>
+              )}
 
               {scenario && (
                 <>

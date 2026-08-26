@@ -45,7 +45,7 @@ body {
 
 /* --- Section labels --- */
 .eyebrow, .section-label {
-  text-transform: uppercase; letter-spacing: .12em; word-spacing: .4em; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .12em; word-spacing: .4em; font-size: 14px;
   color: var(--faint); font-weight: 600;
 }
 .section-label { margin-bottom: 10px; }
@@ -286,7 +286,7 @@ body {
 
 /* --- Site title --- */
 .site-title {
-  text-align: center; font-size: 22px; font-weight: 700; color: var(--text);
+  text-align: center; font-size: 32px; font-weight: 700; color: var(--text);
   margin-bottom: 28px; text-transform: uppercase; letter-spacing: .15em; word-spacing: .5em;
 }
 
@@ -304,4 +304,5 @@ footer {
   .ticker-input { font-size: 22px; width: 140px; }
   header { flex-direction: column; }
   .headline { text-align: left !important; }
+  .site-title { font-size: 22px; letter-spacing: .1em; word-spacing: .3em; }
 }
