@@ -2,12 +2,14 @@
 
 import { use, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { recomputeReport } from '@stock-indicator-dailies/shared';
 import { useAuth } from '@/hooks/useAuth';
-import { fetchWatchlistTickerReport } from '@/lib/watchlistApi';
+import { fetchWatchlistTickerReport, updateWatchlistSettings } from '@/lib/watchlistApi';
 import { sleep } from '@/lib/polling.ts';
 import { DEFAULT_LIVE_SETTINGS, toLiveOptions, type LiveSettings } from '@/lib/settings';
 import { stageLabel } from '@/lib/errorMessages';
 import { ReportCard } from '@/components/ReportCard';
+import { SettingsPanel } from '@/components/SettingsPanel';
 import { BacktestPanel } from '@/components/BacktestPanel';
 import { SignalHistoryPanel } from '@/components/SignalHistoryPanel';
 import type { DailyReport } from '@/types/api';
@@ -29,6 +31,7 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
   const { ticker } = use(params);
   const { session, loading: authLoading } = useAuth();
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   // Guards the poll loop below against a stale response landing after the
   // ticker changed (navigating from one watchlisted ticker's page to
   // another re-uses this same component instance).
@@ -65,6 +68,32 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
 
     void poll();
   }, [session, ticker]);
+
+  /** Single source of truth for persisting this ticker's sensitivity
+   * override, used by both the Indicator Settings panel below and
+   * BacktestPanel's "Apply to stock watchlist settings" button — both
+   * write to the exact same watchlist entry, so both go through here to
+   * stay in sync. Recomputes the on-screen report immediately on success
+   * rather than waiting for a re-fetch, same instant-feedback pattern as
+   * the main page's own settings panel. */
+  async function persistSettings(newSettings: LiveSettings): Promise<{ ok: boolean; reason?: string }> {
+    if (!session || status.kind !== 'ready') return { ok: false, reason: 'Report not loaded yet.' };
+    const res = await updateWatchlistSettings(session.access_token, ticker, newSettings);
+    if (!res.ok) return { ok: false, reason: res.reason };
+    setStatus((prev) =>
+      prev.kind === 'ready'
+        ? { ...prev, settings: newSettings, report: recomputeReport(prev.report, toLiveOptions(newSettings)) }
+        : prev,
+    );
+    return { ok: true };
+  }
+
+  function applySettings(newSettings: LiveSettings) {
+    setSettingsError(null);
+    void persistSettings(newSettings).then((result) => {
+      if (!result.ok) setSettingsError(result.reason ?? 'Could not save these settings.');
+    });
+  }
 
   if (authLoading) return null;
 
@@ -106,7 +135,15 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
       {status.kind === 'ready' && (
         <>
           <ReportCard report={status.report} options={toLiveOptions(status.settings)} />
-          <BacktestPanel ticker={ticker} liveSettings={status.settings} />
+
+          <SettingsPanel settings={status.settings} onApply={applySettings} />
+          {settingsError && (
+            <div className="error-card" style={{ marginBottom: 20 }}>
+              <p>{settingsError}</p>
+            </div>
+          )}
+
+          <BacktestPanel ticker={ticker} liveSettings={status.settings} onApplyToWatchlist={persistSettings} />
           <SignalHistoryPanel ticker={ticker} />
         </>
       )}
