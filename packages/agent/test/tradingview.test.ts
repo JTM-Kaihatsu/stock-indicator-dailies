@@ -46,6 +46,27 @@ test('interval extraction returns null when no header is present', () => {
   assert.equal(extractIntervalToken(['SMA10close207.45', 'random text']), null);
 });
 
+// Live regression, observed capturing AMZN and MSFT: the ticker symbol
+// itself appears elsewhere on the page (nav bar, search, watchlist) as a
+// short all-caps string, and used to satisfy the interval regex on its own
+// before the real header was ever reached — "AMZN" backtracked to "M"+"ZN",
+// "MSFT" to "M"+"SFT", misreporting the interval as monthly on a chart that
+// was actually on daily bars.
+test('a bare ticker symbol elsewhere on the page is not mistaken for the header', () => {
+  assert.equal(extractIntervalToken(['AMZN', 'AAmazon.com, Inc.1DNASDAQ']), '1D');
+  assert.equal(extractIntervalToken(['MSFT', 'MMicrosoft Corporation1DNASDAQ']), '1D');
+  assert.equal(extractIntervalToken(['AMZN']), null);
+});
+
+// A second, duplicate header-like text node without the interval infix at
+// all (just name + exchange) used to backtrack into splitting the exchange
+// word itself — "NASDAQ" -> "D"+"AQ" — misreading a letter *inside* the
+// exchange name as the interval.
+test('a header-like text missing the interval infix is not mistaken for one', () => {
+  assert.equal(extractIntervalToken(['Amazon.com, Inc.NASDAQ']), null);
+  assert.equal(extractIntervalToken(['Amazon.com, Inc.NASDAQ', 'AAmazon.com, Inc.1DNASDAQ']), '1D');
+});
+
 test('capture is scoped to the chart container, not the page', () => {
   assert.equal(TRADINGVIEW.selectors.chartContainer, '.chart-container');
 });
