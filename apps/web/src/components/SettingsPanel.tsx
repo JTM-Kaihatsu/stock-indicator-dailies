@@ -43,18 +43,20 @@ export function SettingsPanel({
 
   return (
     <div className="settings-panel">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <button type="button" className="settings-toggle" onClick={() => (open ? cancel() : openPanel())}>
-          {open ? '▾' : '▸'} Indicator Settings
-        </button>
-        {!isDefault(settings) && <span className="badge settings-badge-active">custom settings active</span>}
-      </div>
+      <button type="button" className="settings-toggle" onClick={() => (open ? cancel() : openPanel())}>
+        {open ? '▾' : '▸'} Indicator Settings
+      </button>
 
       {open && (
         <div style={{ marginTop: 12 }}>
-          <div className="settings-group-hint">
-            These affect the live report above and the baseline for Historical Testing below. Backtest-only
-            execution filters live inside Historical Testing itself.
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+            <div className="settings-group-hint">
+              These affect the live report above and the baseline for Historical Testing below. Backtest-only
+              execution filters live inside Historical Testing itself.
+            </div>
+            {!isDefault(settings) && (
+              <span className="badge settings-badge-active" style={{ flexShrink: 0 }}>Custom settings active</span>
+            )}
           </div>
           <LiveSettingsFields value={pending} onChange={setPending} />
 
