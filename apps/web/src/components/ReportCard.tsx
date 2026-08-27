@@ -71,7 +71,7 @@ export function ReportCard({
     <div>
       <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
         <div>
-          <div className="eyebrow">Stock Indicator Dailies</div>
+          <div className="eyebrow">{report.companyName ?? ticker}</div>
           <h1 style={{ fontFamily: 'var(--mono)', fontSize: 40, fontWeight: 600, letterSpacing: '-.01em', margin: '2px 0 0' }}>{ticker}</h1>
           <div className="tabular" style={{ color: 'var(--muted)', fontSize: 13 }}>
             daily bars · as of {deterministic?.asOf ?? 'N/A'}

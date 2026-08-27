@@ -45,14 +45,21 @@ body {
 
 /* --- Section labels --- */
 .eyebrow, .section-label {
-  text-transform: uppercase; letter-spacing: .12em; word-spacing: .4em; font-size: 22px;
+  text-transform: uppercase; font-size: 22px;
   color: var(--text); font-weight: 600;
 }
 .section-label { margin-bottom: 10px; }
 
 /* --- Indicator rows --- */
 .ind-row {
-  display: grid; grid-template-columns: 1.3fr 1.4fr 1.4fr auto; gap: 14px; align-items: center;
+  /* Each row is its own grid formatting context, so a bare `1fr` track
+     would size to *that row's* content (e.g. a longer "· unqualified" fact
+     string), drifting columns out of alignment row to row. `minmax(0, ..)`
+     pins every track to the same share of the row's own width regardless of
+     content, and the last column gets a fixed width instead of `auto` for
+     the same reason ("match"/"differs"/"N/A" differ in width). */
+  display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.4fr) minmax(0, 1.4fr) 64px;
+  gap: 14px; align-items: center;
   padding: 14px 16px; background: var(--surface); border: 1px solid var(--border);
   border-radius: 10px; margin-bottom: 8px;
 }
@@ -314,12 +321,12 @@ footer {
 
 /* --- Responsive --- */
 @media (max-width: 620px) {
-  .ind-row { grid-template-columns: 1fr 1fr; }
+  .ind-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .ind-name { grid-column: 1 / -1; }
   .agree { grid-column: 1 / -1; text-align: left; }
   .ticker-input { font-size: 18px; width: 140px; }
   header { flex-direction: column; }
   .headline { text-align: left !important; }
   .site-title { font-size: 26px; letter-spacing: .1em; word-spacing: .3em; }
-  .eyebrow, .section-label { font-size: 16px; word-spacing: .3em; }
+  .eyebrow, .section-label { font-size: 16px; }
 }

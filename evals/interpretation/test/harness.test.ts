@@ -11,7 +11,7 @@ import {
   type ChartAgent,
 } from '@stock-indicator-dailies/agent';
 import type { VlmProvider, VlmRequest } from '@stock-indicator-dailies/vlm';
-import type { Bar, DataSource } from '@stock-indicator-dailies/indicators';
+import type { Bar, DailyBarsResult, DataSource } from '@stock-indicator-dailies/indicators';
 
 import { runEval } from '../src/harness.ts';
 
@@ -50,8 +50,8 @@ function fakeBars(n = 80): Bar[] {
 
 class FakeDataSource implements DataSource {
   readonly name = 'fake';
-  async fetchDailyBars(): Promise<Bar[]> {
-    return fakeBars();
+  async fetchDailyBars(): Promise<DailyBarsResult> {
+    return { bars: fakeBars() };
   }
 }
 

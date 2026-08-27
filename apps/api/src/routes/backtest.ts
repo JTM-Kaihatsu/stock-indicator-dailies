@@ -63,7 +63,7 @@ backtestRoute.post('/backtest', async (c) => {
   const options = clampOptions(body.options);
 
   try {
-    const bars = await yahooDataSource.fetchDailyBars(ticker, range);
+    const { bars } = await yahooDataSource.fetchDailyBars(ticker, range);
     const result = runBacktest(ticker, bars, options);
     return c.json({ ok: true, result });
   } catch (err) {

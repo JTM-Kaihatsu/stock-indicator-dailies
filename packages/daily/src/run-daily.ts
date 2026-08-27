@@ -51,6 +51,10 @@ export interface DailyTimings {
 
 export interface DailyReport {
   ticker: string;
+  /** The ticker's display name (e.g. "NVIDIA Corporation" for NVDA), when
+   * the OHLC source happened to expose one. Absent if the data fetch
+   * failed, or the source doesn't carry a name. */
+  companyName?: string;
   /** The VLM's read; the AI second opinion / cross-check. */
   verdict: Verdict;
   /** The computed read from price data; the accurate, headline signal. Absent if the data fetch failed. */
@@ -189,9 +193,11 @@ export async function runDaily(
   // --- 3. Deterministic read (best-effort; a data-fetch failure is non-fatal) ---
   const detStarted = now();
   let deterministic: DeterministicRead | undefined;
+  let companyName: string | undefined;
   try {
     const source = input.dataSource ?? yahooDataSource;
-    const bars = await source.fetchDailyBars(ticker, '1y');
+    const { bars, companyName: name } = await source.fetchDailyBars(ticker, '1y');
+    companyName = name;
     const readings = computeReadings(bars);
     deterministic = {
       readings,
@@ -212,6 +218,7 @@ export async function runDaily(
     ok: true,
     report: {
       ticker,
+      ...(companyName ? { companyName } : {}),
       verdict: result.verdict,
       ...(deterministic ? { deterministic } : {}),
       warnings,

@@ -170,7 +170,7 @@ async function evalOne(
   // --- Fetched read (computed from price data; a cross-check, not truth) ---
   let fetched: IndicatorReading[];
   try {
-    const bars = await dataSource.fetchDailyBars(ticker, range);
+    const { bars } = await dataSource.fetchDailyBars(ticker, range);
     fetched = computeReadings(bars);
   } catch (err) {
     return fail('fetch', err instanceof Error ? err.message : String(err), captureMs, analyzeMs, imagePath);

@@ -38,7 +38,7 @@ for (const ticker of tickers) {
     console.error(`${ticker}: VLM failed; ${result.errors.join('; ')}`);
     continue;
   }
-  const bars = await yahooDataSource.fetchDailyBars(ticker, '1y');
+  const { bars } = await yahooDataSource.fetchDailyBars(ticker, '1y');
   const fetched = computeReadings(bars);
   const comparisons = compareReadings(result.verdict.readings, fetched, {}, ticker);
 

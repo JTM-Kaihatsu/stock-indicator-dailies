@@ -26,7 +26,7 @@ const fakeBars = Array.from({ length: 60 }, (_, i) => {
   const c = 100 + (i % 7);
   return { date: `2026-01-${String((i % 28) + 1).padStart(2, '0')}`, open: c, high: c + 1, low: c - 1, close: c };
 });
-const fakeSource = { name: 'fake', async fetchDailyBars() { return fakeBars; } };
+const fakeSource = { name: 'fake', async fetchDailyBars() { return { bars: fakeBars }; } };
 
 const sellJson = JSON.stringify({
   ticker: 'GEV',

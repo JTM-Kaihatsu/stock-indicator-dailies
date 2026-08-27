@@ -1,15 +1,26 @@
 import type { Bar } from './compute.ts';
 
 /** A source of daily OHLC bars. Behind an interface so the math stays testable. */
+export interface DailyBarsResult {
+  bars: Bar[];
+  /** The ticker's display name (e.g. "NVIDIA Corporation" for NVDA), when
+   * the source happens to expose one alongside the OHLC data. Absent if the
+   * source doesn't carry one; never worth a separate fetch on its own. */
+  companyName?: string;
+}
+
 export interface DataSource {
   readonly name: string;
-  fetchDailyBars(ticker: string, range: string): Promise<Bar[]>;
+  fetchDailyBars(ticker: string, range: string): Promise<DailyBarsResult>;
 }
 
 interface YahooChartResponse {
   chart: {
     result?: Array<{
       timestamp?: number[];
+      /** Same response as the OHLC data; shortName/longName ride along for
+       * free, no separate lookup needed. */
+      meta?: { shortName?: string; longName?: string };
       indicators: {
         quote: Array<{
           open?: (number | null)[];
@@ -30,7 +41,7 @@ interface YahooChartResponse {
  */
 export const yahooDataSource: DataSource = {
   name: 'yahoo',
-  async fetchDailyBars(ticker, range = '1y'): Promise<Bar[]> {
+  async fetchDailyBars(ticker, range = '1y'): Promise<DailyBarsResult> {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
       ticker.toUpperCase(),
     )}?interval=1d&range=${encodeURIComponent(range)}`;
@@ -58,6 +69,6 @@ export const yahooDataSource: DataSource = {
         close,
       });
     }
-    return bars;
+    return { bars, companyName: result.meta?.longName ?? result.meta?.shortName };
   },
 };

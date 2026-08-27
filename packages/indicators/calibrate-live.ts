@@ -19,7 +19,7 @@ import type { IndicatorValues } from './src/values.ts';
 const ticker = (process.argv[2] ?? 'GEV').toUpperCase();
 
 // --- 1. Yahoo OHLC + computed indicators ---
-const bars = await yahooDataSource.fetchDailyBars(ticker, '1y');
+const { bars } = await yahooDataSource.fetchDailyBars(ticker, '1y');
 console.log(`Yahoo: ${bars.length} bars, last ${bars.at(-1)!.date} close ${bars.at(-1)!.close}`);
 const computed = computeLastBar(bars);
 

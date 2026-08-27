@@ -129,7 +129,7 @@ export default function ManageWatchlistPage() {
   if (!session) {
     return (
       <div className="wrap">
-        <h1 className="site-title">Daily Stock Analysis</h1>
+        <h1 className="site-title">Stock Analysis Dailies</h1>
         <div className="settings-panel">
           <div className="settings-group-hint">
             Sign in from the home page to manage your watchlist. <Link href="/" className="auth-popover-link" style={{ display: 'inline', marginTop: 0 }}>← Back</Link>
@@ -141,7 +141,7 @@ export default function ManageWatchlistPage() {
 
   return (
     <div className="wrap">
-      <h1 className="site-title">Daily Stock Analysis</h1>
+      <h1 className="site-title">Stock Analysis Dailies</h1>
       <Link href="/" className="auth-popover-link" style={{ marginTop: 0, marginBottom: 20 }}>
         ← Back
       </Link>

@@ -31,6 +31,10 @@ export interface DailyTimings {
 
 export interface DailyReport {
   ticker: string;
+  /** The ticker's display name (e.g. "NVIDIA Corporation" for NVDA), when
+   * the OHLC source happened to expose one. Absent if the data fetch
+   * failed, or the source doesn't carry a name. */
+  companyName?: string;
   verdict: Verdict;
   deterministic?: DeterministicRead;
   warnings: string[];
