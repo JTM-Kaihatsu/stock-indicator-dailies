@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { FakeChartAgent } from '@stock-indicator-dailies/agent';
 import type { VlmProvider, VlmRequest } from '@stock-indicator-dailies/vlm';
-import type { Bar, DataSource } from '@stock-indicator-dailies/indicators';
+import type { DailyBarsResult, DataSource } from '@stock-indicator-dailies/indicators';
 
 import { runEval } from '../src/harness.ts';
 import { formatReport } from '../src/report.ts';
@@ -26,17 +26,19 @@ class StubProvider implements VlmProvider {
 
 class FakeDataSource implements DataSource {
   readonly name = 'fake';
-  async fetchDailyBars(): Promise<Bar[]> {
-    return Array.from({ length: 80 }, (_, i) => {
-      const close = 100 + 20 * Math.sin(i / 5) + i * 0.1;
-      return {
-        date: new Date(2026, 0, 1 + i).toISOString().slice(0, 10),
-        open: close,
-        high: close + 1,
-        low: close - 1,
-        close,
-      };
-    });
+  async fetchDailyBars(): Promise<DailyBarsResult> {
+    return {
+      bars: Array.from({ length: 80 }, (_, i) => {
+        const close = 100 + 20 * Math.sin(i / 5) + i * 0.1;
+        return {
+          date: new Date(2026, 0, 1 + i).toISOString().slice(0, 10),
+          open: close,
+          high: close + 1,
+          low: close - 1,
+          close,
+        };
+      }),
+    };
   }
 }
 

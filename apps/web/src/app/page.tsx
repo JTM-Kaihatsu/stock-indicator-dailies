@@ -60,7 +60,7 @@ export default function Home() {
 
   return (
     <div className="wrap">
-      <h1 className="site-title">Daily Stock Analysis</h1>
+      <h1 className="site-title">Stock Analysis Dailies</h1>
       <AuthPanel />
 
       <div className="section-label">Lookup Stock Analysis</div>

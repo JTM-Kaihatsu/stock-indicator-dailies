@@ -62,7 +62,7 @@ console.log(`execution filters: ${leverParts.length > 0 ? leverParts.join(', ') 
 const results: BacktestResult[] = [];
 for (const ticker of tickers) {
   try {
-    const bars = await yahooDataSource.fetchDailyBars(ticker, range);
+    const { bars } = await yahooDataSource.fetchDailyBars(ticker, range);
     const result = runBacktest(ticker, bars, options);
     results.push(result);
 
