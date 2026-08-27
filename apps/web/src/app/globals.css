@@ -131,6 +131,7 @@ body {
    below) gets the boxed treatment instead, since that's the section meant
    to draw attention. */
 .settings-panel {
+  margin-top: 28px;
   margin-bottom: 20px;
 }
 .settings-toggle {
