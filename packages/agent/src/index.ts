@@ -5,5 +5,6 @@ export * from './auth.ts';
 export * from './fake.ts';
 export * from './studies.ts';
 export * from './interval.ts';
+export * from './pixel-popup.ts';
 export * from './tradingview-agent.ts';
 export * from './profiles/tradingview.ts';

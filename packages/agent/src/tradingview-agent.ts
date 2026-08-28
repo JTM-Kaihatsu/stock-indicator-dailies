@@ -9,6 +9,7 @@ import { TRADINGVIEW, type ChartProviderProfile } from './profiles/tradingview.t
 import { resolveProfileDir } from './session.ts';
 import { extractIntervalToken } from './interval.ts';
 import { validateStudies } from './studies.ts';
+import { looksLikePopupOverlay } from './pixel-popup.ts';
 
 /**
  * Standard flags for running headless Chromium under memory pressure
@@ -215,13 +216,45 @@ export class TradingViewChartAgent implements ChartAgent {
     // racing that transition (observed live: "waiting for element to be
     // stable" timing out at ~28s right after a popup dismissal).
     await page.waitForTimeout(500);
+    const image = await this.#screenshotChartOrThrow(page, chart);
+
+    // hasVisiblePopup above passed, but pixel analysis says otherwise: a
+    // popup whose markup didn't match any known selector. Give dismissal one
+    // more real attempt (not just cosmetic) before giving up — the same
+    // reasoning as the DOM-based retry above, just for the case that check
+    // couldn't see.
+    if (await looksLikePopupOverlay(page, image.base64)) {
+      await dismissPopups(page);
+      await page.waitForTimeout(1000);
+      await dismissPopups(page);
+      await page.waitForTimeout(500);
+      const retryImage = await this.#screenshotChartOrThrow(page, chart);
+      if (await looksLikePopupOverlay(page, retryImage.base64)) {
+        throw new ChartAcquisitionError(
+          'popup-blocking',
+          'pixel analysis found a large anomalous dark region over the chart after retrying dismissal, ' +
+            "consistent with an undetected pop-up; the DOM-based checks didn't see it, so its markup likely " +
+            "doesn't match any known selector",
+          retryImage,
+        );
+      }
+      return retryImage;
+    }
+
+    return image;
+  }
+
+  /** Screenshots the chart (does not itself check for a popup — that's the
+   * caller's job via `looksLikePopupOverlay`), translating a Playwright timeout into a typed
+   * ChartAcquisitionError instead of letting it bubble up as a raw error
+   * (which run-daily.ts would otherwise bucket as an undifferentiated
+   * `reason: 'unknown'`). Shared by the initial screenshot and the
+   * pixel-check retry below, so both fail the same way. */
+  async #screenshotChartOrThrow(page: Page, chart: Locator): Promise<ChartImage> {
     try {
       const buffer = await chart.screenshot({ type: 'png', timeout: 45_000 });
       return { base64: buffer.toString('base64'), mediaType: 'image/png' };
     } catch (err) {
-      // Not a ChartAcquisitionError by default, so without this it bubbles up
-      // as a raw Playwright error and lands in run-daily.ts's generic
-      // "reason: unknown" bucket, indistinguishable from any other crash.
       throw new ChartAcquisitionError(
         'timeout',
         `timed out screenshotting the chart (layout never settled): ${err instanceof Error ? err.message : String(err)}`,
