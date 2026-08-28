@@ -45,11 +45,18 @@ export interface AnthropicLike {
 interface AnthropicCreateBody {
   model: string;
   max_tokens: number;
-  system?: string;
+  system?: string | AnthropicSystemBlock[];
   messages: Array<{ role: 'user'; content: AnthropicRequestBlock[] }>;
   /** Adaptive thinking, kept on but bounded by `output_config.effort`. */
   thinking?: { type: 'adaptive' | 'disabled' };
   output_config?: { effort: EffortLevel };
+}
+
+interface AnthropicSystemBlock {
+  type: 'text';
+  text: string;
+  /** Marks everything up to and including this block as a cache breakpoint. */
+  cache_control?: { type: 'ephemeral' };
 }
 
 type AnthropicRequestBlock =
@@ -118,7 +125,13 @@ export class ClaudeVlmProvider implements VlmProvider {
       max_tokens: this.#maxTokens,
       thinking: { type: this.#thinking },
       output_config: { effort: this.#effort },
-      system: request.systemPrompt,
+      // The system prompt is a fixed template (shared indicator params +
+      // instructions), byte-for-byte identical across every ticker
+      // analyzed; only the per-request image/instruction below differs. A
+      // cache breakpoint here lets a call within the TTL of a prior one
+      // (any ticker, not just a repeat of the same one — the cache key is
+      // the prompt content, not the ticker) skip re-processing this prefix.
+      system: [{ type: 'text', text: request.systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [
         {
           role: 'user',

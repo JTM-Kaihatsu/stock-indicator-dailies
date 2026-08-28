@@ -42,7 +42,7 @@ test('maps the request to a Claude vision call', async () => {
 
   const body = lastBody() as any;
   assert.equal(body.model, DEFAULT_CLAUDE_MODEL);
-  assert.equal(body.system, 'SYSTEM');
+  assert.deepEqual(body.system, [{ type: 'text', text: 'SYSTEM', cache_control: { type: 'ephemeral' } }]);
   assert.equal(body.messages[0].role, 'user');
   const [imageBlock, textBlock] = body.messages[0].content;
   assert.deepEqual(imageBlock, {
