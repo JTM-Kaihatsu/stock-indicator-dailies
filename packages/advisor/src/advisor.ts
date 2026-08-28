@@ -161,7 +161,13 @@ async function runLoop(ticker: string, options: RunLoopOptions): Promise<Advisor
       response = await client.messages.create({
         model,
         max_tokens: maxTokens,
-        system: SYSTEM_PROMPT,
+        // Fixed, byte-for-byte identical on every call (no ticker-specific
+        // content); a cache breakpoint here lets a call within the TTL of a
+        // prior one (any ticker) skip re-processing it. Below the ~1024-token
+        // minimum to actually cache on its own today, but harmless to mark —
+        // costs nothing if ignored, and combines with `tools` below (also
+        // part of the same cached prefix) if that grows enough to clear it.
+        system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
         tools,
         tool_choice: forcing ? { type: 'tool', name: 'propose_settings' } : { type: 'auto' },
         messages,
