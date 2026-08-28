@@ -97,14 +97,36 @@ async function runExclusive(ticker: string): Promise<DailyResult> {
   const cached = await getCachedReport(ticker);
   if (cached) return { ok: true, report: cached };
 
-  ensureInitialized();
-  const result = await runDaily({ ticker, agent: agent!, provider: provider! });
-  if (result.ok) {
-    // Independent, both best-effort: run concurrently rather than
-    // sequentially awaiting each.
-    await Promise.all([cacheReport(result.report), logSignalHistory(result.report)]);
-  } else {
-    await logFailure(ticker, result);
+  try {
+    ensureInitialized();
+    const result = await runDaily({ ticker, agent: agent!, provider: provider! });
+    if (result.ok) {
+      // Independent, both best-effort: run concurrently rather than
+      // sequentially awaiting each.
+      await Promise.all([cacheReport(result.report), logSignalHistory(result.report)]);
+    } else {
+      await logFailure(ticker, result);
+    }
+    return result;
+  } catch (err) {
+    // runDaily already wraps every stage it knows about in its own
+    // try/catch, converting expected failures into a clean `ok: false`
+    // logged via logFailure above — so reaching here means something threw
+    // from *outside* that coverage (this function's own `ensureInitialized`,
+    // or an unanticipated bug). Without this, the daily scheduler's sweep
+    // (scheduler.ts) only console.errors it and moves on to the next
+    // ticker: no capture_failures row, no way to tell afterward whether a
+    // ticker was ever even attempted that day versus genuinely failed.
+    // Logged here, then re-thrown so callers see the same behavior as
+    // before (the scheduler's console.error, an ad-hoc caller's rejection).
+    const failure: Extract<DailyResult, { ok: false }> = {
+      ok: false,
+      stage: 'capture',
+      reason: 'unexpected-exception',
+      errors: [err instanceof Error ? err.message : String(err)],
+      timings: { captureMs: 0, analyzeMs: 0, deterministicMs: 0, totalMs: 0, withinTarget: false },
+    };
+    await logFailure(ticker, failure);
+    throw err;
   }
-  return result;
 }
