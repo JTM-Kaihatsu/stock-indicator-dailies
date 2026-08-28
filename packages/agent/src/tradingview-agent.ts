@@ -10,6 +10,7 @@ import { resolveProfileDir } from './session.ts';
 import { extractIntervalToken } from './interval.ts';
 import { validateStudies } from './studies.ts';
 import { looksLikePopupOverlay } from './pixel-popup.ts';
+import { hasForeignOverlayOverChart } from './dom-overlap.ts';
 
 /**
  * Standard flags for running headless Chromium under memory pressure
@@ -194,11 +195,18 @@ export class TradingViewChartAgent implements ChartAgent {
     // close one whose markup doesn't match its selectors. Fail closed rather
     // than silently sending Claude a chart with a promo banner over it: one
     // more attempt, then verify, then give up loudly with the evidence attached.
-    if (await hasVisiblePopup(page)) {
+    //
+    // Two independent checks, not one: hasVisiblePopup only recognizes a
+    // known selector; hasForeignOverlayOverChart doesn't care what a popup
+    // looks like or is classed as, only whether *something* outside the
+    // chart is geometrically sitting on top of it — the two catch different
+    // failure modes (see dom-overlap.ts for why the selector-based one alone
+    // isn't enough).
+    if ((await hasVisiblePopup(page)) || (await hasForeignOverlayOverChart(page, this.#profile.selectors.chartContainer))) {
       await dismissPopups(page);
       await page.waitForTimeout(500);
     }
-    if (await hasVisiblePopup(page)) {
+    if ((await hasVisiblePopup(page)) || (await hasForeignOverlayOverChart(page, this.#profile.selectors.chartContainer))) {
       const image = await screenshotChart(chart);
       throw new ChartAcquisitionError(
         'popup-blocking',
