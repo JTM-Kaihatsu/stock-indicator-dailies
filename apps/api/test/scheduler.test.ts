@@ -31,20 +31,42 @@ test('is strictly-after: now exactly at 7am ET rolls to tomorrow, not today', ()
   assert.equal(next.toISOString(), '2026-01-16T12:00:00.000Z');
 });
 
-test('spring-forward transition day: 7am ET lands in EDT (UTC-4), no double-fire', () => {
-  // now: 2026-03-07 08:00 ET = 13:00 UTC (EST, the day before the transition).
+test('spring-forward transition weekend: skipped as a weekend, lands on Monday already in EDT', () => {
+  // now: 2026-03-07 08:00 ET (Saturday, EST) = 13:00 UTC.
   const now = new Date('2026-03-07T13:00:00Z');
   const next = computeNextRunAt(now);
-  // 2026-03-08 is the transition day; by 7am it's already EDT.
-  assert.equal(next.toISOString(), '2026-03-08T11:00:00.000Z');
+  // 2026-03-08 (the actual DST-transition day) is a Sunday and is skipped;
+  // 2026-03-09 (Monday) is already in EDT.
+  assert.equal(next.toISOString(), '2026-03-09T11:00:00.000Z');
 });
 
-test('fall-back transition day: 7am ET lands in EST (UTC-5), no skipped day', () => {
-  // now: 2026-10-31 08:00 ET = 12:00 UTC (EDT, the day before the transition).
+test('fall-back transition weekend: skipped as a weekend, lands on Monday already in EST', () => {
+  // now: 2026-10-31 08:00 ET (Saturday, EDT) = 12:00 UTC.
   const now = new Date('2026-10-31T12:00:00Z');
   const next = computeNextRunAt(now);
-  // 2026-11-01 is the transition day; by 7am it's already EST.
-  assert.equal(next.toISOString(), '2026-11-01T12:00:00.000Z');
+  // 2026-11-01 (the actual DST-transition day) is a Sunday and is skipped;
+  // 2026-11-02 (Monday) is already in EST.
+  assert.equal(next.toISOString(), '2026-11-02T12:00:00.000Z');
+});
+
+// 2026-01-15 is a Thursday; 16th Friday, 17th Saturday, 18th Sunday, 19th Monday.
+
+test('weekend skip: Friday evening rolls to Monday, not Saturday', () => {
+  const now = new Date('2026-01-17T01:00:00Z'); // 2026-01-16 20:00 ET (Friday night, EST)
+  const next = computeNextRunAt(now);
+  assert.equal(next.toISOString(), '2026-01-19T12:00:00.000Z'); // Monday 7am EST
+});
+
+test('weekend skip: Saturday rolls to Monday', () => {
+  const now = new Date('2026-01-17T17:00:00Z'); // 2026-01-17 12:00 ET (Saturday noon, EST)
+  const next = computeNextRunAt(now);
+  assert.equal(next.toISOString(), '2026-01-19T12:00:00.000Z'); // Monday 7am EST
+});
+
+test('weekend skip: Sunday rolls to Monday', () => {
+  const now = new Date('2026-01-18T17:00:00Z'); // 2026-01-18 12:00 ET (Sunday noon, EST)
+  const next = computeNextRunAt(now);
+  assert.equal(next.toISOString(), '2026-01-19T12:00:00.000Z'); // Monday 7am EST
 });
 
 test('custom hourET is respected', () => {
