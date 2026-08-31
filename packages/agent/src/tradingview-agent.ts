@@ -11,6 +11,7 @@ import { extractIntervalToken } from './interval.ts';
 import { validateStudies } from './studies.ts';
 import { looksLikePopupOverlay } from './pixel-popup.ts';
 import { hasForeignOverlayOverChart } from './dom-overlap.ts';
+import { findUnpaintedPanes, getContentPaneBounds } from './pane-paint.ts';
 
 /**
  * Standard flags for running headless Chromium under memory pressure
@@ -246,10 +247,58 @@ export class TradingViewChartAgent implements ChartAgent {
           retryImage,
         );
       }
-      return retryImage;
+      return this.#verifyPanesPaintedOrThrow(page, chart, retryImage);
     }
 
-    return image;
+    return this.#verifyPanesPaintedOrThrow(page, chart, image);
+  }
+
+  /**
+   * Backstop against a pane whose legend claims a value but whose lines
+   * never actually painted — observed live: MACD and Slow Stochastic both
+   * showed real, finite legend values (so `#waitForStudies`'s
+   * `validateStudies` check, DOM-text-based, correctly called them
+   * "rendered") while the panes were visually blank in the captured image.
+   * That check has no way to catch this; it only ever reads legend text,
+   * and TradingView had decoupled that text updating from the canvas
+   * actually repainting for that one capture. See pane-paint.ts for the
+   * pixel-level detail.
+   */
+  async #verifyPanesPaintedOrThrow(page: Page, chart: Locator, image: ChartImage): Promise<ChartImage> {
+    const panes = await getContentPaneBounds(page, this.#profile.selectors.chartContainer);
+    // Fixed by the saved layout, confirmed live: price (with the SMA
+    // overlay) is pane 0, MACD is pane 1, Slow Stochastic is pane 2. Not
+    // derived from `expectedStudies`' array order (macd, slowStochastic,
+    // sma) — that's a declaration order, unrelated to on-screen position.
+    // Skip the check entirely if the layout doesn't have the panes this
+    // assumes; a capture-infrastructure surprise shouldn't block on a
+    // diagnostic that no longer applies to it.
+    if (panes.length < 3) return image;
+
+    // Same "no DOM lib in this package's tsconfig" reasoning as elsewhere
+    // in this file: reach getBoundingClientRect via an unknown cast rather
+    // than a browser-only element type.
+    const chartCssHeight = await chart.evaluate(
+      (el) => (el as unknown as { getBoundingClientRect(): { height: number } }).getBoundingClientRect().height,
+    );
+    const [macdUnpainted, stochUnpainted] = await findUnpaintedPanes(page, image.base64, [panes[1]!, panes[2]!], chartCssHeight);
+
+    if (!macdUnpainted && !stochUnpainted) return image;
+
+    await dismissPopups(page);
+    await page.waitForTimeout(1500);
+    const retryImage = await this.#screenshotChartOrThrow(page, chart);
+    const [macdStillUnpainted, stochStillUnpainted] = await findUnpaintedPanes(page, retryImage.base64, [panes[1]!, panes[2]!], chartCssHeight);
+    if (macdStillUnpainted || stochStillUnpainted) {
+      const which = [macdStillUnpainted && 'MACD', stochStillUnpainted && 'Slow Stochastic'].filter(Boolean).join(' and ');
+      throw new ChartAcquisitionError(
+        'studies-not-rendered',
+        `${which} pane's legend has values but its plotted lines never painted (pixel check found no ` +
+          `blue/orange line color in the pane), even after retrying; the captured image would show a blank pane`,
+        retryImage,
+      );
+    }
+    return retryImage;
   }
 
   /** Screenshots the chart (does not itself check for a popup — that's the

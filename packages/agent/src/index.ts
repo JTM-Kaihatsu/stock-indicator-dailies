@@ -7,5 +7,6 @@ export * from './studies.ts';
 export * from './interval.ts';
 export * from './pixel-popup.ts';
 export * from './dom-overlap.ts';
+export * from './pane-paint.ts';
 export * from './tradingview-agent.ts';
 export * from './profiles/tradingview.ts';
