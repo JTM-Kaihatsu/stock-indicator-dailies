@@ -60,6 +60,7 @@ interface PageGlobals {
     width: number;
     height: number;
   };
+  setTimeout(fn: () => void, ms: number): unknown;
 }
 
 /**
@@ -71,14 +72,23 @@ interface PageGlobals {
 export async function looksLikePopupOverlay(page: Page, base64Png: string): Promise<boolean> {
   try {
     const stats = await page.evaluate(async (b64) => {
-      const { document: doc, Image } = globalThis as unknown as PageGlobals;
+      const { document: doc, Image, setTimeout: pageSetTimeout } = globalThis as unknown as PageGlobals;
       const img = new Image();
       const loaded = new Promise<void>((resolve, reject) => {
         img.onload = () => resolve();
         img.onerror = () => reject(new Error('image decode failed'));
       });
       img.src = `data:image/png;base64,${b64}`;
-      await loaded;
+      // `page.evaluate` itself has no timeout of its own (unlike this
+      // package's locator-based calls, which all pass an explicit
+      // `timeout`) — an onload/onerror that never fires for any reason
+      // would otherwise hang this call, and everything queued behind it,
+      // forever. A decode this small normally completes in milliseconds;
+      // 5s is a hard, generous ceiling, not a tuned budget.
+      const timedOut = new Promise<void>((_, reject) => {
+        pageSetTimeout(() => reject(new Error('image decode timed out')), 5000);
+      });
+      await Promise.race([loaded, timedOut]);
 
       const canvas = doc.createElement('canvas');
       const width = 160; // downsampled; only aggregate stats are needed, not pixel-perfect detail
