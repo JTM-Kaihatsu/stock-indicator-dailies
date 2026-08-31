@@ -60,23 +60,49 @@ function zonedWallClockToUtc(
   return guess;
 }
 
+/** Whether the given (year, month, day) calendar date — as read from
+ * `wallClockPartsInZone`, so already the *local* ET date, not a UTC one —
+ * falls on a Saturday or Sunday. `Date.UTC` with those same Y/M/D numbers is
+ * a pure calendar computation (which weekday does this date fall on), not a
+ * timezone conversion; using UTC here avoids the local *system* timezone
+ * `new Date(y, m, d).getDay()` would otherwise depend on. */
+function isWeekend(year: number, month: number, day: number): boolean {
+  const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay(); // 0=Sun .. 6=Sat
+  return dayOfWeek === 0 || dayOfWeek === 6;
+}
+
 /**
- * Next America/New_York `hourET`:00:00 local time strictly after `now`.
- * DST-correct: never does fixed-offset UTC arithmetic. To find "tomorrow"
- * it advances by a real 24h from today's target instant and then re-reads
- * that instant's ET calendar date (robust to a DST day being 23 or 25
- * wall-clock hours long, since only the *date* from that reading is used;
- * the exact time is then re-derived for that date via zonedWallClockToUtc,
- * which self-corrects for whatever offset applies that day).
+ * Next America/New_York `hourET`:00:00 local time, strictly after `now`, on
+ * a weekday. Markets are closed Saturday and Sunday — no new trading bar
+ * exists to justify a run, so a would-be weekend occurrence is skipped
+ * forward to the next weekday's `hourET`:00:00 instead of firing at all.
+ *
+ * DST-correct: never does fixed-offset UTC arithmetic. To advance a day it
+ * steps forward by a real 24h from the current candidate instant and then
+ * re-reads *that* instant's ET calendar date (robust to a DST day being 23
+ * or 25 wall-clock hours long, since only the *date* from that reading is
+ * used; the exact time is then re-derived for that date via
+ * zonedWallClockToUtc, which self-corrects for whatever offset applies that
+ * day) — same technique whether advancing past "today's time already
+ * passed" or past a weekend, so the loop below handles both with one path.
  */
 export function computeNextRunAt(now: Date, hourET: number = RUN_HOUR_ET): Date {
-  const today = wallClockPartsInZone(now, WATCHLIST_TZ);
-  const todayAtHour = zonedWallClockToUtc(today.year, today.month, today.day, hourET, 0, 0, WATCHLIST_TZ);
-  if (todayAtHour.getTime() > now.getTime()) return todayAtHour;
+  let parts = wallClockPartsInZone(now, WATCHLIST_TZ);
+  let candidate = zonedWallClockToUtc(parts.year, parts.month, parts.day, hourET, 0, 0, WATCHLIST_TZ);
 
-  const roughlyTomorrow = new Date(todayAtHour.getTime() + 24 * 60 * 60 * 1000);
-  const tomorrow = wallClockPartsInZone(roughlyTomorrow, WATCHLIST_TZ);
-  return zonedWallClockToUtc(tomorrow.year, tomorrow.month, tomorrow.day, hourET, 0, 0, WATCHLIST_TZ);
+  // Bounded, not "while true": a weekend is at most 2 days, plus at most 1
+  // more for "today's time already passed" — 7 iterations is generous
+  // headroom, not a tuned figure, purely so a logic bug here fails loudly
+  // (an infinite loop) rather than never.
+  for (let i = 0; i < 7; i++) {
+    if (candidate.getTime() > now.getTime() && !isWeekend(parts.year, parts.month, parts.day)) {
+      return candidate;
+    }
+    const roughlyNextDay = new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
+    parts = wallClockPartsInZone(roughlyNextDay, WATCHLIST_TZ);
+    candidate = zonedWallClockToUtc(parts.year, parts.month, parts.day, hourET, 0, 0, WATCHLIST_TZ);
+  }
+  throw new Error('computeNextRunAt: failed to converge on a weekday within 7 days; this indicates a bug');
 }
 
 /**
