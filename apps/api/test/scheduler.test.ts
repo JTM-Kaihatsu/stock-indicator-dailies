@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { computeNextRunAt } from '../src/scheduler.ts';
+import { computeNextRunAt, isCatchUpDue } from '../src/scheduler.ts';
 
 // Expected UTC instants below were verified independently against Node's
 // own Intl formatter (not against computeNextRunAt itself) before writing
@@ -74,4 +74,34 @@ test('custom hourET is respected', () => {
   const next = computeNextRunAt(now, 9);
   // Next 9am ET after 2026-01-14 19:00 ET is 2026-01-15 09:00 ET = 14:00 UTC.
   assert.equal(next.toISOString(), '2026-01-15T14:00:00.000Z');
+});
+
+// isCatchUpDue: whether a boot happening right now should run immediately
+// (today's 7am ET already passed) rather than only scheduling the next
+// occurrence, which by computeNextRunAt's own strictly-future contract
+// would otherwise always defer an already-passed today to tomorrow —
+// exactly the gap behind a real missed sweep (the process wasn't
+// continuously up through 7am ET; on its next boot, mid-day, the normal
+// scheduler alone would have silently deferred to the following day).
+
+test('catch-up: not due before 7am ET', () => {
+  assert.equal(isCatchUpDue(new Date('2026-01-15T10:00:00Z')), false); // 5am ET, Thursday
+});
+
+test('catch-up: due exactly at 7am ET', () => {
+  assert.equal(isCatchUpDue(new Date('2026-01-15T12:00:00Z')), true); // exactly 7am ET, Thursday
+});
+
+test('catch-up: due well past 7am ET (a mid-day boot, the real-world case)', () => {
+  assert.equal(isCatchUpDue(new Date('2026-01-15T17:00:00Z')), true); // noon ET, Thursday
+});
+
+test('catch-up: never due on a weekend, regardless of time of day', () => {
+  assert.equal(isCatchUpDue(new Date('2026-01-17T17:00:00Z')), false); // Saturday noon ET
+  assert.equal(isCatchUpDue(new Date('2026-01-18T17:00:00Z')), false); // Sunday noon ET
+});
+
+test('catch-up: custom hourET is respected', () => {
+  assert.equal(isCatchUpDue(new Date('2026-01-15T13:00:00Z'), 9), false); // 8am ET, before a 9am cutoff
+  assert.equal(isCatchUpDue(new Date('2026-01-15T14:00:00Z'), 9), true); // 9am ET
 });

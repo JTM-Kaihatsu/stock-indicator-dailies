@@ -1,5 +1,6 @@
 import { getAllDistinctWatchlistedTickers } from './watchlist.ts';
 import { runPipeline } from './pipeline.ts';
+import { getSupabaseClient } from './supabaseClient.ts';
 
 /** Product decision, not deployment config: "7am ET" doesn't vary by
  * environment, so it's a constant here rather than an env var. */
@@ -106,6 +107,41 @@ export function computeNextRunAt(now: Date, hourET: number = RUN_HOUR_ET): Date 
 }
 
 /**
+ * Atomically claims today's (America/New_York calendar date) sweep: an
+ * insert that no-ops on conflict, so "has today already run" and "don't
+ * double-fire" are the same check. Exists specifically because the
+ * scheduler's normal trigger is an in-memory `setTimeout` recomputed fresh
+ * on every process boot (see `startDailyScheduler` below) — a restart that
+ * lands after today's fire time (a deploy, a host-level restart, the
+ * service not having stayed continuously up through 7am ET) would
+ * otherwise silently compute "next run = tomorrow" and skip today with no
+ * trace at all, indistinguishable afterward from every ticker just
+ * happening to fail. Returns `true` when Supabase isn't configured (same
+ * degrade-to-permissive posture local dev already has everywhere else in
+ * this codebase; there's nothing to persist the claim in), so this only
+ * ever *adds* a guard, never blocks a run that would otherwise happen.
+ */
+async function claimTodayRun(): Promise<boolean> {
+  const db = getSupabaseClient();
+  if (!db) return true;
+
+  const today = wallClockPartsInZone(new Date(), WATCHLIST_TZ);
+  const runDate = `${today.year}-${String(today.month).padStart(2, '0')}-${String(today.day).padStart(2, '0')}`;
+  try {
+    const { error } = await db.from('scheduler_runs').insert({ run_date: runDate });
+    // A unique-violation (23505) means today's row already exists — someone
+    // else claimed it first, which is the expected, common case, not a
+    // failure. Any other error degrades to "allow the run" (best-effort,
+    // same posture as every other Supabase write in this codebase) rather
+    // than silently blocking a sweep over an unrelated DB hiccup.
+    if (error) return error.code === '23505' ? false : true;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Sweeps every distinct watchlisted ticker (across all users) through
  * runPipeline. Sequential, not Promise.all: the pipeline's own queue
  * already serializes on the single TradingView browser session, so
@@ -116,6 +152,11 @@ export function computeNextRunAt(now: Date, hourET: number = RUN_HOUR_ET): Date 
  * short-circuits for free inside runPipeline.
  */
 export async function runDailyWatchlistJob(): Promise<void> {
+  if (!(await claimTodayRun())) {
+    console.log('[watchlist scheduler] today has already run; skipping (this call was a duplicate trigger)');
+    return;
+  }
+
   const tickers = await getAllDistinctWatchlistedTickers();
   console.log(`[watchlist scheduler] starting daily sweep of ${tickers.length} ticker(s)`);
   for (const ticker of tickers) {
@@ -129,16 +170,37 @@ export async function runDailyWatchlistJob(): Promise<void> {
   console.log('[watchlist scheduler] daily sweep complete');
 }
 
-/** Starts the recurring scheduler: a setTimeout to the next occurrence,
+/** Whether today (America/New_York) is a weekday whose `hourET` has already
+ * passed — i.e. whether a boot happening right now should catch up on a
+ * possibly-missed run rather than only scheduling for the next occurrence
+ * (which, by `computeNextRunAt`'s own strictly-future contract, would
+ * otherwise always defer an already-passed today to tomorrow). */
+export function isCatchUpDue(now: Date, hourET: number = RUN_HOUR_ET): boolean {
+  const today = wallClockPartsInZone(now, WATCHLIST_TZ);
+  if (isWeekend(today.year, today.month, today.day)) return false;
+  const todayAtHour = zonedWallClockToUtc(today.year, today.month, today.day, hourET, 0, 0, WATCHLIST_TZ);
+  return now.getTime() >= todayAtHour.getTime();
+}
+
+/**
+ * Starts the recurring scheduler: a setTimeout to the next occurrence,
  * rescheduling from a fresh `now` after every fire (rather than a fixed
- * 24h repeating interval) so drift or a missed tick can't accumulate. */
-export function startDailyScheduler(onTick: () => Promise<void>): { stop: () => void } {
+ * 24h repeating interval) so drift or a missed tick can't accumulate.
+ *
+ * Also checks on startup whether today's run is already overdue (see
+ * `isCatchUpDue`) and fires immediately if so, before scheduling the next
+ * occurrence as usual — `claimTodayRun` inside `onTick` (normally
+ * `runDailyWatchlistJob`) makes this safe to call speculatively: it's a
+ * genuine catch-up if today never ran, and a harmless no-op (logged, not
+ * silent) if it already did.
+ */
+export function startDailyScheduler(onTick: () => Promise<void>, hourET: number = RUN_HOUR_ET): { stop: () => void } {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
 
   function scheduleNext() {
     if (stopped) return;
-    const next = computeNextRunAt(new Date());
+    const next = computeNextRunAt(new Date(), hourET);
     const delayMs = next.getTime() - Date.now();
     console.log(`[watchlist scheduler] next run at ${next.toISOString()} (in ${Math.round(delayMs / 60000)}min)`);
     timer = setTimeout(async () => {
@@ -151,7 +213,15 @@ export function startDailyScheduler(onTick: () => Promise<void>): { stop: () => 
     }, delayMs);
   }
 
-  scheduleNext();
+  if (isCatchUpDue(new Date(), hourET)) {
+    console.log('[watchlist scheduler] startup catch-up check: today is already due; running now');
+    onTick()
+      .catch((err) => console.error('[watchlist scheduler] catch-up run threw', err))
+      .finally(scheduleNext);
+  } else {
+    scheduleNext();
+  }
+
   return {
     stop() {
       stopped = true;
