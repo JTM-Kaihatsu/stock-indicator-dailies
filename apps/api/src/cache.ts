@@ -48,29 +48,58 @@ export async function getCachedReport(ticker: string): Promise<DailyReport | nul
   }
 }
 
-/** Persist a successful report, overwriting any prior row for the ticker.
- * Best-effort, like {@link logFailure}: caching is an optimization, not part
- * of the actual result, so a Supabase hiccup here must never turn an
- * already-successful analysis into a reported failure for the caller. */
+/**
+ * Persist a successful report, overwriting any prior row for the ticker.
+ * Best-effort in the sense that a Supabase hiccup here must never turn an
+ * already-successful analysis into a reported failure for the caller (the
+ * pipeline already logged "ok" and the daily scheduler moves on to the next
+ * ticker regardless) — but "best-effort" must not mean "silent." It used to:
+ * a failed image upload returned early with no log at all, and the upsert's
+ * own result was never even inspected. Live evidence of exactly this: a
+ * real sweep logged "ok" for all 10 watchlisted tickers, yet only 1 of 10
+ * actually landed in chart_cache — the other 9 had already been fully,
+ * expensively computed (a real capture + VLM analysis each) and then
+ * silently discarded on the write, with nothing anywhere — not even Render's
+ * own logs — to show it had happened.
+ *
+ * Retries the write itself (not the whole analysis) a couple of times with
+ * a short backoff before giving up: the analysis is the expensive, already-
+ * sunk part, so a transient storage/DB error is worth a cheap second and
+ * third attempt rather than discarding a correct, fully-computed report
+ * over it. Logs loudly (console.error, so it's visible the same way the
+ * "ok"/"failed" lines already are) if every attempt fails.
+ */
 export async function cacheReport(report: DailyReport): Promise<void> {
   const db = getClient();
   if (!db) return;
 
-  try {
-    const imagePath = `${report.ticker}.png`;
-    const uploaded = await uploadImage(db, imagePath, report.image);
-    if (!uploaded) return;
+  const imagePath = `${report.ticker}.png`;
+  const { image: _image, ...rest } = report;
+  const row = { ticker: report.ticker, retrieved_at: new Date().toISOString(), report: rest, image_path: imagePath };
 
-    const { image: _image, ...rest } = report;
-    await db.from('chart_cache').upsert({
-      ticker: report.ticker,
-      retrieved_at: new Date().toISOString(),
-      report: rest,
-      image_path: imagePath,
-    });
-  } catch {
-    // Best-effort; never let caching itself fail an otherwise-successful request.
+  const attempts = 3;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const uploadError = await uploadImage(db, imagePath, report.image);
+      if (uploadError) {
+        lastError = uploadError;
+      } else {
+        const { error: upsertError } = await db.from('chart_cache').upsert(row);
+        if (!upsertError) return; // success
+        lastError = upsertError;
+      }
+    } catch (err) {
+      lastError = err;
+    }
+    if (attempt < attempts) await sleep(attempt * 1000); // 1s, then 2s
   }
+
+  console.error(`[cacheReport] ${report.ticker}: failed to persist after ${attempts} attempts`, lastError);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Log a failed run for later review. Never throws; a logging failure must
@@ -86,8 +115,8 @@ export async function logFailure(
     let imagePath: string | null = null;
     if (failure.image) {
       imagePath = `failures/${ticker}-${Date.now()}.png`;
-      const uploaded = await uploadImage(db, imagePath, failure.image);
-      if (!uploaded) imagePath = null;
+      const uploadError = await uploadImage(db, imagePath, failure.image);
+      if (uploadError) imagePath = null;
     }
 
     await db.from('capture_failures').insert({
@@ -131,13 +160,17 @@ export async function getLatestFailure(ticker: string): Promise<LatestFailure | 
   }
 }
 
-async function uploadImage(db: SupabaseClient, path: string, image: ChartImage): Promise<boolean> {
+/** Returns the Supabase error on failure, `undefined` on success — not a
+ * boolean, so callers that need to know *why* (cacheReport, for logging)
+ * can, while callers that only need yes/no (logFailure) just check
+ * truthiness the same way. */
+async function uploadImage(db: SupabaseClient, path: string, image: ChartImage): Promise<unknown> {
   const bytes = Buffer.from(image.base64, 'base64');
   const { error } = await db.storage.from(BUCKET).upload(path, bytes, {
     contentType: image.mediaType,
     upsert: true,
   });
-  return !error;
+  return error ?? undefined;
 }
 
 async function downloadImage(db: SupabaseClient, path: string): Promise<ChartImage | undefined> {
