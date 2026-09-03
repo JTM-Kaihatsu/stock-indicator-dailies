@@ -1,0 +1,80 @@
+# Local-only, for Datadog trial exploration — not part of the deployed app,
+# not committed. Run via Docker (see the command Claude gave you), not
+# installed on any host this app actually runs on.
+#
+# receivers section is exactly what Datadog's onboarding UI gave in step 1;
+# everything else here matches their steps 2-5 exactly (the Datadog
+# exporter + connector, the tuned batch processor, and the pipeline
+# wiring), rather than a simplified guess — the `datadog/connector` is
+# Datadog's current-recommended architecture: it sits in the traces
+# pipeline computing APM stats (trace metrics like request/error/latency
+# counts) and feeds those into the metrics pipeline, which a single plain
+# exporter wouldn't do on its own.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: "0.0.0.0:4318" # 0.0.0.0, not localhost: this runs inside
+      grpc: # the container; "localhost" there means
+        endpoint: "0.0.0.0:4317" # the container itself, not your Mac.
+  hostmetrics:
+    collection_interval: 10s
+    scrapers:
+      paging:
+        metrics:
+          system.paging.utilization:
+            enabled: true
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      disk:
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      load:
+      memory:
+      network:
+      processes:
+
+processors:
+  batch:
+    send_batch_max_size: 100
+    send_batch_size: 10
+    timeout: 10s
+
+connectors:
+  datadog/connector:
+
+exporters:
+  datadog/exporter:
+    api:
+      # Never put the real key in this file — `${env:DD_API_KEY}` is the
+      # Collector's own env-var substitution syntax; the value only ever
+      # lives in the `docker run -e` flag.
+      key: ${env:DD_API_KEY}
+      # Change this if your trial account isn't on the default US1 site —
+      # check the URL you log into Datadog with: datadoghq.com (US1, most
+      # common), us3.datadoghq.com, us5.datadoghq.com, datadoghq.eu, or
+      # ap1.datadoghq.com.
+      site: datadoghq.com
+
+service:
+  pipelines:
+    metrics:
+      receivers: [datadog/connector, otlp, hostmetrics]
+      processors: [batch]
+      exporters: [datadog/exporter]
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [datadog/connector, datadog/exporter]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [datadog/exporter]
+  telemetry:
+    logs:
+      level: info
