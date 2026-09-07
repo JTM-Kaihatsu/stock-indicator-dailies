@@ -22,7 +22,7 @@ export interface ExpectedStudy {
   valueTitles: readonly string[];
 }
 
-const { macd, slowStochastic, sma } = INDICATOR_PARAMS;
+const { sma, macd, slowStochastic } = INDICATOR_PARAMS;
 
 /**
  * TradingView renders each study's legend as the name, optional source, then its
@@ -39,6 +39,12 @@ const { macd, slowStochastic, sma } = INDICATOR_PARAMS;
  */
 export const TRADINGVIEW_EXPECTED_STUDIES: readonly ExpectedStudy[] = [
   {
+    key: 'sma',
+    label: `SMA (${sma.period})`,
+    legendPattern: new RegExp(`^SMA${sma.period}(?!\\d)`),
+    valueTitles: ['MA'],
+  },
+  {
     key: 'macd',
     label: `MACD (${macd.fastLength}, ${macd.slowLength}, ${macd.signalSmoothing})`,
     legendPattern: new RegExp(
@@ -53,12 +59,6 @@ export const TRADINGVIEW_EXPECTED_STUDIES: readonly ExpectedStudy[] = [
       `^Stoch${slowStochastic.percentKLength}${slowStochastic.percentKSmoothing}${slowStochastic.percentDSmoothing}`,
     ),
     valueTitles: ['%K', '%D'],
-  },
-  {
-    key: 'sma',
-    label: `SMA (${sma.period})`,
-    legendPattern: new RegExp(`^SMA${sma.period}(?!\\d)`),
-    valueTitles: ['MA'],
   },
 ];
 

@@ -140,7 +140,7 @@ function rates(comparisons: readonly FactComparison[]): AgreementRates {
 
 /** Roll a flat list of comparisons up into overall + per-indicator agreement rates. */
 export function summarize(comparisons: readonly FactComparison[]): AgreementSummary {
-  const keys: IndicatorKey[] = ['macd', 'slowStochastic', 'sma'];
+  const keys: IndicatorKey[] = ['sma', 'macd', 'slowStochastic'];
   const perIndicator = Object.fromEntries(
     keys.map((k) => [k, rates(comparisons.filter((c) => c.indicator === k))]),
   ) as Record<IndicatorKey, AgreementRates>;

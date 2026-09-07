@@ -129,7 +129,7 @@ line('barsAgo MAE', mae(vlm.barsAgo.mean), mae(fetched.barsAgo.mean));
 line('suggestion acc', pct(vlmSuggestionAcc), pct(fetchedSuggestionAcc));
 
 console.log('\nper-indicator direction / signal accuracy (VLM | Fetched):');
-for (const key of ['macd', 'slowStochastic', 'sma'] as const) {
+for (const key of ['sma', 'macd', 'slowStochastic'] as const) {
   const v = vlm.perIndicator[key];
   const f = fetched.perIndicator[key];
   console.log(

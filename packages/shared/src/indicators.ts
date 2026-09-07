@@ -6,9 +6,9 @@ import type { IndicatorKey } from './types.ts';
  * ever drift apart.
  */
 export const INDICATOR_KEYS = [
+  'sma',
   'macd',
   'slowStochastic',
-  'sma',
 ] as const satisfies readonly IndicatorKey[];
 
 /**
@@ -20,6 +20,8 @@ export const INDICATOR_KEYS = [
  * captured chart and every ground-truth label assumes exactly these settings.
  */
 export const INDICATOR_PARAMS = {
+  /** Simple Moving Average: period 10. */
+  sma: { period: 10 },
   /** MACD: Fast Length 8, Slow Length 17, Signal Smoothing 9. */
   macd: { fastLength: 8, slowLength: 17, signalSmoothing: 9 },
   /**
@@ -35,8 +37,6 @@ export const INDICATOR_PARAMS = {
    * signal measures a setup that isn't on screen.
    */
   slowStochastic: { percentKLength: 14, percentKSmoothing: 5, percentDSmoothing: 3 },
-  /** Simple Moving Average: period 10. */
-  sma: { period: 10 },
 } as const;
 
 /**
