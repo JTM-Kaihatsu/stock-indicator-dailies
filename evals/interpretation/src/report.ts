@@ -38,7 +38,7 @@ export function formatReport(run: EvalRun): string {
   lines.push('');
   lines.push('  agreement (label ground truth manually in the CSV)');
   lines.push(ratesLine('  overall', run.summary));
-  for (const key of ['macd', 'slowStochastic', 'sma'] as const) {
+  for (const key of ['sma', 'macd', 'slowStochastic'] as const) {
     lines.push(ratesLine(`    ${key}`, run.summary.perIndicator[key]));
   }
   lines.push('');

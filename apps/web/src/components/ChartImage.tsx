@@ -4,6 +4,10 @@ export function ChartImage({ image, ticker }: { image: ChartImageType; ticker: s
   return (
     <section>
       <div className="section-label">Source chart</div>
+      <div style={{ color: 'var(--faint)', fontSize: 12, marginTop: 4, marginBottom: 12 }}>
+        The charts displayed are in the following order: SMA (10-day), MACD (8, 17, 9), and Slow
+        Stochastic (14, 5, 3).
+      </div>
       <figure>
         <img
           className="chart-img"

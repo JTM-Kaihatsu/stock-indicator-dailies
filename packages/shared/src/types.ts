@@ -1,5 +1,5 @@
 /** The three technical indicators Stock Indicator Dailies evaluates on every chart. */
-export type IndicatorKey = 'macd' | 'slowStochastic' | 'sma';
+export type IndicatorKey = 'sma' | 'macd' | 'slowStochastic';
 
 /**
  * A single indicator's derived directional signal, after the recency/zone rules

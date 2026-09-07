@@ -268,8 +268,8 @@ export class TradingViewChartAgent implements ChartAgent {
     const panes = await getContentPaneBounds(page, this.#profile.selectors.chartContainer);
     // Fixed by the saved layout, confirmed live: price (with the SMA
     // overlay) is pane 0, MACD is pane 1, Slow Stochastic is pane 2. Not
-    // derived from `expectedStudies`' array order (macd, slowStochastic,
-    // sma) — that's a declaration order, unrelated to on-screen position.
+    // derived from `expectedStudies`' array order (sma, macd, slowStochastic)
+    // — that's a declaration order, unrelated to on-screen position.
     // Skip the check entirely if the layout doesn't have the panes this
     // assumes; a capture-infrastructure surprise shouldn't block on a
     // diagnostic that no longer applies to it.

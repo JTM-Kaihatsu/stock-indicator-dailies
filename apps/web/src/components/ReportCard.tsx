@@ -8,7 +8,7 @@ import { SignalPill } from './SignalPill';
 import { IndicatorRow } from './IndicatorRow';
 import { ChartImage } from './ChartImage';
 
-const INDICATORS: IndicatorKey[] = ['macd', 'slowStochastic', 'sma'];
+const INDICATORS: IndicatorKey[] = ['sma', 'macd', 'slowStochastic'];
 
 function sigClass(s: string): string {
   if (s === 'BUY') return 'sig-buy';
