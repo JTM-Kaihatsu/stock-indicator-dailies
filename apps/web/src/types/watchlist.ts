@@ -8,7 +8,7 @@ import type { DailyReport } from '@/types/api';
 
 export type WatchlistSettings = DeriveSignalOptions;
 
-export type WatchlistTickerStatus = 'ready' | 'running' | 'failed';
+export type WatchlistTickerStatus = 'ready' | 'running' | 'failed' | 'stale';
 
 export interface WatchlistDashboardRow {
   ticker: string;
@@ -16,6 +16,10 @@ export interface WatchlistDashboardRow {
   computed: Signal | null;
   ai: Signal | null;
   asOf: string | null;
+  /** 'ready' fresh · 'running' capture in flight · 'stale' a real read on
+   * record but past the 24h window with no newer failure (signal shown is
+   * last known; the next sweep refreshes it) · 'failed' nothing on record,
+   * or the last attempt failed. */
   status: WatchlistTickerStatus;
   /** Since when the Overall signal has held its current value; null if
    * there's no history yet. */

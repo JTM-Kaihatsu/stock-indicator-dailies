@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { outageMessageFor, recomputeReport, resolveDualOverall, type DeriveSignalOptions, type Signal } from '@stock-indicator-dailies/shared';
 
-import { getCachedReport, getLatestFailure } from '../cache.ts';
+import { getCachedReport, getCachedReportMeta, getLatestFailure } from '../cache.ts';
 import { canAttempt, isRunning, runPipeline } from '../pipeline.ts';
 import { parseTicker } from '../ticker.ts';
 import { addToWatchlist, getWatchlist, removeFromWatchlist, reorderWatchlist, updateScenarioSettings, updateWatchlistSettings } from '../watchlist.ts';
@@ -11,7 +11,7 @@ import { getLastChangedMap } from '../signalHistory.ts';
 
 export const watchlistRoute = new Hono();
 
-export type WatchlistTickerStatus = 'ready' | 'running' | 'failed';
+export type WatchlistTickerStatus = 'ready' | 'running' | 'failed' | 'stale';
 
 export interface WatchlistDashboardRow {
   ticker: string;
@@ -19,6 +19,14 @@ export interface WatchlistDashboardRow {
   computed: Signal | null;
   ai: Signal | null;
   asOf: string | null;
+  /**
+   * 'ready'   fresh read (within the 24h window)
+   * 'running' a capture is in flight now
+   * 'stale'   a real read on record but past 24h, with no newer failure;
+   *           the signal shown is the last known one, and the next morning
+   *           sweep will refresh it
+   * 'failed'  no read on record, or the most recent attempt actually failed
+   */
   status: WatchlistTickerStatus;
   /** Since when the Overall signal has held its current value; null if
    * there's no history yet (e.g. still pending its first capture). */
@@ -66,27 +74,43 @@ watchlistRoute.get('/watchlist', requireAuth, async (c) => {
   const tickers = entries.map((e) => e.ticker);
   const lastChangedMap = await getLastChangedMap(tickers);
 
+  const blankRow = (ticker: string, status: WatchlistTickerStatus, lastChangedAt: string | null, settings: DeriveSignalOptions | null): WatchlistDashboardRow => ({
+    ticker, overall: null, computed: null, ai: null, asOf: null, status, lastChangedAt, settings,
+  });
+
   const rows: WatchlistDashboardRow[] = await Promise.all(
     entries.map(async ({ ticker, settings }): Promise<WatchlistDashboardRow> => {
       const lastChangedAt = lastChangedMap.get(ticker) ?? null;
-      const cached = await getCachedReport(ticker);
-      if (!cached) {
-        const status: WatchlistTickerStatus = isRunning(ticker) ? 'running' : 'failed';
-        return { ticker, overall: null, computed: null, ai: null, asOf: null, status, lastChangedAt, settings };
-      }
-      const report = recomputeReport(cached, settings ?? {});
+      const meta = await getCachedReportMeta(ticker);
+
+      // Nothing ever captured for this ticker (or its row is gone).
+      if (!meta) return blankRow(ticker, isRunning(ticker) ? 'running' : 'failed', lastChangedAt, settings);
+
+      const report = recomputeReport(meta.report, settings ?? {});
       const computed = report.deterministic?.signal ?? null;
       const ai = report.verdict.signal;
-      return {
+      const withSignal = {
         ticker,
         overall: resolveDualOverall(computed, ai),
         computed,
         ai,
         asOf: report.deterministic?.asOf ?? null,
-        status: 'ready',
         lastChangedAt,
         settings,
       };
+
+      if (!meta.stale) return { ...withSignal, status: 'ready' };
+      if (isRunning(ticker)) return { ...withSignal, status: 'running' };
+
+      // Stale read on record. If the newest thing that happened for this
+      // ticker is a failure more recent than that read, it's a real
+      // failure; otherwise it's just old and the next sweep will catch it.
+      const failure = await getLatestFailure(ticker);
+      const lastAttemptFailed =
+        failure !== null && new Date(failure.occurredAt).getTime() > new Date(meta.retrievedAt).getTime();
+      return lastAttemptFailed
+        ? blankRow(ticker, 'failed', lastChangedAt, settings)
+        : { ...withSignal, status: 'stale' };
     }),
   );
 
