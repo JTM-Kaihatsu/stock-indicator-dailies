@@ -48,6 +48,51 @@ export async function getCachedReport(ticker: string): Promise<DailyReport | nul
   }
 }
 
+export interface CachedReportMeta {
+  /**
+   * The stored DailyReport minus its chart image. The watchlist dashboard
+   * shows a signal and a date, never the PNG, so this skips the Storage
+   * download `getCachedReport` does.
+   */
+  report: Omit<DailyReport, 'image'>;
+  retrievedAt: string;
+  /**
+   * Older than the freshness window. Still returned here (a stale read is
+   * worth showing as "as of <date>"), where `getCachedReport` returns null.
+   */
+  stale: boolean;
+}
+
+/**
+ * The stored read for `ticker` regardless of age and without the image
+ * download. Lets the watchlist dashboard tell "we have an old read, the
+ * next sweep will refresh it" apart from "nothing / it failed", instead of
+ * collapsing both to an outright failure the moment a row crosses 24h.
+ * `null` only on a genuine miss or a Supabase-side error.
+ */
+export async function getCachedReportMeta(ticker: string): Promise<CachedReportMeta | null> {
+  const db = getClient();
+  if (!db) return null;
+
+  try {
+    const { data, error } = await db
+      .from('chart_cache')
+      .select('retrieved_at, report')
+      .eq('ticker', ticker)
+      .maybeSingle<{ retrieved_at: string; report: Omit<DailyReport, 'image'> }>();
+    if (error || !data) return null;
+
+    const ageMs = Date.now() - new Date(data.retrieved_at).getTime();
+    return {
+      report: data.report,
+      retrievedAt: data.retrieved_at,
+      stale: ageMs > CACHE_WINDOW_HOURS * 60 * 60 * 1000,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Persist a successful report, overwriting any prior row for the ticker.
  * Best-effort in the sense that a Supabase hiccup here must never turn an

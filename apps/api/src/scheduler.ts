@@ -147,9 +147,14 @@ async function claimTodayRun(): Promise<boolean> {
  * already serializes on the single TradingView browser session, so
  * concurrent calls here would just pile up in that queue rather than run
  * any faster, and sequential keeps "how far did today's run get" simple to
- * log if something goes wrong partway through. A ticker whose chart_cache
- * entry is already fresh (e.g. someone ran it ad hoc earlier that day)
- * short-circuits for free inside runPipeline.
+ * log if something goes wrong partway through.
+ *
+ * Every ticker is forced (`runPipeline`'s `force` option): this sweep runs
+ * at the same wall-clock time each morning, a few minutes before the
+ * previous morning's writes cross the 24h cache window, so an unforced
+ * sweep would find every ticker "still fresh" and skip itself entirely
+ * every other day. Its whole purpose is a genuinely fresh read for the new
+ * trading day, so it always captures.
  */
 export async function runDailyWatchlistJob(): Promise<void> {
   if (!(await claimTodayRun())) {
@@ -161,7 +166,7 @@ export async function runDailyWatchlistJob(): Promise<void> {
   console.log(`[watchlist scheduler] starting daily sweep of ${tickers.length} ticker(s)`);
   for (const ticker of tickers) {
     try {
-      const result = await runPipeline(ticker);
+      const result = await runPipeline(ticker, { force: true });
       console.log(`[watchlist scheduler] ${ticker}: ${result.ok ? 'ok' : `failed (${result.stage}/${result.reason})`}`);
     } catch (err) {
       console.error(`[watchlist scheduler] ${ticker}: threw`, err);

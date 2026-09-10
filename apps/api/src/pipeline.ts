@@ -103,16 +103,35 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
   });
 }
 
-export async function runPipeline(ticker: string): Promise<DailyResult> {
+export interface RunPipelineOptions {
+  /**
+   * Skip the cache-freshness short-circuit and always run a real capture.
+   * The daily scheduler sweep (scheduler.ts) sets this; ad-hoc lookups
+   * don't. Reason: the sweep fires at the same wall-clock time every
+   * morning, but the previous morning's writes land ~15s to ~3min after
+   * that instant (the sweep is sequential and staggered), so every row is
+   * still a few minutes short of the 24h window when the next sweep starts.
+   * Unforced, the sweep would see every ticker as "still fresh" and skip
+   * itself entirely, then those rows cross 24h an hour later and the
+   * dashboard shows them all as stale/failed until the day after. A forced
+   * sweep just always produces the fresh read its whole purpose is.
+   */
+  force?: boolean;
+}
+
+export async function runPipeline(ticker: string, opts: RunPipelineOptions = {}): Promise<DailyResult> {
   // Cache check happens before the browser-automation path entirely, and
   // before joining the queue; a hit never waits on anything in flight.
-  const cached = await getCachedReport(ticker);
-  if (cached) return { ok: true, report: cached };
+  // `force` (the daily sweep) skips it; see RunPipelineOptions.
+  if (!opts.force) {
+    const cached = await getCachedReport(ticker);
+    if (cached) return { ok: true, report: cached };
+  }
 
   runningTickers.add(ticker);
   lastAttemptAt.set(ticker, Date.now());
   queueLength++;
-  const run = queue.then(() => runExclusive(ticker));
+  const run = queue.then(() => runExclusive(ticker, opts));
   // Swallow so one failed run doesn't wedge the chain for whoever's behind
   // it; the pacing delay applies whether this run succeeded or failed.
   queue = run.then(
@@ -145,11 +164,15 @@ async function attempt(ticker: string): Promise<DailyResult> {
 /**
  * Runs with exclusive access to the browser session. Re-checks the cache
  * first: a same-ticker request that waited behind another may already have
- * its answer by the time its turn comes up, sparing a redundant run.
+ * its answer by the time its turn comes up, sparing a redundant run. A
+ * forced run (the sweep) wants a fresh capture regardless, so it skips this
+ * the same way runPipeline skipped the pre-queue check.
  */
-async function runExclusive(ticker: string): Promise<DailyResult> {
-  const cached = await getCachedReport(ticker);
-  if (cached) return { ok: true, report: cached };
+async function runExclusive(ticker: string, opts: RunPipelineOptions = {}): Promise<DailyResult> {
+  if (!opts.force) {
+    const cached = await getCachedReport(ticker);
+    if (cached) return { ok: true, report: cached };
+  }
 
   try {
     return await withTimeout(attempt(ticker), PIPELINE_TIMEOUT_MS, `runExclusive(${ticker})`);

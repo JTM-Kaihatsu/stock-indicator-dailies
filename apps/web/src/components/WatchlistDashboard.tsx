@@ -77,14 +77,24 @@ export function WatchlistDashboard({ accessToken }: { accessToken: string }) {
                   </td>
                   {row.status === 'failed' ? (
                     <td colSpan={5} className="fact" style={{ color: 'var(--sell)' }}>
-                      Failure — click the stock ticker to retry.
+                      Failure. Click the stock ticker to retry.
                     </td>
                   ) : (
                     <>
                       <td>{cell(row.overall, row.status === 'running', { fontSize: 15 })}</td>
                       <td>{cell(row.computed, row.status === 'running', { bold: false })}</td>
                       <td>{cell(row.ai, row.status === 'running', { bold: false })}</td>
-                      <td className="fact">{row.asOf ?? 'N/A'}</td>
+                      <td className="fact">
+                        {row.asOf ?? 'N/A'}
+                        {row.status === 'stale' && (
+                          <span
+                            style={{ color: 'var(--hold)' }}
+                            title="Past the daily refresh window; showing the last read. The next morning sweep will update it."
+                          >
+                            {' '}· stale
+                          </span>
+                        )}
+                      </td>
                       <td>{lastChanged(row)}</td>
                     </>
                   )}
