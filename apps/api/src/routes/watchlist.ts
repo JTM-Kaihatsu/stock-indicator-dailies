@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { outageMessageFor, recomputeReport, resolveDualOverall, type DeriveSignalOptions, type Signal } from '@stock-indicator-dailies/shared';
 
-import { getCachedReport, getCachedReportMeta, getLatestFailure } from '../cache.ts';
+import { getCachedReportDetail, getCachedReportMeta, getLatestFailure } from '../cache.ts';
 import { canAttempt, isRunning, runPipeline } from '../pipeline.ts';
+import { computeRefreshAvailableAt } from '../refreshCooldown.ts';
 import { parseTicker } from '../ticker.ts';
 import { addToWatchlist, getWatchlist, removeFromWatchlist, reorderWatchlist, updateScenarioSettings, updateWatchlistSettings } from '../watchlist.ts';
 import { requireAuth } from '../authMiddleware.ts';
@@ -181,16 +182,27 @@ watchlistRoute.get('/watchlist/:ticker/report', requireAuth, async (c) => {
   const entry = entries.find((e) => e.ticker === ticker);
   if (!entry) return c.json({ ok: false, reason: 'Not on your watchlist' }, 404);
 
-  const cached = await getCachedReport(ticker);
-  if (cached) {
-    const report = recomputeReport(cached, entry.settings ?? {});
-    return c.json({ ok: true, report, settings: entry.settings, scenarioSettings: entry.scenarioSettings });
+  // A read on record (fresh OR stale) is always shown. The page displays
+  // when it was generated and offers a manual refresh; it does not silently
+  // re-run on load anymore. A genuinely stale read still gets picked up by
+  // the next 7am sweep on its own.
+  const detail = await getCachedReportDetail(ticker);
+  if (detail) {
+    const report = recomputeReport(detail.report, entry.settings ?? {});
+    const failure = await getLatestFailure(ticker);
+    return c.json({
+      ok: true,
+      report,
+      settings: entry.settings,
+      scenarioSettings: entry.scenarioSettings,
+      retrievedAt: detail.retrievedAt,
+      stale: detail.stale,
+      refreshAvailableAt: computeRefreshAvailableAt(detail.retrievedAt, failure?.occurredAt ?? null),
+    });
   }
 
-  // No fresh cache: this is also the retry mechanism described to the user
-  // ("clicking into a failed ticker retries it") — simply loading this
-  // endpoint attempts a fresh run whenever the cooldown allows it, no
-  // separate retry button/endpoint needed.
+  // Nothing ever captured for this ticker: loading the page still kicks off
+  // its first capture (rate-limited by the pipeline's own 30s guard).
   if (isRunning(ticker)) {
     return c.json({ ok: false, reason: 'running', pending: true });
   }
@@ -211,6 +223,36 @@ watchlistRoute.get('/watchlist/:ticker/report', requireAuth, async (c) => {
     reason,
     userMessage: outageMessageFor(stage, reason) ?? undefined,
   });
+});
+
+watchlistRoute.post('/watchlist/:ticker/refresh', requireAuth, async (c) => {
+  const userId = c.get('userId');
+  const ticker = parseTicker(c.req.param('ticker'));
+  if (!ticker) return c.json({ ok: false, reason: 'Invalid ticker' }, 400);
+
+  const entries = await getWatchlist(userId);
+  if (!entries.some((e) => e.ticker === ticker)) {
+    return c.json({ ok: false, reason: 'Not on your watchlist' }, 404);
+  }
+
+  // Already in flight (a sweep, or another tab's refresh): piggyback, don't
+  // reject or start a second run.
+  if (isRunning(ticker)) return c.json({ ok: true, pending: true });
+
+  // Enforce the 1h manual-refresh cooldown here too, not just in the UI: a
+  // client with a stale button state (or a direct API call) can't bypass it.
+  const meta = await getCachedReportMeta(ticker);
+  const failure = await getLatestFailure(ticker);
+  const availableAt = computeRefreshAvailableAt(meta?.retrievedAt ?? null, failure?.occurredAt ?? null);
+  if (availableAt) {
+    return c.json({ ok: false, reason: 'cooldown', refreshAvailableAt: availableAt }, 429);
+  }
+
+  // force: the user may be refreshing a read that's under 24h old (past the
+  // 1h cooldown but still "fresh" to the cache); without force this would
+  // just hand back the cached copy and do nothing.
+  void runPipeline(ticker, { force: true });
+  return c.json({ ok: true, pending: true });
 });
 
 watchlistRoute.delete('/watchlist/:ticker', requireAuth, async (c) => {

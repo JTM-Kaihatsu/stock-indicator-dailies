@@ -1,4 +1,10 @@
-import type { WatchlistMutationResponse, WatchlistReportResponse, WatchlistResponse, WatchlistSettings } from '@/types/watchlist';
+import type {
+  WatchlistMutationResponse,
+  WatchlistRefreshResponse,
+  WatchlistReportResponse,
+  WatchlistResponse,
+  WatchlistSettings,
+} from '@/types/watchlist';
 import { apiUrl } from './api.ts';
 
 /** Single-shot; the dashboard reads pre-computed data (populated by the
@@ -72,6 +78,22 @@ export async function updateScenarioSettings(
  * this ticker's page is what "retrying it" means. */
 export async function fetchWatchlistTickerReport(accessToken: string, ticker: string): Promise<WatchlistReportResponse> {
   const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}/report`), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return res.json();
+}
+
+/** Triggers a manual, forced re-capture for one watchlisted ticker.
+ * Returns immediately; poll `fetchWatchlistTickerReport` until its
+ * `retrievedAt` advances. `ok: false` with `reason: 'cooldown'` means the
+ * 1h window since the last attempt hasn't elapsed (`refreshAvailableAt`
+ * says when it will). */
+export async function refreshWatchlistTicker(
+  accessToken: string,
+  ticker: string,
+): Promise<WatchlistRefreshResponse> {
+  const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}/refresh`), {
+    method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   return res.json();

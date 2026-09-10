@@ -37,9 +37,27 @@ export type WatchlistMutationResponse =
   | { ok: false; reason: string };
 
 export type WatchlistReportResponse =
-  | { ok: true; report: DailyReport; settings: WatchlistSettings | null; scenarioSettings: Record<string, unknown> | null }
+  | {
+      ok: true;
+      report: DailyReport;
+      settings: WatchlistSettings | null;
+      scenarioSettings: Record<string, unknown> | null;
+      /** When the shown report was captured (ISO). */
+      retrievedAt: string;
+      /** Past the 24h freshness window; the next 7am sweep will refresh it. */
+      stale: boolean;
+      /** ISO time the manual Refresh button becomes usable again (1h after
+       * the last capture attempt); null means usable now. */
+      refreshAvailableAt: string | null;
+    }
   | { ok: false; reason: string; pending: true }
   /** Rate-limited: too soon since the last attempt to try again. `userMessage`
    * is present when the last failure looked like a provider/TradingView
    * outage, absent for an ordinary failure. */
   | { ok: false; pending: false; stage: string; reason: string; userMessage?: string };
+
+export type WatchlistRefreshResponse =
+  | { ok: true; pending: true }
+  /** `reason: 'cooldown'` carries `refreshAvailableAt`; other reasons are
+   * plain errors (not on watchlist, misconfig). */
+  | { ok: false; reason: string; refreshAvailableAt?: string };

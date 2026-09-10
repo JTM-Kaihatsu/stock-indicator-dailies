@@ -15,16 +15,22 @@ interface ChartCacheRow {
   image_path: string;
 }
 
-/** Look up a fresh cached report for `ticker`. `null` on a miss, an expired
- * row, or when Supabase isn't configured; all treated the same by the
- * caller. Also `null` on a Supabase-side failure (network blip, transient
- * error): this is called both directly in the /daily/start route and
- * inside runExclusive, neither of which wraps it, so an unguarded throw
- * here used to bypass every well-behaved error path in runDaily entirely
- * and surface as an opaque "capture: unknown" with nothing logged to
- * capture_failures. A cache lookup failing should degrade to "treat it as
- * a miss and capture fresh," never crash the whole request. */
-export async function getCachedReport(ticker: string): Promise<DailyReport | null> {
+export interface CachedReportDetail {
+  /** The full report, image included (unlike `getCachedReportMeta`). */
+  report: DailyReport;
+  retrievedAt: string;
+  /** Older than the freshness window. */
+  stale: boolean;
+}
+
+/**
+ * The stored read for `ticker` with its chart image, regardless of age.
+ * `null` on a genuine miss, a missing image in Storage, or a Supabase-side
+ * error. Powers the single watchlisted-ticker page, which shows the last
+ * read (with a "generated <when>" line and a manual refresh) rather than
+ * only "running..." the moment the row crosses 24h.
+ */
+export async function getCachedReportDetail(ticker: string): Promise<CachedReportDetail | null> {
   const db = getClient();
   if (!db) return null;
 
@@ -36,16 +42,33 @@ export async function getCachedReport(ticker: string): Promise<DailyReport | nul
       .maybeSingle<ChartCacheRow>();
     if (error || !data) return null;
 
-    const ageMs = Date.now() - new Date(data.retrieved_at).getTime();
-    if (ageMs > CACHE_WINDOW_HOURS * 60 * 60 * 1000) return null;
-
     const image = await downloadImage(db, data.image_path);
     if (!image) return null;
 
-    return { ...data.report, image };
+    const ageMs = Date.now() - new Date(data.retrieved_at).getTime();
+    return {
+      report: { ...data.report, image },
+      retrievedAt: data.retrieved_at,
+      stale: ageMs > CACHE_WINDOW_HOURS * 60 * 60 * 1000,
+    };
   } catch {
     return null;
   }
+}
+
+/** Look up a *fresh* cached report for `ticker`. `null` on a miss, an
+ * expired row, or when Supabase isn't configured; all treated the same by
+ * the caller. Also `null` on a Supabase-side failure (network blip,
+ * transient error): this is called both directly in the /daily/start route
+ * and inside runExclusive, neither of which wraps it, so an unguarded throw
+ * here used to bypass every well-behaved error path in runDaily entirely
+ * and surface as an opaque "capture: unknown" with nothing logged to
+ * capture_failures. A cache lookup failing should degrade to "treat it as
+ * a miss and capture fresh," never crash the whole request. */
+export async function getCachedReport(ticker: string): Promise<DailyReport | null> {
+  const detail = await getCachedReportDetail(ticker);
+  if (!detail || detail.stale) return null;
+  return detail.report;
 }
 
 export interface CachedReportMeta {
