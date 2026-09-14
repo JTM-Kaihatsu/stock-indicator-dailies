@@ -7,7 +7,6 @@
   "scripts": {
     "start": "node --experimental-strip-types --env-file-if-exists=../../.env.local src/server.ts",
     "dev": "node --watch --experimental-strip-types --env-file-if-exists=../../.env.local src/server.ts",
-    "dev:otel": "node --import ./src/tracing.ts --watch --experimental-strip-types --env-file-if-exists=../../.env.local src/server.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
@@ -21,12 +20,5 @@
     "@stock-indicator-dailies/vlm": "*",
     "@supabase/supabase-js": "^2.45.0",
     "hono": "^4.7.0"
-  },
-  "devDependencies": {
-    "@opentelemetry/auto-instrumentations-node": "^0.80.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
-    "@opentelemetry/resources": "^2.11.0",
-    "@opentelemetry/sdk-node": "^0.222.0",
-    "@opentelemetry/semantic-conventions": "^1.43.0"
   }
 }
