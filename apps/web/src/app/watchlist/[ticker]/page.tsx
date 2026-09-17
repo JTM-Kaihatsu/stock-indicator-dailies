@@ -142,6 +142,17 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
   // another re-uses this same component instance).
   const requestId = useRef(0);
 
+  // Keyed on the user id, not the `session` object itself: Supabase's client
+  // silently refreshes the access token (a new Session object, same user) on
+  // its own schedule, and notably whenever a backgrounded tab regains focus
+  // (it uses the Page Visibility API for exactly that). useAuth() re-renders
+  // with that new object on every such refresh even though nothing about
+  // the login changed; depending on `session` directly reran this whole
+  // effect on every refresh, snapping the page back to "Loading..." each
+  // time you switched back to this tab. The user id is a plain string that
+  // only actually changes on a real sign-in/sign-out, so a token refresh no
+  // longer resets the page; the session value itself is still read fresh
+  // from the closure below for the actual API calls.
   useEffect(() => {
     if (!session) return;
     const myRequestId = ++requestId.current;
@@ -181,7 +192,9 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
     }
 
     void poll();
-  }, [session, ticker]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- session is used
+    // (via the closure) but deliberately not a dependency; see the comment above.
+  }, [session?.user?.id, ticker]);
 
   /** Kicks off a forced re-capture, then polls until the report's
    * `retrievedAt` advances past what's on screen. Keeps the current report

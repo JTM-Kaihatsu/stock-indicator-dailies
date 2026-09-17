@@ -44,6 +44,11 @@ export default function ManageWatchlistPage() {
   const [savingNotif, setSavingNotif] = useState(false);
   const [notifError, setNotifError] = useState<string | null>(null);
 
+  // Keyed on the user id, not the `session` object itself; see the longer
+  // comment on the equivalent effect in watchlist/[ticker]/page.tsx. Here the
+  // symptom is milder (a silent redundant re-fetch on every tab refocus,
+  // not a visible reset to a loading state, since nothing here clears rows
+  // first) but it's the same unnecessary work for the same reason.
   useEffect(() => {
     if (!session) return;
     fetchWatchlist(session.access_token).then((res) => {
@@ -53,7 +58,9 @@ export default function ManageWatchlistPage() {
     fetchNotificationPrefs(session.access_token).then((res) => {
       if (res.ok) setEmailOnSignalState(res.emailOnSignal);
     });
-  }, [session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- session is used
+    // (via the closure) but deliberately not a dependency; see above.
+  }, [session?.user?.id]);
 
   async function handleToggleNotifications(checked: boolean) {
     if (!session) return;
