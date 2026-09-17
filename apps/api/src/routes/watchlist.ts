@@ -7,8 +7,9 @@ import { computeRefreshAvailableAt } from '../refreshCooldown.ts';
 import { parseTicker } from '../ticker.ts';
 import { addToWatchlist, getWatchlist, removeFromWatchlist, reorderWatchlist, updateScenarioSettings, updateWatchlistSettings } from '../watchlist.ts';
 import { requireAuth } from '../authMiddleware.ts';
-import { runDailyWatchlistJob } from '../scheduler.ts';
+import { runDailyWatchlistJobAndNotify } from '../scheduler.ts';
 import { getLastChangedMap } from '../signalHistory.ts';
+import { getEmailOnSignal, setEmailOnSignal } from '../notificationPrefs.ts';
 
 export const watchlistRoute = new Hono();
 
@@ -150,6 +151,29 @@ watchlistRoute.patch('/watchlist/order', requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+// Whole-watchlist, not per-ticker: one preference per user, independent of
+// which tickers are on the list or how many. Registered as a static
+// segment alongside /watchlist/order for the same reason that one is:
+// keeping the whole-watchlist routes visually grouped, separate from the
+// :ticker-scoped ones below (Hono's router itself doesn't care about
+// registration order for this — static segments always win).
+watchlistRoute.get('/watchlist/notifications', requireAuth, async (c) => {
+  const userId = c.get('userId');
+  const emailOnSignal = await getEmailOnSignal(userId);
+  return c.json({ ok: true, emailOnSignal });
+});
+
+watchlistRoute.patch('/watchlist/notifications', requireAuth, async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.json<{ emailOnSignal?: unknown }>().catch(() => ({}) as { emailOnSignal?: unknown });
+  if (typeof body.emailOnSignal !== 'boolean') {
+    return c.json({ ok: false, reason: 'emailOnSignal must be a boolean' }, 400);
+  }
+
+  await setEmailOnSignal(userId, body.emailOnSignal);
+  return c.json({ ok: true, emailOnSignal: body.emailOnSignal });
+});
+
 watchlistRoute.patch('/watchlist/:ticker', requireAuth, async (c) => {
   const userId = c.get('userId');
   const ticker = parseTicker(c.req.param('ticker'));
@@ -269,7 +293,7 @@ watchlistRoute.delete('/watchlist/:ticker', requireAuth, async (c) => {
 // purely so the scheduler can be verified without waiting for a real 7am ET.
 if (process.env.ENABLE_DEV_ENDPOINTS === 'true') {
   watchlistRoute.post('/watchlist/dev/run-scheduler-now', async (c) => {
-    await runDailyWatchlistJob();
+    await runDailyWatchlistJobAndNotify();
     return c.json({ ok: true });
   });
 }

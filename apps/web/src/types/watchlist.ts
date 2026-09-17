@@ -61,3 +61,10 @@ export type WatchlistRefreshResponse =
   /** `reason: 'cooldown'` carries `refreshAvailableAt`; other reasons are
    * plain errors (not on watchlist, misconfig). */
   | { ok: false; reason: string; refreshAvailableAt?: string };
+
+/** Whole-watchlist (not per-ticker) preference: a single daily digest
+ * email when any watchlisted ticker's Overall signal transitions into or
+ * between BUY/SELL. */
+export type WatchlistNotificationResponse =
+  | { ok: true; emailOnSignal: boolean }
+  | { ok: false; reason: string };

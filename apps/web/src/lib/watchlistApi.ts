@@ -1,5 +1,6 @@
 import type {
   WatchlistMutationResponse,
+  WatchlistNotificationResponse,
   WatchlistRefreshResponse,
   WatchlistReportResponse,
   WatchlistResponse,
@@ -95,6 +96,26 @@ export async function refreshWatchlistTicker(
   const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}/refresh`), {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return res.json();
+}
+
+/** Whether this account has the whole-watchlist BUY/SELL email digest
+ * turned on. One value per user, independent of which tickers are on the
+ * list. */
+export async function fetchNotificationPrefs(accessToken: string): Promise<WatchlistNotificationResponse> {
+  const res = await fetch(apiUrl('/api/watchlist/notifications'), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return res.json();
+}
+
+/** Turns the whole-watchlist BUY/SELL email digest on or off. */
+export async function setNotificationPrefs(accessToken: string, emailOnSignal: boolean): Promise<WatchlistNotificationResponse> {
+  const res = await fetch(apiUrl('/api/watchlist/notifications'), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ emailOnSignal }),
   });
   return res.json();
 }

@@ -3,7 +3,15 @@
 import { Fragment, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { addTicker, fetchWatchlist, removeTicker, reorderWatchlist, updateWatchlistSettings } from '@/lib/watchlistApi';
+import {
+  addTicker,
+  fetchNotificationPrefs,
+  fetchWatchlist,
+  removeTicker,
+  reorderWatchlist,
+  setNotificationPrefs,
+  updateWatchlistSettings,
+} from '@/lib/watchlistApi';
 import { DEFAULT_LIVE_SETTINGS, isDefault, type LiveSettings } from '@/lib/settings';
 import { LiveSettingsFields } from '@/components/SettingsFields';
 import type { WatchlistDashboardRow } from '@/types/watchlist';
@@ -29,13 +37,33 @@ export default function ManageWatchlistPage() {
 
   const [dragTicker, setDragTicker] = useState<string | null>(null);
 
+  // null while loading; the checkbox stays disabled until this resolves so
+  // a click can't race the initial fetch and flip back to the server's
+  // stale answer.
+  const [emailOnSignal, setEmailOnSignalState] = useState<boolean | null>(null);
+  const [savingNotif, setSavingNotif] = useState(false);
+  const [notifError, setNotifError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!session) return;
     fetchWatchlist(session.access_token).then((res) => {
       if (res.ok) setRows(res.rows);
       else setError(res.reason);
     });
+    fetchNotificationPrefs(session.access_token).then((res) => {
+      if (res.ok) setEmailOnSignalState(res.emailOnSignal);
+    });
   }, [session]);
+
+  async function handleToggleNotifications(checked: boolean) {
+    if (!session) return;
+    setSavingNotif(true);
+    setNotifError(null);
+    const res = await setNotificationPrefs(session.access_token, checked);
+    setSavingNotif(false);
+    if (res.ok) setEmailOnSignalState(res.emailOnSignal);
+    else setNotifError(res.reason);
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -148,6 +176,28 @@ export default function ManageWatchlistPage() {
 
       <div className="settings-panel">
         <div className="section-label">Manage Watchlist</div>
+
+        <div className="settings-field" style={{ marginBottom: 20 }}>
+          <label htmlFor="emailOnSignal">
+            Email me when a watchlisted stock signals BUY or SELL
+          </label>
+          <input
+            id="emailOnSignal"
+            type="checkbox"
+            checked={emailOnSignal ?? false}
+            disabled={emailOnSignal === null || savingNotif}
+            onChange={(e) => handleToggleNotifications(e.target.checked)}
+          />
+        </div>
+        <div className="settings-group-hint" style={{ marginTop: -12, marginBottom: 20 }}>
+          One digest email a day, after the morning sweep, covering your whole watchlist. Uses
+          each ticker&apos;s own sensitivity settings below, same as what the dashboard shows.
+        </div>
+        {notifError && (
+          <div className="error-card" style={{ marginBottom: 20 }}>
+            <p>{notifError}</p>
+          </div>
+        )}
 
         <form onSubmit={handleAdd} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <input
