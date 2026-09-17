@@ -102,10 +102,25 @@ export function deriveSignal(
  * signal into one final recommendation. Not the same operation as
  * {@link combineSignals}: that folds three per-indicator signals into one
  * overall signal; this folds two already-final overall signals (the
- * computed read and the AI read) into one. Asymmetric and risk-averse:
- * either side calling SELL is enough to exit, but BUY needs both to agree;
- * a HOLD from the computed side keeps the result at HOLD even when the AI
- * read is more bullish.
+ * computed read and the AI read) into one.
+ *
+ * The two sides agreeing is trivial (the shared value wins). When they
+ * disagree, the rule is: whichever side is decisive when the other is
+ * neutral wins (HOLD+BUY -> BUY, HOLD+SELL -> SELL); a direct
+ * contradiction (one says BUY, the other SELL) is not decisive either way
+ * and settles to HOLD rather than picking a side. In full:
+ *
+ * | det  | ai   | overall |
+ * |------|------|---------|
+ * | HOLD | HOLD | HOLD    |
+ * | HOLD | BUY  | BUY     |
+ * | HOLD | SELL | SELL    |
+ * | BUY  | HOLD | BUY     |
+ * | BUY  | BUY  | BUY     |
+ * | BUY  | SELL | HOLD    |
+ * | SELL | HOLD | SELL    |
+ * | SELL | BUY  | HOLD    |
+ * | SELL | SELL | SELL    |
  *
  * `null` means "no read yet" (e.g. a watchlist ticker still pending its
  * first capture); the result is `null` only when the AI side is null, since
@@ -114,8 +129,9 @@ export function deriveSignal(
 export function resolveDualOverall(detSignal: Signal | null, aiSignal: Signal | null): Signal | null {
   if (aiSignal === null) return null;
   if (detSignal === null) return aiSignal;
-  if (detSignal === 'SELL' || aiSignal === 'SELL') return 'SELL';
-  if (detSignal === 'HOLD') return 'HOLD';
-  if (detSignal === 'BUY' && aiSignal === 'BUY') return 'BUY';
+  if (detSignal === aiSignal) return detSignal;
+  if (detSignal === 'HOLD') return aiSignal;
+  if (aiSignal === 'HOLD') return detSignal;
+  // Remaining case: one BUY, one SELL: a direct contradiction, not a lean.
   return 'HOLD';
 }
