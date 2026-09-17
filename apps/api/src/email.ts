@@ -8,6 +8,22 @@
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
 
+export interface EmailAttachment {
+  filename: string;
+  /** Base64-encoded content, no `data:` prefix. */
+  content: string;
+  /**
+   * When set, the attachment is inline (referenced from the HTML via
+   * `cid:<contentId>`) instead of shown as a downloadable attachment.
+   * Deliberately not a `data:` URI in the HTML itself: several clients
+   * (Gmail included) strip or distrust inline base64 images, since that's
+   * also how spam/phishing mail commonly embeds images to dodge
+   * URL-based scanning; a real CID attachment is the standard, trusted
+   * mechanism.
+   */
+  contentId?: string;
+}
+
 export interface EmailMessage {
   to: string;
   subject: string;
@@ -16,6 +32,7 @@ export interface EmailMessage {
   /** Extra email headers, e.g. List-Unsubscribe; mail providers weigh
    * these when deciding spam vs. inbox for recurring/digest-style mail. */
   headers?: Record<string, string>;
+  attachments?: EmailAttachment[];
 }
 
 /** Sends one email. `false` (not a throw) on any failure: misconfiguration,
@@ -45,6 +62,11 @@ export async function sendEmail(message: EmailMessage): Promise<boolean> {
         html: message.html,
         text: message.text,
         headers: message.headers,
+        attachments: message.attachments?.map((a) => ({
+          filename: a.filename,
+          content: a.content,
+          content_id: a.contentId,
+        })),
       }),
     });
     if (!res.ok) {

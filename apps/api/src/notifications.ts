@@ -1,7 +1,14 @@
-import { recomputeReport, resolveDualOverall, type Signal } from '@stock-indicator-dailies/shared';
+import {
+  INDICATOR_KEYS,
+  recomputeReport,
+  resolveDualOverall,
+  type ChartImage,
+  type IndicatorKey,
+  type Signal,
+} from '@stock-indicator-dailies/shared';
 
 import { getCachedReport } from './cache.ts';
-import { sendEmail } from './email.ts';
+import { sendEmail, type EmailAttachment } from './email.ts';
 import { getUsersWithEmailOnSignal } from './notificationPrefs.ts';
 import { getSupabaseClient } from './supabaseClient.ts';
 import { getUserSignalStates, setUserSignalStates } from './userSignalState.ts';
@@ -24,6 +31,12 @@ export interface SignalEvent {
 export interface DigestEvent extends SignalEvent {
   computed: Signal | null;
   ai: Signal;
+  /** The VLM's per-indicator rationale, SMA/MACD/Slow Stochastic order
+   * (matching the rest of the app), for whichever indicators it actually
+   * provided one; empty when the model didn't return any. */
+  readings: Array<{ indicator: IndicatorKey; rationale: string }>;
+  /** The chart screenshot behind this read, embedded inline in the email. */
+  image: ChartImage;
 }
 
 /**
@@ -65,10 +78,16 @@ function changeLabel(e: DigestEvent): string {
   return e.from ? `${e.from} → ${e.to}` : e.to;
 }
 
+const INDICATOR_LABELS: Record<IndicatorKey, string> = {
+  sma: 'SMA',
+  macd: 'MACD',
+  slowStochastic: 'Slow Stochastic',
+};
+
 function buildDigestEmail(
   to: string,
   events: DigestEvent[],
-): { to: string; subject: string; html: string; text: string; headers?: Record<string, string> } {
+): { to: string; subject: string; html: string; text: string; headers?: Record<string, string>; attachments: EmailAttachment[] } {
   const buys = events.filter((e) => e.to === 'BUY');
   const sells = events.filter((e) => e.to === 'SELL');
   const subjectParts = [
@@ -77,29 +96,43 @@ function buildDigestEmail(
   ].filter((p): p is string => p !== null);
   const subject = `Stock Analysis Dailies: ${subjectParts.join(', ')} signal${events.length > 1 ? 's' : ''}`;
 
-  const htmlRow = (e: DigestEvent) => {
+  const htmlBlock = (e: DigestEvent) => {
     const url = tickerUrl(e.ticker);
     const label = url ? `<a href="${url}">${e.ticker}</a>` : e.ticker;
     const conflictNote = hasConflict(e)
-      ? `<br><span style="color:#888;font-size:12px">Computed and AI reads disagreed: computed ${e.computed}, AI ${e.ai}.</span>`
+      ? `<p style="color:#888;font-size:12px;margin:4px 0">Computed and AI reads disagreed: computed ${e.computed}, AI ${e.ai}.</p>`
       : '';
-    return `<li>${label}: <b>${changeLabel(e)}</b>${conflictNote}</li>`;
+    const rationaleList =
+      e.readings.length > 0
+        ? `<ul style="font-size:13px;color:#555;margin:8px 0;padding-left:18px">${e.readings
+            .map((r) => `<li><b>${INDICATOR_LABELS[r.indicator]}:</b> ${r.rationale}</li>`)
+            .join('')}</ul>`
+        : '';
+    return `
+      <div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #ddd">
+        <h3 style="margin:0 0 4px">${label}: ${changeLabel(e)}</h3>
+        ${conflictNote}
+        ${rationaleList}
+        <img src="cid:chart-${e.ticker}" alt="${e.ticker} chart" style="max-width:600px;width:100%;border:1px solid #ddd;border-radius:4px">
+      </div>
+    `;
   };
 
-  const textRow = (e: DigestEvent) => {
+  const textBlock = (e: DigestEvent) => {
     const conflictNote = hasConflict(e) ? ` (computed and AI reads disagreed: computed ${e.computed}, AI ${e.ai})` : '';
-    return `- ${e.ticker}: ${changeLabel(e)}${conflictNote}`;
+    const rationaleLines = e.readings.map((r) => `    ${INDICATOR_LABELS[r.indicator]}: ${r.rationale}`);
+    return [`- ${e.ticker}: ${changeLabel(e)}${conflictNote}`, ...rationaleLines, '    (chart image attached)'].join('\n');
   };
 
   const html = `
     <p>Your watchlist has ${events.length} new signal${events.length > 1 ? 's' : ''}:</p>
-    <ul>${events.map(htmlRow).join('')}</ul>
+    ${events.map(htmlBlock).join('')}
     <p style="color:#888;font-size:12px">Not financial advice. A data-acquisition and reporting tool; every decision is yours to make.</p>
   `.trim();
 
   const text = [
     `Your watchlist has ${events.length} new signal${events.length > 1 ? 's' : ''}:`,
-    ...events.map(textRow),
+    ...events.map(textBlock),
     '',
     'Not financial advice. A data-acquisition and reporting tool; every decision is yours to make.',
   ].join('\n');
@@ -113,7 +146,13 @@ function buildDigestEmail(
   const base = process.env.APP_URL;
   const headers = base ? { 'List-Unsubscribe': `<${base.replace(/\/$/, '')}/watchlist>` } : undefined;
 
-  return { to, subject, html, text, headers };
+  const attachments: EmailAttachment[] = events.map((e) => ({
+    filename: `${e.ticker}.png`,
+    content: e.image.base64,
+    contentId: `chart-${e.ticker}`,
+  }));
+
+  return { to, subject, html, text, headers, attachments };
 }
 
 /** The Supabase Auth email for `userId`, or null on any failure (a
@@ -147,8 +186,12 @@ async function checkAndNotifyUser(userId: string): Promise<void> {
   // The individual reads behind each ticker's overall, kept only for the
   // duration of this run (not persisted: user_signal_state only needs the
   // resolved overall for tomorrow's comparison), so a firing event can
-  // report whether computed and AI actually agreed.
-  const currentReads = new Map<string, { computed: Signal | null; ai: Signal }>();
+  // report whether computed and AI actually agreed, and carry the AI's own
+  // rationale + chart image into the digest.
+  const currentReads = new Map<
+    string,
+    { computed: Signal | null; ai: Signal; readings: Array<{ indicator: IndicatorKey; rationale: string }>; image: ChartImage }
+  >();
 
   for (const entry of entries) {
     // Fresh-only (not the stale-tolerant getCachedReportDetail): the sweep
@@ -168,7 +211,13 @@ async function checkAndNotifyUser(userId: string): Promise<void> {
     // doesn't know that); skip defensively rather than assert it away.
     if (overall === null) continue;
     currentStates.set(entry.ticker, overall);
-    currentReads.set(entry.ticker, { computed, ai });
+
+    const byKey = new Map(report.verdict.readings.map((r) => [r.indicator, r]));
+    const readings = INDICATOR_KEYS.flatMap((key) => {
+      const rationale = byKey.get(key)?.rationale;
+      return rationale ? [{ indicator: key, rationale }] : [];
+    });
+    currentReads.set(entry.ticker, { computed, ai, readings, image: report.image });
   }
 
   await setUserSignalStates(userId, currentStates);
