@@ -15,11 +15,22 @@ export interface SignalEvent {
   to: 'BUY' | 'SELL';
 }
 
+/** A SignalEvent enriched with the underlying computed (deterministic) and
+ * AI reads that produced `to` via resolveDualOverall, so the digest email
+ * can call out when the two disagreed and show both readings; kept
+ * separate from SignalEvent/detectSignalEvents so the pure transition
+ * comparison stays exactly what it was (ticker + overall in, overall out),
+ * with the enrichment only happening where it's actually consumed. */
+export interface DigestEvent extends SignalEvent {
+  computed: Signal | null;
+  ai: Signal;
+}
+
 /**
  * Pure comparison: which tickers just became a new BUY/SELL event for this
  * user, i.e. `current` says BUY or SELL and it differs from `prior`. A
  * ticker with no prior state counts as a change too (its first-ever
- * evaluation firing BUY/SELL is real, actionable information — worth
+ * evaluation firing BUY/SELL is real, actionable information, worth
  * surfacing rather than treated as silent baseline), and a ticker settled
  * on HOLD, or unchanged from BUY/SELL to the same BUY/SELL, produces
  * nothing. Exported for direct unit testing.
@@ -43,7 +54,21 @@ function tickerUrl(ticker: string): string | null {
   return base ? `${base.replace(/\/$/, '')}/watchlist/${ticker}` : null;
 }
 
-function buildDigestEmail(to: string, events: SignalEvent[]): { to: string; subject: string; html: string; text: string } {
+/** Whether the computed (deterministic) and AI reads actually disagreed
+ * for this event. `computed === null` (the data fetch failed that day)
+ * means there's nothing to compare against, not a conflict. */
+function hasConflict(e: DigestEvent): boolean {
+  return e.computed !== null && e.computed !== e.ai;
+}
+
+function changeLabel(e: DigestEvent): string {
+  return e.from ? `${e.from} → ${e.to}` : e.to;
+}
+
+function buildDigestEmail(
+  to: string,
+  events: DigestEvent[],
+): { to: string; subject: string; html: string; text: string; headers?: Record<string, string> } {
   const buys = events.filter((e) => e.to === 'BUY');
   const sells = events.filter((e) => e.to === 'SELL');
   const subjectParts = [
@@ -52,16 +77,18 @@ function buildDigestEmail(to: string, events: SignalEvent[]): { to: string; subj
   ].filter((p): p is string => p !== null);
   const subject = `Stock Analysis Dailies: ${subjectParts.join(', ')} signal${events.length > 1 ? 's' : ''}`;
 
-  const line = (e: SignalEvent) => {
-    const change = e.from ? `${e.from} → ${e.to}` : e.to;
-    return { ticker: e.ticker, change };
-  };
-
-  const htmlRow = (e: SignalEvent) => {
-    const { change } = line(e);
+  const htmlRow = (e: DigestEvent) => {
     const url = tickerUrl(e.ticker);
     const label = url ? `<a href="${url}">${e.ticker}</a>` : e.ticker;
-    return `<li>${label}: <b>${change}</b></li>`;
+    const conflictNote = hasConflict(e)
+      ? `<br><span style="color:#888;font-size:12px">Computed and AI reads disagreed: computed ${e.computed}, AI ${e.ai}.</span>`
+      : '';
+    return `<li>${label}: <b>${changeLabel(e)}</b>${conflictNote}</li>`;
+  };
+
+  const textRow = (e: DigestEvent) => {
+    const conflictNote = hasConflict(e) ? ` (computed and AI reads disagreed: computed ${e.computed}, AI ${e.ai})` : '';
+    return `- ${e.ticker}: ${changeLabel(e)}${conflictNote}`;
   };
 
   const html = `
@@ -72,12 +99,21 @@ function buildDigestEmail(to: string, events: SignalEvent[]): { to: string; subj
 
   const text = [
     `Your watchlist has ${events.length} new signal${events.length > 1 ? 's' : ''}:`,
-    ...events.map((e) => `- ${e.ticker}: ${line(e).change}`),
+    ...events.map(textRow),
     '',
     'Not financial advice. A data-acquisition and reporting tool; every decision is yours to make.',
   ].join('\n');
 
-  return { to, subject, html, text };
+  // Recurring/digest-style mail without a List-Unsubscribe header is a
+  // real deliverability signal Gmail and others weigh toward spam. This
+  // points at the same page the on/off toggle lives on rather than a true
+  // one-click unsubscribe endpoint (which would need its own unauthenticated
+  // route); List-Unsubscribe-Post is deliberately not set alongside it,
+  // since that header promises one-click semantics this link doesn't provide.
+  const base = process.env.APP_URL;
+  const headers = base ? { 'List-Unsubscribe': `<${base.replace(/\/$/, '')}/watchlist>` } : undefined;
+
+  return { to, subject, html, text, headers };
 }
 
 /** The Supabase Auth email for `userId`, or null on any failure (a
@@ -108,6 +144,11 @@ async function checkAndNotifyUser(userId: string): Promise<void> {
 
   const priorStates = await getUserSignalStates(userId);
   const currentStates = new Map<string, Signal>();
+  // The individual reads behind each ticker's overall, kept only for the
+  // duration of this run (not persisted: user_signal_state only needs the
+  // resolved overall for tomorrow's comparison), so a firing event can
+  // report whether computed and AI actually agreed.
+  const currentReads = new Map<string, { computed: Signal | null; ai: Signal }>();
 
   for (const entry of entries) {
     // Fresh-only (not the stale-tolerant getCachedReportDetail): the sweep
@@ -119,18 +160,23 @@ async function checkAndNotifyUser(userId: string): Promise<void> {
     if (!cached) continue;
 
     const report = recomputeReport(cached, entry.settings ?? {});
-    const overall = resolveDualOverall(report.deterministic?.signal ?? null, report.verdict.signal);
+    const computed = report.deterministic?.signal ?? null;
+    const ai = report.verdict.signal;
+    const overall = resolveDualOverall(computed, ai);
     // resolveDualOverall only returns null when the AI signal itself is
     // null, which never happens on a completed report (the type just
     // doesn't know that); skip defensively rather than assert it away.
     if (overall === null) continue;
     currentStates.set(entry.ticker, overall);
+    currentReads.set(entry.ticker, { computed, ai });
   }
 
   await setUserSignalStates(userId, currentStates);
 
-  const events = detectSignalEvents(priorStates, currentStates);
-  if (events.length === 0) return;
+  const transitions = detectSignalEvents(priorStates, currentStates);
+  if (transitions.length === 0) return;
+
+  const events: DigestEvent[] = transitions.map((t) => ({ ...t, ...currentReads.get(t.ticker)! }));
 
   const email = await getUserEmail(userId);
   if (!email) {
