@@ -1,16 +1,18 @@
 import {
   AdvisorUpstreamError,
   AdvisorWallClockTimeoutError,
-  researchAndPropose,
-  type AdvisorResult,
+  researchCompany,
+  scoreForRiskTolerance,
+  type RiskScoredProposal,
+  type RiskTolerance,
 } from '@stock-indicator-dailies/advisor';
 import { isOutageError } from '@stock-indicator-dailies/shared';
 
-import { cacheAdvice } from './advisorCache.ts';
+import { cacheResearch, cacheSuggestion, getCachedResearch } from './advisorCache.ts';
 import { createJobStore } from './jobStore.ts';
 
 export type AdvisorJobResult =
-  | { ok: true; result: AdvisorResult }
+  | { ok: true; result: RiskScoredProposal }
   | {
       ok: false;
       reason: string;
@@ -34,11 +36,24 @@ function classifyOutage(err: unknown): boolean {
   return err instanceof AdvisorUpstreamError || err instanceof AdvisorWallClockTimeoutError || isOutageError(err);
 }
 
-export function startAdvisorJob(ticker: string): string {
+/** Runs the two advisor stages for `ticker` + `riskTolerance`, reusing
+ * cached research when there is any (research doesn't vary by risk
+ * tolerance) and always scoring fresh for this specific tolerance. Caches
+ * whichever stage(s) it actually ran, so a second call for the same
+ * ticker with a *different* risk tolerance skips straight to the cheap
+ * scoring step instead of re-researching. */
+export function startAdvisorJob(ticker: string, riskTolerance: RiskTolerance): string {
   return store.start(
     async () => {
-      const result = await researchAndPropose(ticker);
-      await cacheAdvice(ticker, result);
+      let research = await getCachedResearch(ticker);
+      if (!research) {
+        const researched = await researchCompany(ticker);
+        research = researched.research;
+        await cacheResearch(ticker, research);
+      }
+
+      const result = await scoreForRiskTolerance(ticker, research, riskTolerance);
+      await cacheSuggestion(ticker, riskTolerance, result);
       return { ok: true, result };
     },
     (err) => ({
