@@ -1,6 +1,7 @@
 import { getAllDistinctWatchlistedTickers } from './watchlist.ts';
 import { runPipeline } from './pipeline.ts';
 import { getSupabaseClient } from './supabaseClient.ts';
+import { sendWatchlistSignalEmails } from './notifications.ts';
 
 /** Product decision, not deployment config: "7am ET" doesn't vary by
  * environment, so it's a constant here rather than an env var. */
@@ -155,11 +156,15 @@ async function claimTodayRun(): Promise<boolean> {
  * sweep would find every ticker "still fresh" and skip itself entirely
  * every other day. Its whole purpose is a genuinely fresh read for the new
  * trading day, so it always captures.
+ *
+ * Returns whether it actually ran the sweep this call (`false` on the
+ * duplicate-trigger skip above) so `runDailyWatchlistJobAndNotify` below
+ * knows whether there's anything fresh to evaluate for email alerts.
  */
-export async function runDailyWatchlistJob(): Promise<void> {
+export async function runDailyWatchlistJob(): Promise<boolean> {
   if (!(await claimTodayRun())) {
     console.log('[watchlist scheduler] today has already run; skipping (this call was a duplicate trigger)');
-    return;
+    return false;
   }
 
   const tickers = await getAllDistinctWatchlistedTickers();
@@ -173,6 +178,24 @@ export async function runDailyWatchlistJob(): Promise<void> {
     }
   }
   console.log('[watchlist scheduler] daily sweep complete');
+  return true;
+}
+
+/**
+ * The real daily tick: the capture sweep above, then (only if it actually
+ * ran, not a duplicate-trigger skip) the email-alert sweep, so alerts are
+ * always evaluated against today's freshly-captured reads. This, not
+ * `runDailyWatchlistJob` alone, is what the scheduler and the dev trigger
+ * endpoint should call.
+ */
+export async function runDailyWatchlistJobAndNotify(): Promise<void> {
+  const ran = await runDailyWatchlistJob();
+  if (!ran) return;
+  try {
+    await sendWatchlistSignalEmails();
+  } catch (err) {
+    console.error('[watchlist scheduler] email-alert sweep threw', err);
+  }
 }
 
 /** Whether today (America/New_York) is a weekday whose `hourET` has already
@@ -195,7 +218,7 @@ export function isCatchUpDue(now: Date, hourET: number = RUN_HOUR_ET): boolean {
  * Also checks on startup whether today's run is already overdue (see
  * `isCatchUpDue`) and fires immediately if so, before scheduling the next
  * occurrence as usual — `claimTodayRun` inside `onTick` (normally
- * `runDailyWatchlistJob`) makes this safe to call speculatively: it's a
+ * `runDailyWatchlistJobAndNotify`) makes this safe to call speculatively: it's a
  * genuine catch-up if today never ran, and a harmless no-op (logged, not
  * silent) if it already did.
  */
