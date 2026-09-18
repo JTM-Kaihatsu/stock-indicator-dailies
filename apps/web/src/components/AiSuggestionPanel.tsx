@@ -11,7 +11,7 @@ import {
   type DiffableSettingsKey,
   type IndicatorSettings,
 } from '@/lib/settings';
-import type { AdvisorProposal, FitVerdict } from '@/types/advisor';
+import type { AdvisorProposal, EarningsLikelihood, FitVerdict } from '@/types/advisor';
 
 /** Cooldown after a failed request, so a user (or an outage) can't hammer
  * Claude with immediate retries. Longer when the failure looks like Claude
@@ -32,6 +32,15 @@ const FIT_STYLES: Record<FitVerdict, { label: string; bg: string; fg: string }> 
   'not-recommended': { label: 'Not recommended given risk-tolerance level', bg: 'var(--sell-bg)', fg: 'var(--sell)' },
   caution: { label: 'Proceed with extra caution', bg: 'var(--hold-bg)', fg: 'var(--hold)' },
   'within-bounds': { label: 'Within risk-tolerance bounds', bg: 'var(--buy-bg)', fg: 'var(--buy)' },
+};
+
+/** Reuses the same buy/hold/sell color tokens as FIT_STYLES: a low chance
+ * of meeting analyst expectations reads as a caution (red), high as
+ * favorable (green). */
+const EARNINGS_LIKELIHOOD_STYLES: Record<EarningsLikelihood, { label: string; bg: string; fg: string }> = {
+  low: { label: 'Low likelihood of meeting expectations', bg: 'var(--sell-bg)', fg: 'var(--sell)' },
+  moderate: { label: 'Moderate likelihood of meeting expectations', bg: 'var(--hold-bg)', fg: 'var(--hold)' },
+  high: { label: 'High likelihood of meeting expectations', bg: 'var(--buy-bg)', fg: 'var(--buy)' },
 };
 
 export interface AcceptResult {
@@ -134,6 +143,7 @@ export function AiSuggestionPanel({
   const changedFields = proposedSettings ? diffSettings(settings, proposedSettings) : [];
   const onCooldown = cooldownRemaining > 0;
   const fitStyle = proposal ? FIT_STYLES[proposal.fit] : null;
+  const earningsStyle = proposal ? EARNINGS_LIKELIHOOD_STYLES[proposal.earningsLikelihood] : null;
 
   return (
     <section className="advisor-panel">
@@ -200,6 +210,30 @@ export function AiSuggestionPanel({
             </div>
           )}
           <div className="advisor-rationale">{proposal.rationale}</div>
+
+          {earningsStyle && (
+            <div
+              style={{
+                background: earningsStyle.bg,
+                color: earningsStyle.fg,
+                border: `1px solid ${earningsStyle.fg}`,
+                borderRadius: 8,
+                padding: '8px 12px',
+                marginTop: 12,
+                fontSize: 13,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <b>{earningsStyle.label}</b>
+                <span style={{ fontWeight: 400, opacity: 0.85 }}>
+                  Next earnings: {proposal.nextEarningsDate ?? 'not found in research'}
+                </span>
+              </div>
+              <div style={{ marginTop: 4, fontWeight: 400 }}>{proposal.earningsOutlook}</div>
+              <div style={{ marginTop: 4, fontWeight: 400 }}>{proposal.earningsLikelihoodReason}</div>
+            </div>
+          )}
+
           {/* Proposed settings always render here as plain values, never
            * collapsing into a "matches" message once applied; the numbers
            * are exactly what's useful to see right after accepting. */}

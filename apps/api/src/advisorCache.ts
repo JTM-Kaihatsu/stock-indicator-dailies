@@ -68,6 +68,10 @@ interface SuggestionCacheRow {
   settings: RiskScoredProposal['settings'];
   fit: string;
   fit_reason: string;
+  next_earnings_date: string | null;
+  earnings_outlook: string;
+  earnings_likelihood: string;
+  earnings_likelihood_reason: string;
 }
 
 function toProposal(row: SuggestionCacheRow): RiskScoredProposal {
@@ -76,6 +80,10 @@ function toProposal(row: SuggestionCacheRow): RiskScoredProposal {
     settings: row.settings,
     fit: row.fit as RiskScoredProposal['fit'],
     fitReason: row.fit_reason,
+    nextEarningsDate: row.next_earnings_date,
+    earningsOutlook: row.earnings_outlook,
+    earningsLikelihood: row.earnings_likelihood as RiskScoredProposal['earningsLikelihood'],
+    earningsLikelihoodReason: row.earnings_likelihood_reason,
   };
 }
 
@@ -88,7 +96,10 @@ export async function getCachedSuggestion(ticker: string, riskTolerance: RiskTol
   try {
     const { data, error } = await db
       .from('advisor_suggestion_cache')
-      .select('ticker, risk_tolerance, retrieved_at, rationale, settings, fit, fit_reason')
+      .select(
+        'ticker, risk_tolerance, retrieved_at, rationale, settings, fit, fit_reason, ' +
+          'next_earnings_date, earnings_outlook, earnings_likelihood, earnings_likelihood_reason',
+      )
       .eq('ticker', ticker)
       .eq('risk_tolerance', riskTolerance)
       .maybeSingle<SuggestionCacheRow>();
@@ -116,6 +127,10 @@ export async function cacheSuggestion(ticker: string, riskTolerance: RiskToleran
       settings: result.settings,
       fit: result.fit,
       fit_reason: result.fitReason,
+      next_earnings_date: result.nextEarningsDate,
+      earnings_outlook: result.earningsOutlook,
+      earnings_likelihood: result.earningsLikelihood,
+      earnings_likelihood_reason: result.earningsLikelihoodReason,
     });
   } catch {
     // Best-effort.

@@ -1,42 +1,22 @@
 /**
- * Fixed tool schemas for the advisor's two stages (see advisor.ts):
- * research (submit_research) and risk-tolerance-aware scoring
- * (propose_settings). The settings bounds mirror
- * apps/api/src/routes/backtest.ts's `clampOptions` exactly, so client-,
- * model-, and server-side bounds on the same 9 fields never drift apart.
+ * Fixed tool schema for the advisor's stage 2, risk-tolerance-aware scoring
+ * (propose_settings; see advisor.ts). Stage 1 (research) runs on Gemini +
+ * Grounding with Google Search, which returns plain text rather than a
+ * structured tool call, so it has no schema here. The settings bounds
+ * mirror apps/api/src/routes/backtest.ts's `clampOptions` exactly, so
+ * client-, model-, and server-side bounds on the same 9 fields never drift
+ * apart.
  */
-
-export const WEB_SEARCH_TOOL = {
-  type: 'web_search_20250305' as const,
-  name: 'web_search' as const,
-  max_uses: 5,
-};
 
 /** An investor's stated risk tolerance, used both to tune proposed settings
  * and to judge whether a stock suits that stance at all (see `fit` on
  * RiskScoredProposal). */
 export type RiskTolerance = 'averse' | 'neutral' | 'seeking';
 
-export const SUBMIT_RESEARCH_TOOL = {
-  name: 'submit_research',
-  description:
-    'Submit your research findings on this company as a reusable summary. Call this exactly once, as your final action, after you are done researching.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      research: {
-        type: 'string' as const,
-        description:
-          "4-8 sentence summary of the company's industry and sector, current trends affecting it, recent " +
-          'relevant news, its competitors, and how volatile or speculative its stock currently is. Written to ' +
-          'stand alone: it will be reused later, by a separate step, to tune settings for different investor ' +
-          "risk tolerances and to judge whether the stock suits each one, without re-researching.",
-      },
-    },
-    required: ['research'],
-  },
-};
-
+/** Stage 1's output: a reusable research brief, gathered by Gemini via
+ * Grounding with Google Search. Plain text, not a validated tool-call shape
+ * (Gemini's grounding tool doesn't combine with forced structured output),
+ * so stage 2 (Claude) is what actually structures anything out of it. */
 export interface ResearchProposal {
   research: string;
 }
@@ -53,23 +33,8 @@ function stripTrailingArtifacts(text: string): string {
   return text.replace(/(?:\s*<\/?[a-zA-Z_][\w-]*>)+\s*$/, '').trim();
 }
 
-/** Validates a parsed `submit_research` tool call input. */
-export function validateResearchProposal(input: unknown): ResearchProposal {
-  if (typeof input !== 'object' || input === null) {
-    throw new Error('submit_research input was not an object');
-  }
-  const obj = input as Record<string, unknown>;
-  if (typeof obj.research !== 'string') {
-    throw new Error('submit_research missing research');
-  }
-  const research = stripTrailingArtifacts(obj.research);
-  if (research.length === 0) {
-    throw new Error('submit_research missing non-empty research');
-  }
-  return { research };
-}
-
 const FIT_VALUES = ['not-recommended', 'caution', 'within-bounds'] as const;
+const EARNINGS_LIKELIHOOD_VALUES = ['low', 'moderate', 'high'] as const;
 
 export const PROPOSE_SETTINGS_TOOL = {
   name: 'propose_settings',
@@ -114,8 +79,34 @@ export const PROPOSE_SETTINGS_TOOL = {
         type: 'string' as const,
         description: '1-2 sentence justification for the fit verdict, citing specifics from the research.',
       },
+      nextEarningsDate: {
+        type: ['string', 'null'] as const,
+        description:
+          "The company's next scheduled earnings report date (ISO 8601, e.g. \"2026-10-22\"), per the " +
+          "research. null if the research doesn't mention one; never guess.",
+      },
+      earningsOutlook: {
+        type: 'string' as const,
+        description:
+          'What analysts expect and are watching for at the next earnings report, and the upside if those ' +
+          "expectations are met or beaten, per the research. State honestly if the research doesn't cover this.",
+      },
+      earningsLikelihood: {
+        type: 'string' as const,
+        enum: [...EARNINGS_LIKELIHOOD_VALUES],
+        description:
+          "How likely those expectations are to be met, reasoned from the company's historical earnings " +
+          'pattern, current industry trends, and any political/regulatory factors the research covers.',
+      },
+      earningsLikelihoodReason: {
+        type: 'string' as const,
+        description: '1-3 sentence justification for the earnings likelihood, citing specifics from the research.',
+      },
     },
-    required: ['rationale', 'settings', 'fit', 'fitReason'],
+    required: [
+      'rationale', 'settings', 'fit', 'fitReason',
+      'nextEarningsDate', 'earningsOutlook', 'earningsLikelihood', 'earningsLikelihoodReason',
+    ],
   },
 };
 
@@ -132,12 +123,17 @@ export interface ProposedSettings {
 }
 
 export type FitVerdict = (typeof FIT_VALUES)[number];
+export type EarningsLikelihood = (typeof EARNINGS_LIKELIHOOD_VALUES)[number];
 
 export interface RiskScoredProposal {
   rationale: string;
   settings: ProposedSettings;
   fit: FitVerdict;
   fitReason: string;
+  nextEarningsDate: string | null;
+  earningsOutlook: string;
+  earningsLikelihood: EarningsLikelihood;
+  earningsLikelihoodReason: string;
 }
 
 const RANGES: Record<keyof ProposedSettings, [number, number]> = {
@@ -198,10 +194,42 @@ export function validateRiskScoredProposal(input: unknown): RiskScoredProposal {
     }
   }
 
+  if (obj.nextEarningsDate !== null && typeof obj.nextEarningsDate !== 'string') {
+    throw new Error('propose_settings field "nextEarningsDate" must be a string or null');
+  }
+  const strippedEarningsDate = typeof obj.nextEarningsDate === 'string' ? stripTrailingArtifacts(obj.nextEarningsDate) : '';
+  const nextEarningsDate = strippedEarningsDate.length > 0 ? strippedEarningsDate : null;
+
+  if (typeof obj.earningsOutlook !== 'string') {
+    throw new Error('propose_settings missing earningsOutlook');
+  }
+  const earningsOutlook = stripTrailingArtifacts(obj.earningsOutlook);
+  if (earningsOutlook.length === 0) {
+    throw new Error('propose_settings missing a non-empty earningsOutlook');
+  }
+
+  if (typeof obj.earningsLikelihood !== 'string' || !EARNINGS_LIKELIHOOD_VALUES.includes(obj.earningsLikelihood as EarningsLikelihood)) {
+    throw new Error(
+      `propose_settings field "earningsLikelihood"=${JSON.stringify(obj.earningsLikelihood)} must be one of ${EARNINGS_LIKELIHOOD_VALUES.join(', ')}`,
+    );
+  }
+
+  if (typeof obj.earningsLikelihoodReason !== 'string') {
+    throw new Error('propose_settings missing earningsLikelihoodReason');
+  }
+  const earningsLikelihoodReason = stripTrailingArtifacts(obj.earningsLikelihoodReason);
+  if (earningsLikelihoodReason.length === 0) {
+    throw new Error('propose_settings missing a non-empty earningsLikelihoodReason');
+  }
+
   return {
     rationale,
     settings: settings as unknown as ProposedSettings,
     fit: obj.fit as FitVerdict,
     fitReason,
+    nextEarningsDate,
+    earningsOutlook,
+    earningsLikelihood: obj.earningsLikelihood as EarningsLikelihood,
+    earningsLikelihoodReason,
   };
 }

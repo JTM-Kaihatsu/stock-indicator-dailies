@@ -1,10 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI } from '@google/genai';
 
 import {
   PROPOSE_SETTINGS_TOOL,
-  SUBMIT_RESEARCH_TOOL,
-  WEB_SEARCH_TOOL,
-  validateResearchProposal,
   validateRiskScoredProposal,
   type ResearchProposal,
   type RiskScoredProposal,
@@ -12,24 +10,10 @@ import {
 } from './tool.ts';
 
 export const DEFAULT_MODEL = 'claude-sonnet-5';
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 export const DEFAULT_MAX_TOKENS = 4096;
-/** Round-trip safety net, not the primary bound; see DEFAULT_SEARCH_BUDGET.
- * Only meaningful for researchCompany; scoreForRiskTolerance is a single
- * forced-tool call with no search loop, so turns don't apply to it. */
-export const DEFAULT_MAX_TURNS = 4;
-/**
- * Total searches allowed across the *whole* research call, not per turn.
- * `max_uses` on the tool itself only caps a single `messages.create`
- * response; since web_search is a server tool, one turn can already chain
- * several searches, and the research loop can run multiple turns, so
- * without a cumulative budget the true worst case is `maxTurns *
- * per-call max_uses`. Once this hits zero, web_search is dropped from the
- * offered tools entirely and submit_research is forced immediately,
- * regardless of remaining turns.
- */
-export const DEFAULT_SEARCH_BUDGET = 5;
 /** Wall-clock cap on one call; protects against the model simply being
- * slow (or a hung request) even while within its search budget. */
+ * slow (or a hung request) regardless of which provider is involved. */
 export const DEFAULT_TIMEOUT_MS = 60_000;
 /** This is a background job, not a synchronous request on the critical
  * path, so it can afford to absorb more of Anthropic's transient
@@ -37,8 +21,8 @@ export const DEFAULT_TIMEOUT_MS = 60_000;
  * The SDK already applies exponential backoff between attempts. */
 export const DEFAULT_MAX_RETRIES = 5;
 
-/** The slice of the SDK this depends on; narrow and injectable, same
- * testability pattern as packages/vlm/src/providers/claude.ts. */
+/** The slice of the Anthropic SDK this depends on; narrow and injectable,
+ * same testability pattern as packages/vlm/src/providers/claude.ts. */
 export interface AnthropicLike {
   messages: {
     create(body: Record<string, unknown>): Promise<{
@@ -48,35 +32,40 @@ export interface AnthropicLike {
   };
 }
 
-export interface AdvisorOptions {
+/** The slice of the Gemini SDK this depends on; narrow and injectable, same
+ * testability pattern as AnthropicLike above. */
+export interface GeminiLike {
+  models: {
+    generateContent(params: Record<string, unknown>): Promise<{ text?: string }>;
+  };
+}
+
+/** researchCompany now runs on Gemini + Grounding with Google Search (see
+ * module docs in tool.ts for why); its options are shaped for that
+ * provider, not Anthropic's. */
+export interface ResearchOptions {
+  /** Defaults to `process.env.GEMINI_API_KEY`. */
+  apiKey?: string;
+  model?: string;
+  maxOutputTokens?: number;
+  timeoutMs?: number;
+  client?: GeminiLike;
+}
+
+/** scoreForRiskTolerance stays on Claude: a single forced tool call, no
+ * search, synthesizing whatever researchCompany (now Gemini-backed)
+ * gathered into structured settings + rationale + fit + earnings outlook. */
+export interface ScoreOptions {
   /** Defaults to `process.env.VLM_API_KEY`; same key already used for the
    * chart-reading VLM calls, since both are Claude API usage. */
   apiKey?: string;
   model?: string;
   maxTokens?: number;
-  maxTurns?: number;
-  searchBudget?: number;
   timeoutMs?: number;
   /** Only applies when `client` is not supplied; ignored for an injected
    * test client, which has no retry behavior of its own. */
   maxRetries?: number;
   client?: AnthropicLike;
-}
-
-/** researchCompany's own options never need maxTurns/searchBudget tuned
- * independently of the module defaults in practice, but kept symmetric
- * with AdvisorOptions for consistency and testability. */
-export type ResearchOptions = AdvisorOptions;
-
-/** scoreForRiskTolerance is a single forced-tool call; maxTurns and
- * searchBudget don't apply to it (no loop, no web_search offered). */
-export type ScoreOptions = Omit<AdvisorOptions, 'maxTurns' | 'searchBudget'>;
-
-export class AdvisorTimeoutError extends Error {
-  constructor(maxTurns: number) {
-    super(`advisor did not call submit_research within ${maxTurns} turns`);
-    this.name = 'AdvisorTimeoutError';
-  }
 }
 
 export class AdvisorWallClockTimeoutError extends Error {
@@ -86,12 +75,11 @@ export class AdvisorWallClockTimeoutError extends Error {
   }
 }
 
-/** Anthropic's API returned a transient error (rate limit, overload, or a
- * 5xx) after the SDK's own retries were exhausted. Distinct from
- * AdvisorTimeoutError (the model never proposed) and
- * AdvisorWallClockTimeoutError (the whole call ran too long); this one
- * means the upstream API itself was unavailable, and trying again shortly
- * is likely to work. */
+/** The upstream API (Claude or Gemini) returned a transient error (rate
+ * limit, overload, or a 5xx) after any of the provider's own retries were
+ * exhausted. Distinct from AdvisorWallClockTimeoutError (the whole call ran
+ * too long); this one means the upstream API itself was unavailable, and
+ * trying again shortly is likely to work. */
 export class AdvisorUpstreamError extends Error {
   readonly status: number;
   constructor(status: number, message: string) {
@@ -103,15 +91,16 @@ export class AdvisorUpstreamError extends Error {
 
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504, 529]);
 
-/** Duck-typed status extraction so this works against both the real
- * Anthropic SDK's APIError and any fake client tests throw. */
+/** Duck-typed status extraction so this works against both providers' SDKs
+ * (Anthropic's APIError and Gemini's ApiError both carry a numeric
+ * `.status`) and any fake client tests throw. */
 function extractStatus(err: unknown): number | undefined {
   if (typeof err !== 'object' || err === null || !('status' in err)) return undefined;
   const status = (err as { status?: unknown }).status;
   return typeof status === 'number' ? status : undefined;
 }
 
-function friendlyUpstreamMessage(status: number): string {
+function friendlyClaudeUpstreamMessage(status: number): string {
   if (status === 529) {
     return "Claude's API is temporarily overloaded. This usually clears up within a minute; please try again shortly.";
   }
@@ -121,10 +110,20 @@ function friendlyUpstreamMessage(status: number): string {
   return `Claude's API returned an unexpected error (HTTP ${status}). Please try again shortly.`;
 }
 
-/** Wraps a Claude call so both stages translate a transient upstream error
- * (rate limit, overload, 5xx) into AdvisorUpstreamError the same way,
- * instead of letting the SDK's raw error escape. */
-async function createMessage(
+function friendlyGeminiUpstreamMessage(status: number): string {
+  if (status === 503) {
+    return "Gemini's API is temporarily overloaded. This usually clears up within a minute; please try again shortly.";
+  }
+  if (status === 429) {
+    return "Hit Gemini's API rate limit. Please wait a moment and try again.";
+  }
+  return `Gemini's API returned an unexpected error (HTTP ${status}). Please try again shortly.`;
+}
+
+/** Wraps a Claude call so scoring translates a transient upstream error
+ * (rate limit, overload, 5xx) into AdvisorUpstreamError, instead of letting
+ * the SDK's raw error escape. */
+async function createClaudeMessage(
   client: AnthropicLike,
   body: Record<string, unknown>,
 ): Promise<Awaited<ReturnType<AnthropicLike['messages']['create']>>> {
@@ -133,19 +132,42 @@ async function createMessage(
   } catch (err) {
     const status = extractStatus(err);
     if (status !== undefined && RETRYABLE_STATUSES.has(status)) {
-      throw new AdvisorUpstreamError(status, friendlyUpstreamMessage(status));
+      throw new AdvisorUpstreamError(status, friendlyClaudeUpstreamMessage(status));
     }
     throw err;
   }
 }
 
-function buildClient(options: { apiKey?: string; maxRetries?: number; client?: AnthropicLike }): AnthropicLike {
+/** Same wrapping as createClaudeMessage, for Gemini's client shape. */
+async function createGeminiContent(
+  client: GeminiLike,
+  params: Record<string, unknown>,
+): Promise<{ text?: string }> {
+  try {
+    return await client.models.generateContent(params);
+  } catch (err) {
+    const status = extractStatus(err);
+    if (status !== undefined && RETRYABLE_STATUSES.has(status)) {
+      throw new AdvisorUpstreamError(status, friendlyGeminiUpstreamMessage(status));
+    }
+    throw err;
+  }
+}
+
+function buildClaudeClient(options: { apiKey?: string; maxRetries?: number; client?: AnthropicLike }): AnthropicLike {
   return (
     options.client ??
     (new Anthropic({
       apiKey: options.apiKey ?? process.env.VLM_API_KEY,
       maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,
     }) as unknown as AnthropicLike)
+  );
+}
+
+function buildGeminiClient(options: { apiKey?: string; client?: GeminiLike }): GeminiLike {
+  return (
+    options.client ??
+    (new GoogleGenAI({ apiKey: options.apiKey ?? process.env.GEMINI_API_KEY }) as unknown as GeminiLike)
   );
 }
 
@@ -169,102 +191,56 @@ function findToolUse(content: Array<{ type: string; [key: string]: unknown }>, n
     | undefined;
 }
 
-/** Counts how many web_search invocations actually happened in a response;
- * `server_tool_use` blocks are the model's search calls; unlike a
- * client-defined tool, Anthropic resolves these server-side inline in the
- * same response, so there's no separate round-trip to count. */
-function countSearchesUsed(content: Array<{ type: string; [key: string]: unknown }>): number {
-  return content.filter((block) => block.type === 'server_tool_use' && block.name === 'web_search').length;
-}
-
-const RESEARCH_SYSTEM_PROMPT = `You are researching a public company to build a reusable research brief for a
+const GEMINI_RESEARCH_PROMPT = `You are researching a public company to build a reusable research brief for a
 technical-analysis trading tool. This brief will be used later, in a separate step you are not doing here, to
 tune indicator settings for different investor risk tolerances and to judge whether the stock suits each one;
 write it to stand on its own, not slanted toward any one risk profile.
 
-Use web_search to research the company: its industry and sector, current trends affecting it, recent relevant
-news, its competitors, and how volatile or speculative its stock currently is. Base your findings on what you
-find; do not rely on general knowledge alone when search results are available. Your search budget is limited,
-so prioritize the highest-value queries rather than searching exhaustively.
+Use Google Search to research the company:
+- Its industry and sector, current trends affecting it, recent relevant news, its competitors, and how volatile
+  or speculative its stock currently is.
+- Its next scheduled earnings report: when it is (if publicly known), what analysts expect and are watching
+  for, and the upside if those expectations are met or beaten.
+- How likely those expectations are to be met, reasoned from the company's own historical pattern of beating or
+  missing expectations, current industry trends, and any relevant political or regulatory news that could help
+  or hinder it (e.g. tariffs, regulation, supply constraints, public sentiment). Ground this in what you find
+  for THIS company; do not assume any particular kind of catalyst applies.
 
-You MUST end by calling submit_research exactly once, as your final action. Do not give your answer as plain
-text.`;
+Base your findings on what you find via search, not general knowledge alone. Write a single findings summary,
+covering both the general company research and the earnings outlook above, as prose (4-10 sentences). Respond
+with only that summary; no preamble, no headers.`;
 
-interface ResearchLoopOptions {
-  client: AnthropicLike;
-  model: string;
-  maxTokens: number;
-  maxTurns: number;
-  searchBudget: number;
-}
-
-async function researchLoop(ticker: string, options: ResearchLoopOptions): Promise<ResearchProposal> {
-  const { client, model, maxTokens, maxTurns, searchBudget } = options;
-  const messages: Array<{ role: 'user' | 'assistant'; content: unknown }> = [
-    { role: 'user', content: `Research ${ticker} and submit your findings.` },
-  ];
-
-  let searchesUsed = 0;
-
-  for (let turn = 0; turn < maxTurns; turn++) {
-    const remainingSearches = Math.max(0, searchBudget - searchesUsed);
-    const budgetExhausted = remainingSearches === 0;
-    const forcing = turn === maxTurns - 1 || budgetExhausted;
-
-    const tools = budgetExhausted
-      ? [SUBMIT_RESEARCH_TOOL]
-      : [{ ...WEB_SEARCH_TOOL, max_uses: remainingSearches }, SUBMIT_RESEARCH_TOOL];
-
-    const response = await createMessage(client, {
-      model,
-      max_tokens: maxTokens,
-      // Fixed, byte-for-byte identical on every call (no ticker-specific
-      // content); a cache breakpoint here lets a call within the TTL of a
-      // prior one (any ticker) skip re-processing it.
-      system: [{ type: 'text', text: RESEARCH_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-      tools,
-      tool_choice: forcing ? { type: 'tool', name: 'submit_research' } : { type: 'auto' },
-      messages,
-    });
-
-    searchesUsed += countSearchesUsed(response.content);
-
-    const proposal = findToolUse(response.content, 'submit_research');
-    if (proposal) {
-      return validateResearchProposal(proposal.input);
-    }
-
-    // Not done yet; carry the assistant's turn forward (including any
-    // server_tool_use / web_search_tool_result blocks) and nudge it to
-    // wrap up on the next attempt.
-    messages.push({ role: 'assistant', content: response.content });
-    messages.push({
-      role: 'user',
-      content: forcing
-        ? 'Call submit_research now with your best findings so far.'
-        : 'Continue your research if needed, then call submit_research.',
-    });
-  }
-
-  throw new AdvisorTimeoutError(maxTurns);
-}
-
-/** Researches `ticker`'s company via Claude + the hosted web_search tool and
- * returns a reusable research brief. Throws AdvisorTimeoutError if the
- * model never calls submit_research within maxTurns, or
- * AdvisorWallClockTimeoutError if the whole call runs past timeoutMs. This
- * is stage 1 of 2 (see scoreForRiskTolerance for stage 2); split out so the
- * expensive, web-search-backed part is cacheable per ticker regardless of
- * which risk tolerance ends up being scored against it. */
+/** Researches `ticker`'s company via Gemini + Grounding with Google Search
+ * and returns a reusable research brief. Stage 1 of 2 (see
+ * scoreForRiskTolerance for stage 2); split out so the expensive,
+ * search-backed part is cacheable per ticker regardless of which risk
+ * tolerance ends up being scored against it. Gemini's grounding tool
+ * decides its own search queries within this one call, the same way
+ * Claude's hosted web_search tool did when this stage used to run there. */
 export async function researchCompany(ticker: string, options: ResearchOptions = {}): Promise<ResearchProposal> {
-  const model = options.model ?? DEFAULT_MODEL;
-  const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
-  const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
-  const searchBudget = options.searchBudget ?? DEFAULT_SEARCH_BUDGET;
+  const model = options.model ?? DEFAULT_GEMINI_MODEL;
+  const maxOutputTokens = options.maxOutputTokens ?? DEFAULT_MAX_TOKENS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const client = buildClient(options);
+  const client = buildGeminiClient(options);
 
-  return withWallClock(researchLoop(ticker, { client, model, maxTokens, maxTurns, searchBudget }), timeoutMs);
+  const work = (async () => {
+    const response = await createGeminiContent(client, {
+      model,
+      contents: `Research ${ticker} and write the findings summary.`,
+      config: {
+        systemInstruction: GEMINI_RESEARCH_PROMPT,
+        tools: [{ googleSearch: {} }],
+        maxOutputTokens,
+      },
+    });
+    const research = (response.text ?? '').trim();
+    if (research.length === 0) {
+      throw new Error('Gemini research call returned no usable text');
+    }
+    return { research };
+  })();
+
+  return withWallClock(work, timeoutMs);
 }
 
 const SCORE_SYSTEM_PROMPT = `You are tuning a technical-analysis trading tool's indicator settings for one
@@ -286,9 +262,16 @@ Using the research and whichever one of these is stated in the request, you must
    "within-bounds"; judge the company, not the knobs. Reserve "caution"/"not-recommended" for a genuine
    mismatch the research supports (e.g. a risk-averse investor and a stock the research shows is unusually
    volatile, speculative, or driven by frequent, hard-to-predict catalysts), not routine market movement.
+3. Extract the earnings outlook from the research: the next earnings date if the research mentions one
+   (otherwise null; do not guess), what analysts expect and the upside if achieved, and a likelihood assessment
+   (low/moderate/high) for whether those expectations will be met, reasoned from the company's historical
+   earnings pattern, current industry trends, and any political/regulatory factors the research covers. If the
+   research doesn't cover earnings specifics for this company, say so honestly in earningsOutlook rather than
+   inventing detail, and reason earningsLikelihood from whatever general volatility/predictability information
+   the research does contain.
 
 You MUST end by calling propose_settings exactly once, as your final action, with a rationale, the settings,
-and the fit verdict + its reason. Do not give your answer as plain text.`;
+the fit verdict + its reason, and the earnings outlook fields. Do not give your answer as plain text.`;
 
 const RISK_TOLERANCE_LABELS: Record<RiskTolerance, string> = {
   averse: 'risk-averse',
@@ -297,10 +280,11 @@ const RISK_TOLERANCE_LABELS: Record<RiskTolerance, string> = {
 };
 
 /** Scores an already-researched company against one investor risk
- * tolerance: proposes tuned settings and judges whether the stock itself
- * suits that stance. Stage 2 of 2 (see researchCompany); a single forced
- * tool call, no web_search, no turn loop; meant to be cheap and fast
- * enough to re-run per risk tolerance without re-researching. */
+ * tolerance: proposes tuned settings, judges whether the stock itself
+ * suits that stance, and extracts an earnings outlook. Stage 2 of 2 (see
+ * researchCompany); a single forced tool call, no search; meant to be
+ * cheap and fast enough to re-run per risk tolerance without
+ * re-researching. */
 export async function scoreForRiskTolerance(
   ticker: string,
   research: string,
@@ -310,10 +294,10 @@ export async function scoreForRiskTolerance(
   const model = options.model ?? DEFAULT_MODEL;
   const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const client = buildClient(options);
+  const client = buildClaudeClient(options);
 
   const work = (async () => {
-    const response = await createMessage(client, {
+    const response = await createClaudeMessage(client, {
       model,
       max_tokens: maxTokens,
       system: [{ type: 'text', text: SCORE_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
