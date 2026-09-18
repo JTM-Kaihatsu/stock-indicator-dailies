@@ -1,5 +1,5 @@
 import { RECENCY_WINDOW_DAYS } from './indicators.ts';
-import type { IndicatorReading, IndicatorSignal, Signal } from './types.ts';
+import type { IndicatorReading, IndicatorSignal, RiskTolerance, Signal } from './types.ts';
 
 export interface DeriveSignalOptions {
   /** Minimum number of BUY readings required to emit BUY. Defaults to 2. */
@@ -14,6 +14,14 @@ export interface DeriveSignalOptions {
    * signal. Defaults to {@link RECENCY_WINDOW_DAYS}.
    */
   recencyDays?: number;
+  /**
+   * Not consumed by deriveSignal/resolveDualOverall (unrelated to reading
+   * crossovers); carried in this same bag because it's edited in the same
+   * "Indicator Settings" UI and persisted the same way as the other three
+   * fields, for the AI advisor to read when proposing settings and judging
+   * fit for a ticker.
+   */
+  riskTolerance?: RiskTolerance;
 }
 
 /**

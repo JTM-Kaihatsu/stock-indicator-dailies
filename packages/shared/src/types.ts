@@ -11,6 +11,16 @@ export type IndicatorSignal = 'BUY' | 'SELL' | 'NEUTRAL';
 export type Signal = 'BUY' | 'SELL' | 'HOLD';
 
 /**
+ * An investor's stated risk tolerance. Tunes what the AI advisor proposes
+ * for a ticker's settings and, independently, its judgment of whether the
+ * stock itself suits that stance at all (see packages/advisor's `fit`).
+ * Declared here rather than imported from packages/advisor: that package
+ * is server-only (bundles the Anthropic SDK), so apps/web can't depend on
+ * it directly.
+ */
+export type RiskTolerance = 'averse' | 'neutral' | 'seeking';
+
+/**
  * Direction of the most recent *clean* crossover for an indicator, as judged by
  * the VLM. `NONE` covers both "no crossover" and "too choppy to call one"; the
  * VLM is expected to not force a crossover out of noise.

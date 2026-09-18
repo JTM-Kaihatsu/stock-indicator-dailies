@@ -1,9 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { RiskTolerance } from '@stock-indicator-dailies/shared';
 import { AdvisorRequestError, fetchCachedAdvice, requestAiSuggestion } from '@/lib/advisorApi';
-import { FIELD_LABELS, diffSettings, fromProposedSettings, type IndicatorSettings } from '@/lib/settings';
-import type { AdvisorProposal } from '@/types/advisor';
+import {
+  FIELD_LABELS,
+  RISK_TOLERANCE_OPTIONS,
+  diffSettings,
+  fromProposedSettings,
+  type DiffableSettingsKey,
+  type IndicatorSettings,
+} from '@/lib/settings';
+import type { AdvisorProposal, FitVerdict } from '@/types/advisor';
 
 /** Cooldown after a failed request, so a user (or an outage) can't hammer
  * Claude with immediate retries. Longer when the failure looks like Claude
@@ -15,6 +23,16 @@ const STATUS_LINKS = [
   { label: 'Downdetector', url: 'https://downdetector.com/status/claude-ai/' },
   { label: 'Claude status', url: 'https://status.claude.com/' },
 ];
+
+/** The exact three verdict labels and colors requested: whether the stock
+ * itself suits the risk tolerance it was scored against, independent of
+ * how the settings were tuned. Reuses the existing buy/hold/sell color
+ * tokens rather than inventing new ones. */
+const FIT_STYLES: Record<FitVerdict, { label: string; bg: string; fg: string }> = {
+  'not-recommended': { label: 'Not recommended given risk-tolerance level', bg: 'var(--sell-bg)', fg: 'var(--sell)' },
+  caution: { label: 'Proceed with extra caution', bg: 'var(--hold-bg)', fg: 'var(--hold)' },
+  'within-bounds': { label: 'Within risk-tolerance bounds', bg: 'var(--buy-bg)', fg: 'var(--buy)' },
+};
 
 export interface AcceptResult {
   ok: boolean;
@@ -30,6 +48,10 @@ export function AiSuggestionPanel({
   settings: IndicatorSettings;
   onAccept: (settings: IndicatorSettings) => Promise<AcceptResult>;
 }) {
+  // Defaults to the ticker's own saved Indicator Settings preference, but
+  // changeable per-request here without persisting it; only saving the
+  // Indicator Settings panel itself changes the ticker's stored default.
+  const [riskTolerance, setRiskTolerance] = useState<RiskTolerance>(settings.riskTolerance ?? 'neutral');
   const [loading, setLoading] = useState(false);
   const [proposal, setProposal] = useState<AdvisorProposal | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,20 +61,31 @@ export function AiSuggestionPanel({
   const [accepting, setAccepting] = useState(false);
   const [acceptError, setAcceptError] = useState<string | null>(null);
 
-  // Seed from any prior cached suggestion on mount, so an already-run
-  // suggestion (rationale + proposed settings) shows by default without
-  // requiring another click, on both the main page and a watchlisted
-  // ticker's page (the cache is global/ticker-keyed, not per-user).
+  // A different ticker means a different saved preference to default the
+  // selector back to (not carrying forward whatever was picked for the
+  // previous ticker).
+  useEffect(() => {
+    setRiskTolerance(settings.riskTolerance ?? 'neutral');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker]);
+
+  // Seed from any prior cached suggestion for this exact (ticker, risk
+  // tolerance) pair, so an already-run suggestion (rationale + proposed
+  // settings + fit) shows by default without requiring another click, on
+  // both the main page and a watchlisted ticker's page (the cache is
+  // global/ticker-keyed, not per-user); and re-seeds when the selector
+  // itself changes, so switching tolerances shows whatever's already
+  // cached for each one instead of going blank.
   useEffect(() => {
     let cancelled = false;
-    void fetchCachedAdvice(ticker).then((cached) => {
+    setProposal(null);
+    void fetchCachedAdvice(ticker, riskTolerance).then((cached) => {
       if (!cancelled && cached) setProposal(cached);
     });
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker]);
+  }, [ticker, riskTolerance]);
 
   useEffect(() => {
     if (cooldownUntil <= Date.now()) return;
@@ -71,7 +104,7 @@ export function AiSuggestionPanel({
     setProposal(null);
     setAcceptError(null);
     try {
-      setProposal(await requestAiSuggestion(ticker));
+      setProposal(await requestAiSuggestion(ticker, riskTolerance));
     } catch (err) {
       const outage = err instanceof AdvisorRequestError && err.outage;
       setError(err instanceof Error ? err.message : 'Network error');
@@ -100,10 +133,31 @@ export function AiSuggestionPanel({
   const proposedSettings = proposal ? fromProposedSettings(proposal.settings) : null;
   const changedFields = proposedSettings ? diffSettings(settings, proposedSettings) : [];
   const onCooldown = cooldownRemaining > 0;
+  const fitStyle = proposal ? FIT_STYLES[proposal.fit] : null;
 
   return (
     <section className="advisor-panel">
       <div className="section-label">AI suggestion</div>
+
+      <div className="settings-group-hint" style={{ marginBottom: 4 }}>
+        Risk tolerance for this suggestion:
+      </div>
+      <div role="radiogroup" aria-label="Risk tolerance" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12 }}>
+        {RISK_TOLERANCE_OPTIONS.map((opt) => (
+          <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }} title={opt.hint}>
+            <input
+              type="radio"
+              name={`riskTolerance-${ticker}`}
+              value={opt.value}
+              checked={riskTolerance === opt.value}
+              onChange={() => setRiskTolerance(opt.value)}
+              disabled={loading}
+            />
+            {opt.label}
+          </label>
+        ))}
+      </div>
+
       <button type="button" className="analyze-btn" onClick={request} disabled={loading || onCooldown}>
         {loading ? `Researching ${ticker}…` : onCooldown ? `Retry in ${cooldownRemaining}s` : 'Get AI Suggestion'}
       </button>
@@ -129,12 +183,28 @@ export function AiSuggestionPanel({
 
       {proposal && (
         <div style={{ marginTop: 12 }}>
+          {fitStyle && (
+            <div
+              style={{
+                background: fitStyle.bg,
+                color: fitStyle.fg,
+                border: `1px solid ${fitStyle.fg}`,
+                borderRadius: 8,
+                padding: '8px 12px',
+                marginBottom: 12,
+                fontSize: 13,
+              }}
+            >
+              <b>{fitStyle.label}</b>
+              <div style={{ marginTop: 4, fontWeight: 400 }}>{proposal.fitReason}</div>
+            </div>
+          )}
           <div className="advisor-rationale">{proposal.rationale}</div>
           {/* Proposed settings always render here as plain values, never
-           * collapsing into a "matches" message once applied — the numbers
+           * collapsing into a "matches" message once applied; the numbers
            * are exactly what's useful to see right after accepting. */}
           <div className="compare-card" style={{ marginTop: 0 }}>
-            {(Object.keys(FIELD_LABELS) as Array<keyof IndicatorSettings>).map((key) => (
+            {(Object.keys(FIELD_LABELS) as DiffableSettingsKey[]).map((key) => (
               <div className="compare-row" key={key}>
                 <span className="compare-label">{FIELD_LABELS[key]}</span>
                 <span className="compare-values">{proposedSettings![key] ?? 'off'}</span>

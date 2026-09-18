@@ -1,6 +1,6 @@
 'use client';
 
-import type { BacktestOnlySettings, LiveSettings } from '@/lib/settings';
+import { RISK_TOLERANCE_OPTIONS, type BacktestOnlySettings, type LiveSettings } from '@/lib/settings';
 
 const num = (v: string, fallback: number) => {
   const n = Number(v);
@@ -57,6 +57,29 @@ export function LiveSettingsFields({
           value={value.recencyDays}
           onChange={(e) => set('recencyDays', num(e.target.value, value.recencyDays))}
         />
+      </div>
+      <div className="settings-field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+        <label>Risk tolerance</label>
+        <div role="radiogroup" aria-label="Risk tolerance" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          {RISK_TOLERANCE_OPTIONS.map((opt) => (
+            <label
+              key={opt.value}
+              htmlFor={`${idPrefix}riskTolerance-${opt.value}`}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 400, cursor: 'pointer' }}
+              title={opt.hint}
+            >
+              <input
+                id={`${idPrefix}riskTolerance-${opt.value}`}
+                type="radio"
+                name={`${idPrefix}riskTolerance`}
+                value={opt.value}
+                checked={(value.riskTolerance ?? 'neutral') === opt.value}
+                onChange={() => set('riskTolerance', opt.value)}
+              />
+              {opt.label}
+            </label>
+          ))}
+        </div>
       </div>
     </div>
   );
