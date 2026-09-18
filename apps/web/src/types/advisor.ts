@@ -20,11 +20,20 @@ export interface ProposedSettings {
  * were tuned. */
 export type FitVerdict = 'not-recommended' | 'caution' | 'within-bounds';
 
+/** How likely the next earnings report is to meet analyst expectations, per
+ * the advisor's research (historical pattern, industry trends, and any
+ * political/regulatory factors it found). */
+export type EarningsLikelihood = 'low' | 'moderate' | 'high';
+
 export interface AdvisorProposal {
   rationale: string;
   settings: ProposedSettings;
   fit: FitVerdict;
   fitReason: string;
+  nextEarningsDate: string | null;
+  earningsOutlook: string;
+  earningsLikelihood: EarningsLikelihood;
+  earningsLikelihoodReason: string;
 }
 
 export type AdvisorJobResult =
