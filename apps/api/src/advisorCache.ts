@@ -10,7 +10,12 @@ import { getSupabaseClient as getClient } from './supabaseClient.ts';
  * and demos. */
 const CACHE_WINDOW_HOURS = 24 * 7;
 
-function isFresh(retrievedAt: string): boolean {
+/** Exported so advisorJobs.ts's refresh flow can apply the same freshness
+ * window to a suggestion row it already has (see getCachedSuggestion,
+ * which no longer hides a stale row behind `null` the way this module's
+ * other caches do; the refresh flow needs to see a stale row too, to
+ * decide whether it's cheap-refreshable or needs a full regeneration). */
+export function isFresh(retrievedAt: string): boolean {
   return Date.now() - new Date(retrievedAt).getTime() <= CACHE_WINDOW_HOURS * 60 * 60 * 1000;
 }
 
@@ -72,6 +77,7 @@ interface SuggestionCacheRow {
   earnings_outlook: string;
   earnings_likelihood: string;
   earnings_likelihood_reason: string;
+  quick_update_note: string | null;
 }
 
 function toProposal(row: SuggestionCacheRow): RiskScoredProposal {
@@ -87,9 +93,22 @@ function toProposal(row: SuggestionCacheRow): RiskScoredProposal {
   };
 }
 
-/** Look up a fresh cached suggestion for this exact (ticker, risk
- * tolerance) pair. `null` on a miss, an expired row, or any failure. */
-export async function getCachedSuggestion(ticker: string, riskTolerance: RiskTolerance): Promise<RiskScoredProposal | null> {
+export interface CachedSuggestion {
+  result: RiskScoredProposal;
+  retrievedAt: string;
+  /** The appended "quick update attempt as of ..." note from the last
+   * refresh that found nothing significant; null if none is pending (either
+   * never refreshed, or the last refresh was a full regeneration). */
+  quickUpdateNote: string | null;
+}
+
+/** Look up a cached suggestion for this exact (ticker, risk tolerance)
+ * pair, regardless of freshness; `null` only on a genuine miss or any
+ * failure. Unlike getCachedResearch, staleness is NOT hidden here: the
+ * refresh flow in advisorJobs.ts needs to see a stale row (and its
+ * retrievedAt) too, to decide whether a quick check or a full
+ * regeneration is appropriate; use the exported `isFresh` to check. */
+export async function getCachedSuggestion(ticker: string, riskTolerance: RiskTolerance): Promise<CachedSuggestion | null> {
   const db = getClient();
   if (!db) return null;
 
@@ -98,22 +117,23 @@ export async function getCachedSuggestion(ticker: string, riskTolerance: RiskTol
       .from('advisor_suggestion_cache')
       .select(
         'ticker, risk_tolerance, retrieved_at, rationale, settings, fit, fit_reason, ' +
-          'next_earnings_date, earnings_outlook, earnings_likelihood, earnings_likelihood_reason',
+          'next_earnings_date, earnings_outlook, earnings_likelihood, earnings_likelihood_reason, quick_update_note',
       )
       .eq('ticker', ticker)
       .eq('risk_tolerance', riskTolerance)
       .maybeSingle<SuggestionCacheRow>();
-    if (error || !data || !isFresh(data.retrieved_at)) return null;
-    return toProposal(data);
+    if (error || !data) return null;
+    return { result: toProposal(data), retrievedAt: data.retrieved_at, quickUpdateNote: data.quick_update_note };
   } catch {
     return null;
   }
 }
 
-/** Persist a fresh suggestion, overwriting any prior row for this exact
- * (ticker, risk tolerance) pair; other risk tolerances' cached suggestions
- * for the same ticker are untouched. Best-effort, same posture as
- * cacheResearch. */
+/** Persist a fresh suggestion from a full regeneration, overwriting any
+ * prior row for this exact (ticker, risk tolerance) pair (including
+ * clearing any pending quick-update note; other risk tolerances' cached
+ * suggestions for the same ticker are untouched). Best-effort, same
+ * posture as cacheResearch. */
 export async function cacheSuggestion(ticker: string, riskTolerance: RiskTolerance, result: RiskScoredProposal): Promise<void> {
   const db = getClient();
   if (!db) return;
@@ -131,7 +151,29 @@ export async function cacheSuggestion(ticker: string, riskTolerance: RiskToleran
       earnings_outlook: result.earningsOutlook,
       earnings_likelihood: result.earningsLikelihood,
       earnings_likelihood_reason: result.earningsLikelihoodReason,
+      quick_update_note: null,
     });
+  } catch {
+    // Best-effort.
+  }
+}
+
+/** Attaches a quick-update note to an existing suggestion row, without
+ * touching anything else (in particular, not retrieved_at: this was a
+ * cheap check, not a real regeneration, so the "last updated" the UI shows
+ * should still reflect the last full regeneration). A no-op if the row
+ * doesn't exist, which shouldn't happen in practice (the refresh flow only
+ * calls this after already reading the row it's appending to). */
+export async function appendQuickUpdateNote(ticker: string, riskTolerance: RiskTolerance, note: string): Promise<void> {
+  const db = getClient();
+  if (!db) return;
+
+  try {
+    await db
+      .from('advisor_suggestion_cache')
+      .update({ quick_update_note: note })
+      .eq('ticker', ticker)
+      .eq('risk_tolerance', riskTolerance);
   } catch {
     // Best-effort.
   }

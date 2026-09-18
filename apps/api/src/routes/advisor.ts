@@ -30,14 +30,11 @@ advisor.post('/advisor/start', async (c) => {
     return c.json({ ok: false, reason: 'riskTolerance must be one of averse, neutral, seeking' }, 400);
   }
 
-  // A cache hit resolves immediately, inline; a miss kicks off a fresh
-  // job (which may itself skip straight to scoring if research for this
-  // ticker is already cached; see advisorJobs.ts). Same cache-hit-inline
-  // shape as /daily/start, mainly to avoid repeated slow, web-search-backed
-  // calls during testing and demos.
-  const cached = await getCachedSuggestion(ticker, riskTolerance);
-  if (cached) return c.json({ ok: true, result: cached });
-
+  // Always a job, never an inline cache-hit shortcut: startAdvisorJob
+  // itself decides between a cheap quick-update check (when there's a
+  // fresh-enough cached suggestion for this exact ticker+tolerance and the
+  // next earnings date, if any, hasn't passed) and a full regeneration, so
+  // even a "hit" needs at least one upstream call before it can resolve.
   const jobId = startAdvisorJob(ticker, riskTolerance);
   return c.json({ ok: true, jobId });
 });
@@ -60,5 +57,6 @@ advisor.get('/advisor/cached/:ticker', async (c) => {
   }
 
   const cached = await getCachedSuggestion(ticker, riskTolerance);
-  return c.json({ ok: true, result: cached });
+  if (!cached) return c.json({ ok: true, result: null });
+  return c.json({ ok: true, result: { ...cached.result, retrievedAt: cached.retrievedAt, quickUpdateNote: cached.quickUpdateNote } });
 });

@@ -243,6 +243,58 @@ export async function researchCompany(ticker: string, options: ResearchOptions =
   return withWallClock(work, timeoutMs);
 }
 
+const MATERIAL_UPDATE_CHECK_PROMPT = `You are checking whether anything materially significant has happened for a
+public company since a given date, for someone deciding whether their existing investment research is still
+current. Use Google Search to check for major company-specific news, significant industry trends or news, and
+related political or regulatory news since that date. Only report something if it is significant enough that it
+would change an investment research brief; ignore routine, minor, or already-expected news.
+
+Respond in exactly this format, nothing else:
+Line 1: YES or NO
+Line 2 (only if YES): a 1-2 sentence summary of what changed.`;
+
+export interface MaterialUpdateCheck {
+  hasUpdates: boolean;
+  summary: string | null;
+}
+
+/** A cheap alternative to a full re-research: checks whether anything
+ * material has happened for `ticker` since `sinceDate` (company, industry,
+ * or political/regulatory news), for the "refresh" flow in
+ * apps/api/src/advisorJobs.ts. `sinceDate` and `now` are both caller-
+ * supplied (real server clock, not the model's own sense of the date) so
+ * this can't drift from what the cache's own freshness check is using. */
+export async function checkForMaterialUpdates(
+  ticker: string,
+  sinceDate: string,
+  now: string,
+  options: ResearchOptions = {},
+): Promise<MaterialUpdateCheck> {
+  const model = options.model ?? DEFAULT_GEMINI_MODEL;
+  const maxOutputTokens = options.maxOutputTokens ?? 512;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const client = buildGeminiClient(options);
+
+  const work = (async () => {
+    const response = await createGeminiContent(client, {
+      model,
+      contents: `Ticker: ${ticker}. Today's date is ${now}. Check for material news since ${sinceDate}.`,
+      config: {
+        systemInstruction: MATERIAL_UPDATE_CHECK_PROMPT,
+        tools: [{ googleSearch: {} }],
+        maxOutputTokens,
+      },
+    });
+    const text = (response.text ?? '').trim();
+    const firstLine = (text.split('\n')[0] ?? '').trim().toUpperCase();
+    const hasUpdates = firstLine.startsWith('YES');
+    const summary = hasUpdates ? text.split('\n').slice(1).join('\n').trim() || null : null;
+    return { hasUpdates, summary };
+  })();
+
+  return withWallClock(work, timeoutMs);
+}
+
 const SCORE_SYSTEM_PROMPT = `You are tuning a technical-analysis trading tool's indicator settings for one
 stock, for an investor with a specific, stated risk tolerance. You are given a research brief gathered
 separately in an earlier step; no search tool is available here, so work only from what you're given.

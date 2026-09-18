@@ -1,6 +1,7 @@
 import {
   AdvisorUpstreamError,
   AdvisorWallClockTimeoutError,
+  checkForMaterialUpdates,
   researchCompany,
   scoreForRiskTolerance,
   type RiskScoredProposal,
@@ -8,11 +9,25 @@ import {
 } from '@stock-indicator-dailies/advisor';
 import { isOutageError } from '@stock-indicator-dailies/shared';
 
-import { cacheResearch, cacheSuggestion, getCachedResearch } from './advisorCache.ts';
+import { appendQuickUpdateNote, cacheResearch, cacheSuggestion, getCachedResearch, getCachedSuggestion, isFresh } from './advisorCache.ts';
 import { createJobStore } from './jobStore.ts';
 
+/** RiskScoredProposal plus cache metadata the frontend needs to display
+ * "last updated" and any pending quick-update note; flattened into one
+ * object so the wire shape is uniform across the cached-peek and job-result
+ * endpoints. */
+export interface AdvisorResultWithMeta extends RiskScoredProposal {
+  /** When this suggestion was last fully regenerated (not the last
+   * quick-check, if any; see quickUpdateNote). What the UI shows as
+   * "last updated". */
+  retrievedAt: string;
+  /** The appended note from a quick check that found nothing significant
+   * since retrievedAt; null if none is pending. */
+  quickUpdateNote: string | null;
+}
+
 export type AdvisorJobResult =
-  | { ok: true; result: RiskScoredProposal }
+  | { ok: true; result: AdvisorResultWithMeta }
   | {
       ok: false;
       reason: string;
@@ -36,25 +51,63 @@ function classifyOutage(err: unknown): boolean {
   return err instanceof AdvisorUpstreamError || err instanceof AdvisorWallClockTimeoutError || isOutageError(err);
 }
 
-/** Runs the two advisor stages for `ticker` + `riskTolerance`, reusing
- * cached research when there is any (research doesn't vary by risk
- * tolerance) and always scoring fresh for this specific tolerance. Caches
- * whichever stage(s) it actually ran, so a second call for the same
- * ticker with a *different* risk tolerance skips straight to the cheap
- * scoring step instead of re-researching. */
+function isPastEarningsDate(nextEarningsDate: string | null, now: Date): boolean {
+  if (!nextEarningsDate) return false;
+  // Through the end of that calendar day (UTC), not the instant it starts;
+  // an earnings date is still "current" for the whole day it happens.
+  return now.getTime() > new Date(`${nextEarningsDate}T23:59:59Z`).getTime();
+}
+
+async function fullRegeneration(ticker: string, riskTolerance: RiskTolerance): Promise<AdvisorJobResult> {
+  let research = await getCachedResearch(ticker);
+  if (!research) {
+    const researched = await researchCompany(ticker);
+    research = researched.research;
+    await cacheResearch(ticker, research);
+  }
+
+  const result = await scoreForRiskTolerance(ticker, research, riskTolerance);
+  const retrievedAt = new Date().toISOString();
+  await cacheSuggestion(ticker, riskTolerance, result);
+  return { ok: true, result: { ...result, retrievedAt, quickUpdateNote: null } };
+}
+
+/** Runs the two advisor stages for `ticker` + `riskTolerance`. If a
+ * suggestion is already cached for this exact pair, tries a cheap refresh
+ * before paying for a full re-research + re-score:
+ *
+ * - Within the cache's normal freshness window (a week), and the next
+ *   earnings date (if any) hasn't passed yet: run a single, cheap
+ *   material-updates check. If nothing significant turns up, just append a
+ *   dated note to the existing suggestion instead of regenerating it.
+ * - Otherwise (no cache, past the freshness window, the earnings date has
+ *   passed, or the quick check itself found something significant): do a
+ *   full regeneration, same as before, reusing cached research when that's
+ *   still fresh regardless of the suggestion cache's own state.
+ *
+ * "Now" is always this server's real clock (`new Date()`), never something
+ * inferred by a model, so the earnings-date and freshness comparisons can't
+ * drift on a model's own sense of the date. */
 export function startAdvisorJob(ticker: string, riskTolerance: RiskTolerance): string {
   return store.start(
     async () => {
-      let research = await getCachedResearch(ticker);
-      if (!research) {
-        const researched = await researchCompany(ticker);
-        research = researched.research;
-        await cacheResearch(ticker, research);
+      const now = new Date();
+      const cached = await getCachedSuggestion(ticker, riskTolerance);
+
+      if (cached && isFresh(cached.retrievedAt) && !isPastEarningsDate(cached.result.nextEarningsDate, now)) {
+        const check = await checkForMaterialUpdates(ticker, cached.retrievedAt.slice(0, 10), now.toISOString().slice(0, 10));
+        if (!check.hasUpdates) {
+          const note =
+            `Quick update attempt as of ${now.toISOString().slice(0, 10)}: No significant news updates were found ` +
+            'across company, industry, or related political news.';
+          await appendQuickUpdateNote(ticker, riskTolerance, note);
+          return { ok: true, result: { ...cached.result, retrievedAt: cached.retrievedAt, quickUpdateNote: note } };
+        }
+        // Material news found; fall through to a full regeneration so it
+        // actually gets incorporated, rather than just noted.
       }
 
-      const result = await scoreForRiskTolerance(ticker, research, riskTolerance);
-      await cacheSuggestion(ticker, riskTolerance, result);
-      return { ok: true, result };
+      return fullRegeneration(ticker, riskTolerance);
     },
     (err) => ({
       ok: false,

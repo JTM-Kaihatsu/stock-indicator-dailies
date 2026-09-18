@@ -15,8 +15,10 @@ export class AdvisorRequestError extends Error {
   }
 }
 
-/** Same start→poll shape as analyzeDaily: a cache hit resolves immediately,
- * a miss polls a background research job. `riskTolerance` defaults to
+/** Same start→poll shape as analyzeDaily, always via a job now: even an
+ * already-cached ticker+tolerance needs at least a cheap quick-check
+ * before it can resolve (see apps/api/src/advisorJobs.ts's refresh flow),
+ * so there's no inline-result shortcut left. `riskTolerance` defaults to
  * 'neutral' server-side when omitted; always pass it explicitly here so a
  * ticker's own saved preference (or a per-request override) is what
  * actually gets scored. */
@@ -28,7 +30,6 @@ export async function requestAiSuggestion(ticker: string, riskTolerance: RiskTol
   });
   const start: StartAdvisorResponse = await startRes.json();
   if (!start.ok) throw new AdvisorRequestError(start.reason, false);
-  if ('result' in start) return start.result;
 
   let jobResult: AdvisorJobResult;
   try {

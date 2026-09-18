@@ -34,6 +34,14 @@ export interface AdvisorProposal {
   earningsOutlook: string;
   earningsLikelihood: EarningsLikelihood;
   earningsLikelihoodReason: string;
+  /** When this suggestion was last fully regenerated; what "last updated"
+   * on the AI Suggestion panel shows. Not the same as a quick-check, which
+   * only appends quickUpdateNote below without changing this. */
+  retrievedAt: string;
+  /** A cheap refresh found nothing significant since retrievedAt; shown as
+   * an appended note rather than a full regeneration. null if none is
+   * pending (never refreshed, or the last refresh was a full one). */
+  quickUpdateNote: string | null;
 }
 
 export type AdvisorJobResult =
@@ -46,10 +54,11 @@ export type AdvisorJobResult =
       outage: boolean;
     };
 
-/** A cache hit resolves inline with the result; a miss returns a job id to
- * poll instead. Same shape as StartResponse for the daily pipeline. */
+/** POST /advisor/start always starts a job now, even for an exact
+ * ticker+tolerance that's already cached: the refresh flow needs at least
+ * a cheap quick-check before it can resolve, so there's no true inline
+ * "hit" shortcut left (see apps/api/src/advisorJobs.ts). */
 export type StartAdvisorResponse =
-  | { ok: true; result: AdvisorProposal }
   | { ok: true; jobId: string }
   | { ok: false; reason: string };
 

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   AdvisorUpstreamError,
   AdvisorWallClockTimeoutError,
+  checkForMaterialUpdates,
   researchCompany,
   scoreForRiskTolerance,
   type AnthropicLike,
@@ -135,6 +136,38 @@ test('researchCompany throws AdvisorWallClockTimeoutError when the call runs pas
     },
   };
   await assert.rejects(() => researchCompany('NVDA', { client, timeoutMs: 10 }), AdvisorWallClockTimeoutError);
+});
+
+// --- checkForMaterialUpdates: the cheap refresh check ---
+
+test('parses a NO response as no updates', async () => {
+  const { client } = scriptedGeminiClient('NO');
+  const result = await checkForMaterialUpdates('NVDA', '2026-09-01', '2026-09-10', { client });
+  assert.equal(result.hasUpdates, false);
+  assert.equal(result.summary, null);
+});
+
+test('parses a YES response with a summary', async () => {
+  const { client } = scriptedGeminiClient('YES\nThe company announced a major new product line.');
+  const result = await checkForMaterialUpdates('NVDA', '2026-09-01', '2026-09-10', { client });
+  assert.equal(result.hasUpdates, true);
+  assert.equal(result.summary, 'The company announced a major new product line.');
+});
+
+test('treats an empty or malformed response as no updates', async () => {
+  const { client } = scriptedGeminiClient(undefined);
+  const result = await checkForMaterialUpdates('NVDA', '2026-09-01', '2026-09-10', { client });
+  assert.equal(result.hasUpdates, false);
+  assert.equal(result.summary, null);
+});
+
+test('checkForMaterialUpdates passes the ticker, since-date, and today into the prompt', async () => {
+  const { client, params } = scriptedGeminiClient('NO');
+  await checkForMaterialUpdates('AAPL', '2026-08-15', '2026-09-10', { client });
+  const body = params[0] as { contents: string };
+  assert.match(body.contents, /AAPL/);
+  assert.match(body.contents, /2026-08-15/);
+  assert.match(body.contents, /2026-09-10/);
 });
 
 // --- scoreForRiskTolerance: a single forced Claude call, no search loop ---
