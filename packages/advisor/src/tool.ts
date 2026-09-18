@@ -83,7 +83,10 @@ export const PROPOSE_SETTINGS_TOOL = {
         type: ['string', 'null'] as const,
         description:
           "The company's next scheduled earnings report date (ISO 8601, e.g. \"2026-10-22\"), per the " +
-          "research. null if the research doesn't mention one; never guess.",
+          'research. A confirmed exact date, if the research has one. If the research only gives an estimated ' +
+          'date or range (e.g. "late October to early November"), resolve it to a single date by using the ' +
+          "EARLIER end of that range. null only if the research gives no indication of timing at all; don't " +
+          'invent a date with no basis in the research.',
       },
       earningsOutlook: {
         type: 'string' as const,
