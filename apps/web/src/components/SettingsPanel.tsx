@@ -51,8 +51,8 @@ export function SettingsPanel({
         <div style={{ marginTop: 12 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
             <div className="settings-group-hint">
-              These affect the live report above and the baseline for Historical Testing below. Backtest-only
-              execution filters live inside Historical Testing itself.
+              These affect the live report above and the baseline for Tuning and Historical Testing below.
+              Backtest-only execution filters live inside Tuning and Historical Testing itself.
             </div>
             {!isDefault(settings) && (
               <span className="badge settings-badge-active" style={{ flexShrink: 0 }}>Custom settings active</span>

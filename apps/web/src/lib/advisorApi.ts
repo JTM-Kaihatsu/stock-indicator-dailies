@@ -1,3 +1,4 @@
+import type { RiskTolerance } from '@stock-indicator-dailies/shared';
 import type { AdvisorJobResult, AdvisorJobStatusResponse, AdvisorProposal, StartAdvisorResponse } from '@/types/advisor';
 import { apiUrl } from './api.ts';
 import { pollUntilDone } from './polling.ts';
@@ -15,12 +16,15 @@ export class AdvisorRequestError extends Error {
 }
 
 /** Same start→poll shape as analyzeDaily: a cache hit resolves immediately,
- * a miss polls a background research job. */
-export async function requestAiSuggestion(ticker: string): Promise<AdvisorProposal> {
+ * a miss polls a background research job. `riskTolerance` defaults to
+ * 'neutral' server-side when omitted; always pass it explicitly here so a
+ * ticker's own saved preference (or a per-request override) is what
+ * actually gets scored. */
+export async function requestAiSuggestion(ticker: string, riskTolerance: RiskTolerance): Promise<AdvisorProposal> {
   const startRes = await fetch(apiUrl('/api/advisor/start'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ticker }),
+    body: JSON.stringify({ ticker, riskTolerance }),
   });
   const start: StartAdvisorResponse = await startRes.json();
   if (!start.ok) throw new AdvisorRequestError(start.reason, false);
@@ -42,12 +46,13 @@ export async function requestAiSuggestion(ticker: string): Promise<AdvisorPropos
   return jobResult.result;
 }
 
-/** Read-only peek at a cached suggestion for `ticker`; never triggers fresh
- * research. `null` on a miss or any failure — a caller uses this only to
- * seed a default display, so there's nothing actionable in an error here. */
-export async function fetchCachedAdvice(ticker: string): Promise<AdvisorProposal | null> {
+/** Read-only peek at a cached suggestion for `ticker` + `riskTolerance`;
+ * never triggers fresh research. `null` on a miss or any failure; a caller
+ * uses this only to seed a default display, so there's nothing actionable
+ * in an error here. */
+export async function fetchCachedAdvice(ticker: string, riskTolerance: RiskTolerance): Promise<AdvisorProposal | null> {
   try {
-    const res = await fetch(apiUrl(`/api/advisor/cached/${encodeURIComponent(ticker)}`));
+    const res = await fetch(apiUrl(`/api/advisor/cached/${encodeURIComponent(ticker)}?riskTolerance=${riskTolerance}`));
     const data: { ok: boolean; result?: AdvisorProposal | null } = await res.json();
     return data.ok ? (data.result ?? null) : null;
   } catch {

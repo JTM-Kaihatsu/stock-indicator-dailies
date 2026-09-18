@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { outageMessageFor, recomputeReport, resolveDualOverall, type DeriveSignalOptions, type Signal } from '@stock-indicator-dailies/shared';
+import { outageMessageFor, recomputeReport, resolveDualOverall, type DeriveSignalOptions, type RiskTolerance, type Signal } from '@stock-indicator-dailies/shared';
 
 import { getCachedReportDetail, getCachedReportMeta, getLatestFailure } from '../cache.ts';
 import { canAttempt, isRunning, runPipeline } from '../pipeline.ts';
@@ -37,9 +37,11 @@ export interface WatchlistDashboardRow {
   settings: DeriveSignalOptions | null;
 }
 
-/** Picks out only the 3 recognized numeric fields, dropping anything else
- * and any non-finite value. Not a full schema validator; a malformed field
- * degrading to "unset" (app default) is an acceptable failure mode here. */
+const RISK_TOLERANCES: readonly RiskTolerance[] = ['averse', 'neutral', 'seeking'];
+
+/** Picks out only the 4 recognized fields, dropping anything else and any
+ * invalid value. Not a full schema validator; a malformed field degrading
+ * to "unset" (app default) is an acceptable failure mode here. */
 function parseSettings(raw: unknown): DeriveSignalOptions | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
@@ -47,6 +49,9 @@ function parseSettings(raw: unknown): DeriveSignalOptions | null {
   if (typeof r.buyConsensus === 'number' && Number.isFinite(r.buyConsensus)) out.buyConsensus = r.buyConsensus;
   if (typeof r.sellConsensus === 'number' && Number.isFinite(r.sellConsensus)) out.sellConsensus = r.sellConsensus;
   if (typeof r.recencyDays === 'number' && Number.isFinite(r.recencyDays)) out.recencyDays = r.recencyDays;
+  if (typeof r.riskTolerance === 'string' && RISK_TOLERANCES.includes(r.riskTolerance as RiskTolerance)) {
+    out.riskTolerance = r.riskTolerance as RiskTolerance;
+  }
   return Object.keys(out).length > 0 ? out : null;
 }
 

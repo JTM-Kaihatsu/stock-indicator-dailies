@@ -15,9 +15,16 @@ export interface ProposedSettings {
   adxPeriod: number;
 }
 
+/** Whether the stock itself, per the advisor's research, suits the risk
+ * tolerance it was scored against; independent of how the settings above
+ * were tuned. */
+export type FitVerdict = 'not-recommended' | 'caution' | 'within-bounds';
+
 export interface AdvisorProposal {
   rationale: string;
   settings: ProposedSettings;
+  fit: FitVerdict;
+  fitReason: string;
 }
 
 export type AdvisorJobResult =

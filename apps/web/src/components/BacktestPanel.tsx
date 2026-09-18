@@ -235,15 +235,16 @@ export function BacktestPanel({
   return (
     <section className="backtest-panel">
       <button type="button" className="settings-toggle" onClick={() => setOpen((v) => !v)}>
-        {open ? '▾' : '▸'} Historical Testing
+        {open ? '▾' : '▸'} Tuning and Historical Testing
       </button>
 
       {open && (
         <div style={{ marginTop: 12 }}>
           <div className="settings-group-hint">
             <p>
-              It&apos;s time to time travel and make more money! Adjust how much money a given strategy would
-              make by changing indicator-read settings and then simulating how this strategy would play out.
+              Test how different strategies would have played out historically and then apply them to your
+              indicator-read settings. Understand industry and company trends and adjust based on your level of
+              risk-acceptance.
             </p>
             <p>
               Note that the settings below are backtest-only execution filters; these have no effect on the
