@@ -1,4 +1,4 @@
-import type { RiskScoredProposal, RiskTolerance } from '@stock-indicator-dailies/advisor';
+import type { FieldCitations, ResearchCitation, ResearchProposal, RiskScoredProposal, RiskTolerance } from '@stock-indicator-dailies/advisor';
 
 import { getSupabaseClient as getClient } from './supabaseClient.ts';
 
@@ -23,24 +23,25 @@ interface ResearchCacheRow {
   ticker: string;
   retrieved_at: string;
   research: string;
+  citations: ResearchCitation[];
 }
 
 /** Look up cached research for `ticker`, regardless of which risk
  * tolerance ends up being scored against it (research doesn't vary by
  * who's asking). `null` on a miss, an expired row, or when Supabase isn't
  * configured or the lookup fails; all treated the same by the caller. */
-export async function getCachedResearch(ticker: string): Promise<string | null> {
+export async function getCachedResearch(ticker: string): Promise<ResearchProposal | null> {
   const db = getClient();
   if (!db) return null;
 
   try {
     const { data, error } = await db
       .from('advisor_research_cache')
-      .select('ticker, retrieved_at, research')
+      .select('ticker, retrieved_at, research, citations')
       .eq('ticker', ticker)
       .maybeSingle<ResearchCacheRow>();
     if (error || !data || !isFresh(data.retrieved_at)) return null;
-    return data.research;
+    return { research: data.research, citations: data.citations ?? [] };
   } catch {
     return null;
   }
@@ -50,7 +51,7 @@ export async function getCachedResearch(ticker: string): Promise<string | null> 
  * Best-effort: caching is an optimization, not part of the actual result,
  * so a Supabase hiccup here must never turn an already-successful research
  * call into a reported failure for the caller. */
-export async function cacheResearch(ticker: string, research: string): Promise<void> {
+export async function cacheResearch(ticker: string, research: ResearchProposal): Promise<void> {
   const db = getClient();
   if (!db) return;
 
@@ -58,7 +59,8 @@ export async function cacheResearch(ticker: string, research: string): Promise<v
     await db.from('advisor_research_cache').upsert({
       ticker,
       retrieved_at: new Date().toISOString(),
-      research,
+      research: research.research,
+      citations: research.citations,
     });
   } catch {
     // Best-effort; never let caching itself fail an otherwise-successful request.
@@ -78,7 +80,12 @@ interface SuggestionCacheRow {
   earnings_likelihood: string;
   earnings_likelihood_reason: string;
   quick_update_note: string | null;
+  field_citations: Partial<FieldCitations>;
 }
+
+const EMPTY_FIELD_CITATIONS: FieldCitations = {
+  rationale: [], fitReason: [], earningsOutlook: [], earningsLikelihoodReason: [],
+};
 
 function toProposal(row: SuggestionCacheRow): RiskScoredProposal {
   return {
@@ -90,6 +97,7 @@ function toProposal(row: SuggestionCacheRow): RiskScoredProposal {
     earningsOutlook: row.earnings_outlook,
     earningsLikelihood: row.earnings_likelihood as RiskScoredProposal['earningsLikelihood'],
     earningsLikelihoodReason: row.earnings_likelihood_reason,
+    fieldCitations: { ...EMPTY_FIELD_CITATIONS, ...row.field_citations },
   };
 }
 
@@ -117,7 +125,8 @@ export async function getCachedSuggestion(ticker: string, riskTolerance: RiskTol
       .from('advisor_suggestion_cache')
       .select(
         'ticker, risk_tolerance, retrieved_at, rationale, settings, fit, fit_reason, ' +
-          'next_earnings_date, earnings_outlook, earnings_likelihood, earnings_likelihood_reason, quick_update_note',
+          'next_earnings_date, earnings_outlook, earnings_likelihood, earnings_likelihood_reason, ' +
+          'quick_update_note, field_citations',
       )
       .eq('ticker', ticker)
       .eq('risk_tolerance', riskTolerance)
@@ -152,6 +161,7 @@ export async function cacheSuggestion(ticker: string, riskTolerance: RiskToleran
       earnings_likelihood: result.earningsLikelihood,
       earnings_likelihood_reason: result.earningsLikelihoodReason,
       quick_update_note: null,
+      field_citations: result.fieldCitations,
     });
   } catch {
     // Best-effort.

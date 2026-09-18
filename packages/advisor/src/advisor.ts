@@ -4,6 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 import {
   PROPOSE_SETTINGS_TOOL,
   validateRiskScoredProposal,
+  type ResearchCitation,
   type ResearchProposal,
   type RiskScoredProposal,
   type RiskTolerance,
@@ -32,12 +33,55 @@ export interface AnthropicLike {
   };
 }
 
+interface GeminiGroundingChunk {
+  web?: { title?: string; uri?: string };
+}
+
+interface GeminiGroundingSupport {
+  segment?: { text?: string };
+  groundingChunkIndices?: number[];
+}
+
+interface GeminiResponse {
+  text?: string;
+  candidates?: Array<{
+    groundingMetadata?: {
+      groundingChunks?: GeminiGroundingChunk[];
+      groundingSupports?: GeminiGroundingSupport[];
+    };
+  }>;
+}
+
 /** The slice of the Gemini SDK this depends on; narrow and injectable, same
  * testability pattern as AnthropicLike above. */
 export interface GeminiLike {
   models: {
-    generateContent(params: Record<string, unknown>): Promise<{ text?: string }>;
+    generateContent(params: Record<string, unknown>): Promise<GeminiResponse>;
   };
+}
+
+/** Turns Gemini's grounding metadata (which segments of its response text
+ * were backed by which web sources) into our own ResearchCitation shape.
+ * Drops a support with no text, no attributed chunks, or chunks with no
+ * usable URI; best-effort, since a citation we can't fully resolve is
+ * useless for display anyway. */
+function extractCitations(response: GeminiResponse): ResearchCitation[] {
+  const metadata = response.candidates?.[0]?.groundingMetadata;
+  const chunks = metadata?.groundingChunks ?? [];
+  const supports = metadata?.groundingSupports ?? [];
+
+  const citations: ResearchCitation[] = [];
+  for (const support of supports) {
+    const claim = support.segment?.text?.trim();
+    if (!claim) continue;
+    const sources = (support.groundingChunkIndices ?? [])
+      .map((i) => chunks[i]?.web)
+      .filter((web): web is { title?: string; uri: string } => typeof web?.uri === 'string')
+      .map((web) => ({ title: web.title?.trim() || web.uri, url: web.uri }));
+    if (sources.length === 0) continue;
+    citations.push({ claim, sources });
+  }
+  return citations;
 }
 
 /** researchCompany now runs on Gemini + Grounding with Google Search (see
@@ -142,7 +186,7 @@ async function createClaudeMessage(
 async function createGeminiContent(
   client: GeminiLike,
   params: Record<string, unknown>,
-): Promise<{ text?: string }> {
+): Promise<GeminiResponse> {
   try {
     return await client.models.generateContent(params);
   } catch (err) {
@@ -240,7 +284,7 @@ export async function researchCompany(ticker: string, options: ResearchOptions =
     if (research.length === 0) {
       throw new Error('Gemini research call returned no usable text');
     }
-    return { research };
+    return { research, citations: extractCitations(response) };
   })();
 
   return withWallClock(work, timeoutMs);
@@ -300,7 +344,8 @@ export async function checkForMaterialUpdates(
 
 const SCORE_SYSTEM_PROMPT = `You are tuning a technical-analysis trading tool's indicator settings for one
 stock, for an investor with a specific, stated risk tolerance. You are given a research brief gathered
-separately in an earlier step; no search tool is available here, so work only from what you're given.
+separately in an earlier step, and a numbered list of specific claims from that research with their sources; no
+search tool is available here, so work only from what you're given.
 
 Investor risk tolerance definitions:
 - risk-averse: prefers certainty and will choose the lower-risk option. Favor settings that require strong
@@ -326,15 +371,34 @@ Using the research and whichever one of these is stated in the request, you must
    cover earnings specifics for this company at all, say so honestly in earningsOutlook rather than inventing
    detail, and reason earningsLikelihood from whatever general volatility/predictability information the
    research does contain.
+4. For each of rationale, fitReason, earningsOutlook, and earningsLikelihoodReason, list which of the numbered
+   research claims (if any) it draws on, as an array of indices in the matching *Citations field (e.g.
+   rationaleCitations for rationale). Only cite a claim that field actually relies on; an empty array is normal
+   and expected when a field is your own reasoning/synthesis rather than a specific claim from the research.
+   Never cite a claim to a field it doesn't actually support just to fill in a citation.
 
 You MUST end by calling propose_settings exactly once, as your final action, with a rationale, the settings,
-the fit verdict + its reason, and the earnings outlook fields. Do not give your answer as plain text.`;
+the fit verdict + its reason, the earnings outlook fields, and the citation fields. Do not give your answer as
+plain text.`;
 
 const RISK_TOLERANCE_LABELS: Record<RiskTolerance, string> = {
   averse: 'risk-averse',
   neutral: 'risk-neutral',
   seeking: 'risk-seeking',
 };
+
+/** Formats research citations as a numbered list for the scoring prompt,
+ * e.g. `[0] "Google Cloud grew 34% YoY..." (sources: Reuters, Bloomberg)`.
+ * Claude references these back by index in its own citation fields; it
+ * never needs to reproduce the URL itself, so this stays compact. Empty
+ * string (not an empty list rendering) when there are no citations, so the
+ * prompt doesn't dangle an empty header. */
+function formatCitationsList(citations: readonly ResearchCitation[]): string {
+  if (citations.length === 0) return '(no specific sourced claims available)';
+  return citations
+    .map((c, i) => `[${i}] "${c.claim}" (sources: ${c.sources.map((s) => s.title).join(', ')})`)
+    .join('\n');
+}
 
 /** Scores an already-researched company against one investor risk
  * tolerance: proposes tuned settings, judges whether the stock itself
@@ -344,7 +408,7 @@ const RISK_TOLERANCE_LABELS: Record<RiskTolerance, string> = {
  * re-researching. */
 export async function scoreForRiskTolerance(
   ticker: string,
-  research: string,
+  research: ResearchProposal,
   riskTolerance: RiskTolerance,
   options: ScoreOptions = {},
 ): Promise<RiskScoredProposal> {
@@ -364,7 +428,8 @@ export async function scoreForRiskTolerance(
         {
           role: 'user',
           content:
-            `Research on ${ticker}:\n${research}\n\n` +
+            `Research on ${ticker}:\n${research.research}\n\n` +
+            `Numbered source citations for the research above:\n${formatCitationsList(research.citations)}\n\n` +
             `Investor risk tolerance: ${RISK_TOLERANCE_LABELS[riskTolerance]}\n\n` +
             'Propose settings and judge fit.',
         },
@@ -377,7 +442,7 @@ export async function scoreForRiskTolerance(
       // mean the API itself misbehaved, not a model choice to skip it.
       throw new Error('propose_settings was not called despite a forced tool_choice');
     }
-    return validateRiskScoredProposal(proposal.input);
+    return validateRiskScoredProposal(proposal.input, research.citations);
   })();
 
   return withWallClock(work, timeoutMs);

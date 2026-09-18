@@ -25,6 +25,24 @@ export type FitVerdict = 'not-recommended' | 'caution' | 'within-bounds';
  * political/regulatory factors it found). */
 export type EarningsLikelihood = 'low' | 'moderate' | 'high';
 
+/** One piece of Gemini's grounded research text and the source(s) it was
+ * attributed to. `sources[].url` is a Google grounding-redirect link, not
+ * a direct link to the source, but it resolves to the original page. */
+export interface ResearchCitation {
+  claim: string;
+  sources: Array<{ title: string; url: string }>;
+}
+
+/** Which research citations back each field of the proposal; powers the
+ * "sources" info button next to each claim in the AI Suggestion panel. An
+ * empty array for a field is normal (pure reasoning, nothing to cite). */
+export interface FieldCitations {
+  rationale: ResearchCitation[];
+  fitReason: ResearchCitation[];
+  earningsOutlook: ResearchCitation[];
+  earningsLikelihoodReason: ResearchCitation[];
+}
+
 export interface AdvisorProposal {
   rationale: string;
   settings: ProposedSettings;
@@ -34,6 +52,7 @@ export interface AdvisorProposal {
   earningsOutlook: string;
   earningsLikelihood: EarningsLikelihood;
   earningsLikelihoodReason: string;
+  fieldCitations: FieldCitations;
   /** When this suggestion was last fully regenerated; what "last updated"
    * on the AI Suggestion panel shows. Not the same as a quick-check, which
    * only appends quickUpdateNote below without changing this. */

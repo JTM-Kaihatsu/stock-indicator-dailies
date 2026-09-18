@@ -13,12 +13,39 @@
  * RiskScoredProposal). */
 export type RiskTolerance = 'averse' | 'neutral' | 'seeking';
 
+/** One piece of Gemini's grounded research text, and the source(s) it was
+ * attributed to. `claim` is the exact segment of research text Gemini's own
+ * grounding metadata tied to these sources (not something we invented by
+ * parsing prose); `sources[].url` is a Google grounding-redirect link, not
+ * a direct link to the source, but it resolves to the original page when
+ * followed. */
+export interface ResearchCitation {
+  claim: string;
+  sources: Array<{ title: string; url: string }>;
+}
+
 /** Stage 1's output: a reusable research brief, gathered by Gemini via
- * Grounding with Google Search. Plain text, not a validated tool-call shape
- * (Gemini's grounding tool doesn't combine with forced structured output),
- * so stage 2 (Claude) is what actually structures anything out of it. */
+ * Grounding with Google Search. `research` is plain text, not a validated
+ * tool-call shape (Gemini's grounding tool doesn't combine with forced
+ * structured output), so stage 2 (Claude) is what actually structures
+ * anything out of it, `citations` included: stage 2 picks which of these
+ * back each field it produces (see FieldCitations). */
 export interface ResearchProposal {
   research: string;
+  citations: ResearchCitation[];
+}
+
+/** Which research citations stage 2 (Claude) drew on for each field of its
+ * own output; resolved (full claim + sources, not just indices) so a
+ * cached suggestion stays self-contained even if research is later
+ * regenerated. Powers the AI Suggestion panel's per-field "sources" info
+ * button. Empty array is normal (a field can be pure synthesis/reasoning
+ * with nothing to cite). */
+export interface FieldCitations {
+  rationale: ResearchCitation[];
+  fitReason: ResearchCitation[];
+  earningsOutlook: ResearchCitation[];
+  earningsLikelihoodReason: ResearchCitation[];
 }
 
 /**
@@ -105,10 +132,33 @@ export const PROPOSE_SETTINGS_TOOL = {
         type: 'string' as const,
         description: '1-3 sentence justification for the earnings likelihood, citing specifics from the research.',
       },
+      rationaleCitations: {
+        type: 'array' as const,
+        items: { type: 'integer' as const, minimum: 0 },
+        description:
+          'Indices into the numbered research citations list (given in the prompt) that support rationale. ' +
+          'Empty array if rationale is pure reasoning/synthesis with nothing specific to cite.',
+      },
+      fitReasonCitations: {
+        type: 'array' as const,
+        items: { type: 'integer' as const, minimum: 0 },
+        description: 'Same as rationaleCitations, for fitReason.',
+      },
+      earningsOutlookCitations: {
+        type: 'array' as const,
+        items: { type: 'integer' as const, minimum: 0 },
+        description: 'Same as rationaleCitations, for earningsOutlook.',
+      },
+      earningsLikelihoodReasonCitations: {
+        type: 'array' as const,
+        items: { type: 'integer' as const, minimum: 0 },
+        description: 'Same as rationaleCitations, for earningsLikelihoodReason.',
+      },
     },
     required: [
       'rationale', 'settings', 'fit', 'fitReason',
       'nextEarningsDate', 'earningsOutlook', 'earningsLikelihood', 'earningsLikelihoodReason',
+      'rationaleCitations', 'fitReasonCitations', 'earningsOutlookCitations', 'earningsLikelihoodReasonCitations',
     ],
   },
 };
@@ -137,6 +187,7 @@ export interface RiskScoredProposal {
   earningsOutlook: string;
   earningsLikelihood: EarningsLikelihood;
   earningsLikelihoodReason: string;
+  fieldCitations: FieldCitations;
 }
 
 const RANGES: Record<keyof ProposedSettings, [number, number]> = {
@@ -151,11 +202,29 @@ const RANGES: Record<keyof ProposedSettings, [number, number]> = {
   adxPeriod: [2, 100],
 };
 
+/** Resolves a field's raw citation-index array (as Claude returned it)
+ * against the actual research citations list, dropping anything
+ * out-of-range or malformed rather than throwing: an index a model got
+ * wrong is a minor cosmetic loss (that one citation just doesn't show up),
+ * not a reason to fail the whole proposal. */
+function resolveCitations(raw: unknown, citations: readonly ResearchCitation[]): ResearchCitation[] {
+  if (!Array.isArray(raw)) return [];
+  const resolved: ResearchCitation[] = [];
+  for (const i of raw) {
+    if (typeof i === 'number' && Number.isInteger(i) && i >= 0 && i < citations.length) {
+      resolved.push(citations[i]!);
+    }
+  }
+  return resolved;
+}
+
 /** Validates a parsed `propose_settings` tool call input against the same
  * bounds the backend enforces. Throws with a specific message on the first
  * violation; the caller decides how to handle a model that ignored the
- * schema's declared bounds. */
-export function validateRiskScoredProposal(input: unknown): RiskScoredProposal {
+ * schema's declared bounds. `citations` is the same numbered list given to
+ * the model in the prompt, used to resolve its citation-index fields into
+ * full ResearchCitation objects. */
+export function validateRiskScoredProposal(input: unknown, citations: readonly ResearchCitation[] = []): RiskScoredProposal {
   if (typeof input !== 'object' || input === null) {
     throw new Error('propose_settings input was not an object');
   }
@@ -234,5 +303,11 @@ export function validateRiskScoredProposal(input: unknown): RiskScoredProposal {
     earningsOutlook,
     earningsLikelihood: obj.earningsLikelihood as EarningsLikelihood,
     earningsLikelihoodReason,
+    fieldCitations: {
+      rationale: resolveCitations(obj.rationaleCitations, citations),
+      fitReason: resolveCitations(obj.fitReasonCitations, citations),
+      earningsOutlook: resolveCitations(obj.earningsOutlookCitations, citations),
+      earningsLikelihoodReason: resolveCitations(obj.earningsLikelihoodReasonCitations, citations),
+    },
   };
 }

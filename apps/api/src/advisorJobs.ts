@@ -61,8 +61,7 @@ function isPastEarningsDate(nextEarningsDate: string | null, now: Date): boolean
 async function fullRegeneration(ticker: string, riskTolerance: RiskTolerance): Promise<AdvisorJobResult> {
   let research = await getCachedResearch(ticker);
   if (!research) {
-    const researched = await researchCompany(ticker);
-    research = researched.research;
+    research = await researchCompany(ticker);
     await cacheResearch(ticker, research);
   }
 
