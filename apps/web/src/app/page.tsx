@@ -1,18 +1,28 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { recomputeReport } from '@stock-indicator-dailies/shared';
 import { analyzeDaily } from '@/lib/api';
 import { addTicker } from '@/lib/watchlistApi';
 import { useAuth } from '@/hooks/useAuth';
 import type { DailyReport } from '@/types/api';
-import { DEFAULT_LIVE_SETTINGS, loadSettings, saveSettings, toLiveOptions, type LiveSettings } from '@/lib/settings';
+import {
+  DEFAULT_BACKTEST_ONLY_SETTINGS,
+  DEFAULT_LIVE_SETTINGS,
+  loadSettings,
+  mergeSettings,
+  saveSettings,
+  toLiveOptions,
+  type IndicatorSettings,
+  type LiveSettings,
+} from '@/lib/settings';
 import { dailyFailureMessage } from '@/lib/errorMessages';
 import { TickerInput } from '@/components/TickerInput';
 import { ReportCard } from '@/components/ReportCard';
 import { LoadingState } from '@/components/LoadingState';
 import { SettingsPanel } from '@/components/SettingsPanel';
-import { BacktestPanel } from '@/components/BacktestPanel';
+import { AiSuggestionPanel, type AcceptResult } from '@/components/AiSuggestionPanel';
+import { BacktestPanel, type BacktestPanelHandle } from '@/components/BacktestPanel';
 import { AuthPanel } from '@/components/AuthPanel';
 import { SignalHistoryPanel } from '@/components/SignalHistoryPanel';
 
@@ -23,6 +33,7 @@ export default function Home() {
   const [report, setReport] = useState<DailyReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [liveSettings, setLiveSettings] = useState<LiveSettings>(DEFAULT_LIVE_SETTINGS);
+  const backtestRef = useRef<BacktestPanelHandle>(null);
 
   // Hydrate from sessionStorage after mount, not at initial render, so the
   // server-rendered and first client render both start from the same
@@ -35,6 +46,11 @@ export default function Home() {
     saveSettings(newSettings);
     setLiveSettings(newSettings);
     setReport((current) => (current ? recomputeReport(current, toLiveOptions(newSettings)) : current));
+  }
+
+  async function runTesting(settings: IndicatorSettings): Promise<AcceptResult> {
+    if (!backtestRef.current) return { ok: false, reason: 'Historical Testing is not ready yet.' };
+    return backtestRef.current.runScenario(settings);
   }
 
   async function handleSubmit(t: string) {
@@ -90,7 +106,13 @@ export default function Home() {
                 : undefined
             }
           />
-          <BacktestPanel ticker={report.ticker} liveSettings={liveSettings} />
+          <AiSuggestionPanel
+            ticker={report.ticker}
+            settings={mergeSettings(liveSettings, DEFAULT_BACKTEST_ONLY_SETTINGS)}
+            onApplyAsIndicatorSettings={applySettings}
+            onAccept={runTesting}
+          />
+          <BacktestPanel ref={backtestRef} ticker={report.ticker} liveSettings={liveSettings} />
           <SignalHistoryPanel ticker={report.ticker} />
         </>
       )}

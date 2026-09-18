@@ -11,11 +11,19 @@ import {
   updateWatchlistSettings,
 } from '@/lib/watchlistApi';
 import { sleep } from '@/lib/polling.ts';
-import { DEFAULT_LIVE_SETTINGS, toLiveOptions, type IndicatorSettings, type LiveSettings } from '@/lib/settings';
+import {
+  DEFAULT_BACKTEST_ONLY_SETTINGS,
+  DEFAULT_LIVE_SETTINGS,
+  mergeSettings,
+  toLiveOptions,
+  type IndicatorSettings,
+  type LiveSettings,
+} from '@/lib/settings';
 import { stageLabel } from '@/lib/errorMessages';
 import { ReportCard } from '@/components/ReportCard';
 import { SettingsPanel } from '@/components/SettingsPanel';
-import { BacktestPanel } from '@/components/BacktestPanel';
+import { AiSuggestionPanel, type AcceptResult } from '@/components/AiSuggestionPanel';
+import { BacktestPanel, type BacktestPanelHandle } from '@/components/BacktestPanel';
 import { SignalHistoryPanel } from '@/components/SignalHistoryPanel';
 import type { DailyReport } from '@/types/api';
 
@@ -141,6 +149,7 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
   // ticker changed (navigating from one watchlisted ticker's page to
   // another re-uses this same component instance).
   const requestId = useRef(0);
+  const backtestRef = useRef<BacktestPanelHandle>(null);
 
   // Keyed on the user id, not the `session` object itself: Supabase's client
   // silently refreshes the access token (a new Session object, same user) on
@@ -286,6 +295,11 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
     });
   }
 
+  async function runTesting(settings: IndicatorSettings): Promise<AcceptResult> {
+    if (!backtestRef.current) return { ok: false, reason: 'Historical Testing is not ready yet.' };
+    return backtestRef.current.runScenario(settings);
+  }
+
   if (authLoading) return null;
 
   if (!session) {
@@ -343,7 +357,15 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
             </div>
           )}
 
+          <AiSuggestionPanel
+            ticker={ticker}
+            settings={mergeSettings(status.settings, DEFAULT_BACKTEST_ONLY_SETTINGS)}
+            onApplyAsIndicatorSettings={applySettings}
+            onAccept={runTesting}
+          />
+
           <BacktestPanel
+            ref={backtestRef}
             ticker={ticker}
             liveSettings={status.settings}
             onApplyToWatchlist={persistSettings}

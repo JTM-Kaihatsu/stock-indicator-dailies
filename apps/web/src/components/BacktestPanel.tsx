@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { runBacktest } from '@/lib/backtestApi';
 import {
   DEFAULT_BACKTEST_ONLY_SETTINGS,
@@ -14,19 +14,21 @@ import {
 import type { BacktestResult } from '@/types/backtest';
 import { TradeList } from './TradeList';
 import { BacktestOnlySettingsFields, InfoIcon, LiveSettingsFields } from './SettingsFields';
-import { AiSuggestionPanel, type AcceptResult } from './AiSuggestionPanel';
+import type { AcceptResult } from './AiSuggestionPanel';
 
 type RunOutcome = { ok: true; result: BacktestResult } | { ok: false; reason: string };
 
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
-export function BacktestPanel({
-  ticker,
-  liveSettings,
-  onApplyToWatchlist,
-  initialScenarioSettings,
-  onScenarioPersist,
-}: {
+/** Imperative handle so a sibling AiSuggestionPanel (rendered above this
+ * panel, not inside it; see the two page components) can trigger a
+ * Historical Testing scenario run from its "Run Testing on AI Suggestions"
+ * button without this panel needing to own or render that button itself. */
+export interface BacktestPanelHandle {
+  runScenario(settings: IndicatorSettings): Promise<AcceptResult>;
+}
+
+export const BacktestPanel = forwardRef<BacktestPanelHandle, {
   ticker: string;
   liveSettings: LiveSettings;
   /** Only passed when this panel is rendered for a watchlisted ticker;
@@ -45,7 +47,13 @@ export function BacktestPanel({
    * accepted AI suggestion), so the watchlisted ticker's stored scenario
    * stays current. Omitted on the main page. */
   onScenarioPersist?: (settings: IndicatorSettings) => void;
-}) {
+}>(function BacktestPanel({
+  ticker,
+  liveSettings,
+  onApplyToWatchlist,
+  initialScenarioSettings,
+  onScenarioPersist,
+}, ref) {
   // Open by default: Historical Testing is core to the report, not an
   // optional aside, on both the ad-hoc main-page report and a watchlisted
   // ticker's page.
@@ -82,7 +90,6 @@ export function BacktestPanel({
   // mount, even though it depends on `baseline` becoming available first.
   const scenarioAutoRunAttempted = useRef(false);
 
-  const currentSettings = mergeSettings(policy, backtestOnly);
   const settingsApplied =
     policy.buyConsensus === appliedSettings.buyConsensus &&
     policy.sellConsensus === appliedSettings.sellConsensus &&
@@ -232,6 +239,8 @@ export function BacktestPanel({
     return { ok: true };
   }
 
+  useImperativeHandle(ref, () => ({ runScenario: acceptAiSuggestion }));
+
   return (
     <section className="backtest-panel">
       <button type="button" className="settings-toggle" onClick={() => setOpen((v) => !v)}>
@@ -354,10 +363,8 @@ export function BacktestPanel({
               )}
             </>
           )}
-
-          <AiSuggestionPanel ticker={ticker} settings={currentSettings} onAccept={acceptAiSuggestion} />
         </div>
       )}
     </section>
   );
-}
+});

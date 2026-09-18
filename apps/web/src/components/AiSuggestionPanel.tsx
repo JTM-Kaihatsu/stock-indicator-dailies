@@ -10,6 +10,7 @@ import {
   fromProposedSettings,
   type DiffableSettingsKey,
   type IndicatorSettings,
+  type LiveSettings,
 } from '@/lib/settings';
 import type { AdvisorProposal, EarningsLikelihood, FitVerdict } from '@/types/advisor';
 
@@ -51,10 +52,20 @@ export interface AcceptResult {
 export function AiSuggestionPanel({
   ticker,
   settings,
+  onApplyAsIndicatorSettings,
   onAccept,
 }: {
   ticker: string;
+  /** The report's current baseline: live Indicator Settings merged with the
+   * default backtest-only filters. Drives both this panel's "already
+   * matches" badges and the settings-compare table below. */
   settings: IndicatorSettings;
+  /** Applies the proposal's 3 live-sensitivity fields as the actual
+   * Indicator Settings (same effect as the Indicator Settings panel's own
+   * Apply button); preserves whichever risk tolerance is already set there. */
+  onApplyAsIndicatorSettings: (settings: LiveSettings) => void;
+  /** Runs the proposal's full settings (including backtest-only fields) as
+   * a Historical Testing scenario. */
   onAccept: (settings: IndicatorSettings) => Promise<AcceptResult>;
 }) {
   // Defaults to the ticker's own saved Indicator Settings preference, but
@@ -139,8 +150,30 @@ export function AiSuggestionPanel({
     }
   }
 
+  /** Applies just the 3 live-sensitivity fields as the actual Indicator
+   * Settings, preserving whatever risk tolerance is already set there (the
+   * proposal doesn't itself carry a tolerance to apply; that was an input
+   * to the request, not part of its output). Synchronous from this
+   * component's perspective, same as the Indicator Settings panel's own
+   * Apply button; any persistence failure surfaces at the page level. */
+  function applyAsIndicatorSettings() {
+    if (!proposal) return;
+    const full = fromProposedSettings(proposal.settings);
+    onApplyAsIndicatorSettings({
+      buyConsensus: full.buyConsensus,
+      sellConsensus: full.sellConsensus,
+      recencyDays: full.recencyDays,
+      riskTolerance: settings.riskTolerance,
+    });
+  }
+
   const proposedSettings = proposal ? fromProposedSettings(proposal.settings) : null;
   const changedFields = proposedSettings ? diffSettings(settings, proposedSettings) : [];
+  const liveFieldsMatch =
+    proposedSettings !== null &&
+    settings.buyConsensus === proposedSettings.buyConsensus &&
+    settings.sellConsensus === proposedSettings.sellConsensus &&
+    settings.recencyDays === proposedSettings.recencyDays;
   const onCooldown = cooldownRemaining > 0;
   const fitStyle = proposal ? FIT_STYLES[proposal.fit] : null;
   const earningsStyle = proposal ? EARNINGS_LIKELIHOOD_STYLES[proposal.earningsLikelihood] : null;
@@ -245,7 +278,14 @@ export function AiSuggestionPanel({
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {liveFieldsMatch ? (
+              <span className="badge settings-badge-active">✓ Matches Indicator Settings</span>
+            ) : (
+              <button type="button" className="analyze-btn" onClick={applyAsIndicatorSettings}>
+                Apply AI Suggestions as the Indicator Settings
+              </button>
+            )}
             {changedFields.length > 0 ? (
               <button type="button" className="analyze-btn" onClick={accept} disabled={accepting}>
                 {accepting ? 'Running…' : 'Run Testing on AI Suggestions'}
