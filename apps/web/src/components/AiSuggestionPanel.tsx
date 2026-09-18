@@ -151,10 +151,12 @@ export function AiSuggestionPanel({
     }
   }
 
-  /** Applies just the 3 live-sensitivity fields as the actual Indicator
-   * Settings, preserving whatever risk tolerance is already set there (the
-   * proposal doesn't itself carry a tolerance to apply; that was an input
-   * to the request, not part of its output). Synchronous from this
+  /** Applies the 3 live-sensitivity fields, ATR/ADX, and the risk tolerance
+   * this suggestion was actually generated for (NOT whatever the current
+   * Indicator Settings' tolerance happens to be) as the actual Indicator
+   * Settings: applying settings tuned for risk-seeking should also mark
+   * the ticker risk-seeking, not silently leave the old tolerance in place
+   * alongside numbers tuned for a different one. Synchronous from this
    * component's perspective, same as the Indicator Settings panel's own
    * Apply button; any persistence failure surfaces at the page level. */
   function applyAsIndicatorSettings() {
@@ -164,7 +166,7 @@ export function AiSuggestionPanel({
       buyConsensus: full.buyConsensus,
       sellConsensus: full.sellConsensus,
       recencyDays: full.recencyDays,
-      riskTolerance: settings.riskTolerance,
+      riskTolerance,
       atrMultiplier: full.atrMultiplier,
       atrPeriod: full.atrPeriod,
       adxThreshold: full.adxThreshold,
@@ -174,8 +176,11 @@ export function AiSuggestionPanel({
 
   const proposedSettings = proposal ? fromProposedSettings(proposal.settings) : null;
   const changedFields = proposedSettings ? diffSettings(settings, proposedSettings) : [];
+  const currentRiskTolerance = settings.riskTolerance ?? 'neutral';
+  const riskToleranceDiffers = currentRiskTolerance !== riskTolerance;
   const liveFieldsMatch =
     proposedSettings !== null &&
+    !riskToleranceDiffers &&
     settings.buyConsensus === proposedSettings.buyConsensus &&
     settings.sellConsensus === proposedSettings.sellConsensus &&
     settings.recencyDays === proposedSettings.recencyDays &&
@@ -186,6 +191,27 @@ export function AiSuggestionPanel({
   const onCooldown = cooldownRemaining > 0;
   const fitStyle = proposal ? FIT_STYLES[proposal.fit] : null;
   const earningsStyle = proposal ? EARNINGS_LIKELIHOOD_STYLES[proposal.earningsLikelihood] : null;
+  const riskToleranceLabel = (v: RiskTolerance) => RISK_TOLERANCE_OPTIONS.find((o) => o.value === v)?.label ?? v;
+  /** What applying this proposal as Indicator Settings would change,
+   * denoted against the CURRENT indicator settings (not just Historical
+   * Testing's own baseline/scenario comparison, and including risk
+   * tolerance, which the settings-only diffSettings above deliberately
+   * excludes since the backtest simulation has no concept of it). Always
+   * lists every field (not just the ones that differ), same "show the
+   * whole picture" precedent as the table below; a differing field is
+   * marked with a from-arrow-to instead of a bare value. */
+  const compareRows = proposedSettings
+    ? [
+        { key: 'riskTolerance', label: 'Risk tolerance', current: riskToleranceLabel(currentRiskTolerance), proposed: riskToleranceLabel(riskTolerance), differs: riskToleranceDiffers },
+        ...(Object.keys(FIELD_LABELS) as DiffableSettingsKey[]).map((key) => ({
+          key,
+          label: FIELD_LABELS[key],
+          current: String(settings[key] ?? 'off'),
+          proposed: String(proposedSettings[key] ?? 'off'),
+          differs: settings[key] !== proposedSettings[key],
+        })),
+      ]
+    : [];
 
   return (
     <section className="advisor-panel">
@@ -305,14 +331,28 @@ export function AiSuggestionPanel({
             </div>
           )}
 
-          {/* Proposed settings always render here as plain values, never
-           * collapsing into a "matches" message once applied; the numbers
-           * are exactly what's useful to see right after accepting. */}
+          {/* Every field always renders here, never collapsing into a
+           * "matches" message once applied; the numbers are exactly what's
+           * useful to see right after accepting. A field that differs from
+           * the current Indicator Settings (risk tolerance included, not
+           * just the backtest-relevant fields Historical Testing's own
+           * baseline/scenario diff covers) shows current → proposed
+           * instead of a bare value. */}
           <div className="compare-card" style={{ marginTop: 0 }}>
-            {(Object.keys(FIELD_LABELS) as DiffableSettingsKey[]).map((key) => (
-              <div className="compare-row" key={key}>
-                <span className="compare-label">{FIELD_LABELS[key]}</span>
-                <span className="compare-values">{proposedSettings![key] ?? 'off'}</span>
+            {compareRows.map((row) => (
+              <div className="compare-row" key={row.key}>
+                <span className="compare-label">{row.label}</span>
+                <span className="compare-values">
+                  {row.differs ? (
+                    <>
+                      <span style={{ color: 'var(--muted)' }}>{row.current}</span>
+                      <span className="compare-arrow">→</span>
+                      <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{row.proposed}</span>
+                    </>
+                  ) : (
+                    row.proposed
+                  )}
+                </span>
               </div>
             ))}
           </div>
