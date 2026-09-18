@@ -5,11 +5,21 @@ import { getCachedReportDetail, getCachedReportMeta, getLatestFailure } from '..
 import { canAttempt, isRunning, runPipeline } from '../pipeline.ts';
 import { computeRefreshAvailableAt } from '../refreshCooldown.ts';
 import { parseTicker } from '../ticker.ts';
-import { addToWatchlist, getWatchlist, removeFromWatchlist, reorderWatchlist, updateScenarioSettings, updateWatchlistSettings } from '../watchlist.ts';
+import {
+  addToWatchlist,
+  getWatchlist,
+  removeFromWatchlist,
+  reorderWatchlist,
+  updatePosition,
+  updateScenarioSettings,
+  updateWatchlistSettings,
+  type WatchlistRow,
+} from '../watchlist.ts';
 import { requireAuth } from '../authMiddleware.ts';
 import { runDailyWatchlistJobAndNotify } from '../scheduler.ts';
 import { getLastChangedMap } from '../signalHistory.ts';
 import { getEmailOnSignal, setEmailOnSignal } from '../notificationPrefs.ts';
+import { computePositionRisk, computeUnrealizedPnl, type Position, type PositionRisk, type UnrealizedPnl } from '../positionRisk.ts';
 
 export const watchlistRoute = new Hono();
 
@@ -35,6 +45,52 @@ export interface WatchlistDashboardRow {
   lastChangedAt: string | null;
   /** This ticker's sensitivity override; null means app defaults. */
   settings: DeriveSignalOptions | null;
+  /** A real entered position; null means none recorded. */
+  position: Position | null;
+  /** Only computed when both a position and ATR settings are set; null
+   * otherwise. When `triggered`, `overall` above has already been forced
+   * to 'SELL' and `overallOverrideReason` explains why. */
+  positionRisk: PositionRisk | null;
+  overallOverrideReason: string | null;
+  unrealizedPnl: UnrealizedPnl | null;
+}
+
+/** Applies the live ATR sell-point override to one row's Overall signal, in
+ * place of whatever resolveDualOverall computed: entering a position and
+ * setting ATR noise-reduction in Indicator Settings is an explicit choice
+ * to have this ticker's stop level watched, so a breach takes priority
+ * over the ordinary computed/AI disagreement-resolution logic. Only ever
+ * forces SELL, never overrides a HOLD/BUY read that isn't actually
+ * breached. Best-effort: a fetch failure inside computePositionRisk
+ * degrades to "no override," not a broken row. */
+async function applyPositionRisk(
+  ticker: string,
+  entry: WatchlistRow,
+  currentPrice: number | null,
+  overall: Signal | null,
+): Promise<Pick<WatchlistDashboardRow, 'position' | 'positionRisk' | 'overallOverrideReason' | 'unrealizedPnl'> & { overall: Signal | null }> {
+  const position = entry.position;
+  const atrMultiplier = entry.settings?.atrMultiplier;
+  const atrPeriod = entry.settings?.atrPeriod;
+
+  if (!position) return { position: null, positionRisk: null, overallOverrideReason: null, unrealizedPnl: null, overall };
+
+  const unrealizedPnl = currentPrice !== null ? computeUnrealizedPnl(position, currentPrice) : null;
+
+  if (atrMultiplier === undefined || atrPeriod === undefined) {
+    return { position, positionRisk: null, overallOverrideReason: null, unrealizedPnl, overall };
+  }
+
+  const positionRisk = await computePositionRisk(ticker, position, atrMultiplier, atrPeriod);
+  if (!positionRisk?.triggered) {
+    return { position, positionRisk, overallOverrideReason: null, unrealizedPnl, overall };
+  }
+
+  const reason =
+    `Overall forced to SELL: price ($${positionRisk.currentPrice.toFixed(2)}) fell below your ATR stop ` +
+    `($${positionRisk.stopLevel.toFixed(2)} = peak $${positionRisk.peakSinceEntry.toFixed(2)} since entry minus ` +
+    `${positionRisk.atrMultiplier}x the ${positionRisk.atrPeriod}-day ATR of $${positionRisk.atrValue.toFixed(2)}).`;
+  return { position, positionRisk, overallOverrideReason: reason, unrealizedPnl, overall: 'SELL' };
 }
 
 const RISK_TOLERANCES: readonly RiskTolerance[] = ['averse', 'neutral', 'seeking'];
@@ -84,6 +140,24 @@ function parseIndicatorSettings(raw: unknown): Record<string, unknown> | null {
   return out;
 }
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Validates a `{ entryDate, shares, entryPrice }` position, or `null` to
+ * clear one. `undefined` (the field omitted entirely) means "leave the
+ * stored position as-is," distinct from an explicit `null`; the caller
+ * tells these apart before calling this. */
+function parsePosition(raw: unknown): Position | null | 'invalid' {
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object') return 'invalid';
+  const r = raw as Record<string, unknown>;
+  if (typeof r.entryDate !== 'string' || !DATE_PATTERN.test(r.entryDate) || Number.isNaN(Date.parse(r.entryDate))) {
+    return 'invalid';
+  }
+  if (typeof r.shares !== 'number' || !Number.isFinite(r.shares) || r.shares <= 0) return 'invalid';
+  if (typeof r.entryPrice !== 'number' || !Number.isFinite(r.entryPrice) || r.entryPrice <= 0) return 'invalid';
+  return { entryDate: r.entryDate, shares: r.shares, entryPrice: r.entryPrice };
+}
+
 // requireAuth is applied per-route below, not via a blanket `/watchlist/*`
 // wildcard; that would also gate the dev-only scheduler-trigger endpoint,
 // which is deliberately separate (see bottom of file).
@@ -93,30 +167,39 @@ watchlistRoute.get('/watchlist', requireAuth, async (c) => {
   const entries = await getWatchlist(userId);
   const tickers = entries.map((e) => e.ticker);
   const lastChangedMap = await getLastChangedMap(tickers);
+  const entryByTicker = new Map(entries.map((e) => [e.ticker, e]));
 
-  const blankRow = (ticker: string, status: WatchlistTickerStatus, lastChangedAt: string | null, settings: DeriveSignalOptions | null): WatchlistDashboardRow => ({
-    ticker, overall: null, computed: null, ai: null, asOf: null, status, lastChangedAt, settings,
+  const blankRow = (ticker: string, status: WatchlistTickerStatus, lastChangedAt: string | null, entry: WatchlistRow): WatchlistDashboardRow => ({
+    ticker, overall: null, computed: null, ai: null, asOf: null, status, lastChangedAt,
+    settings: entry.settings, position: entry.position, positionRisk: null, overallOverrideReason: null, unrealizedPnl: null,
   });
 
   const rows: WatchlistDashboardRow[] = await Promise.all(
     entries.map(async ({ ticker, settings }): Promise<WatchlistDashboardRow> => {
+      const entry = entryByTicker.get(ticker)!;
       const lastChangedAt = lastChangedMap.get(ticker) ?? null;
       const meta = await getCachedReportMeta(ticker);
 
       // Nothing ever captured for this ticker (or its row is gone).
-      if (!meta) return blankRow(ticker, isRunning(ticker) ? 'running' : 'failed', lastChangedAt, settings);
+      if (!meta) return blankRow(ticker, isRunning(ticker) ? 'running' : 'failed', lastChangedAt, entry);
 
       const report = recomputeReport(meta.report, settings ?? {});
       const computed = report.deterministic?.signal ?? null;
       const ai = report.verdict.signal;
+      const currentPrice = report.deterministic?.values.close ?? null;
+      const risk = await applyPositionRisk(ticker, entry, currentPrice, resolveDualOverall(computed, ai));
       const withSignal = {
         ticker,
-        overall: resolveDualOverall(computed, ai),
+        overall: risk.overall,
         computed,
         ai,
         asOf: report.deterministic?.asOf ?? null,
         lastChangedAt,
         settings,
+        position: risk.position,
+        positionRisk: risk.positionRisk,
+        overallOverrideReason: risk.overallOverrideReason,
+        unrealizedPnl: risk.unrealizedPnl,
       };
 
       if (!meta.stale) return { ...withSignal, status: 'ready' };
@@ -129,7 +212,7 @@ watchlistRoute.get('/watchlist', requireAuth, async (c) => {
       const lastAttemptFailed =
         failure !== null && new Date(failure.occurredAt).getTime() > new Date(meta.retrievedAt).getTime();
       return lastAttemptFailed
-        ? blankRow(ticker, 'failed', lastChangedAt, settings)
+        ? blankRow(ticker, 'failed', lastChangedAt, entry)
         : { ...withSignal, status: 'stale' };
     }),
   );
@@ -197,11 +280,12 @@ watchlistRoute.patch('/watchlist/:ticker', requireAuth, async (c) => {
   const ticker = parseTicker(c.req.param('ticker'));
   if (!ticker) return c.json({ ok: false, reason: 'Invalid ticker' }, 400);
 
-  const body = await c.req.json<{ settings?: unknown; scenarioSettings?: unknown }>().catch(() => ({}) as { settings?: unknown; scenarioSettings?: unknown });
+  const body = await c.req
+    .json<{ settings?: unknown; scenarioSettings?: unknown; position?: unknown }>()
+    .catch(() => ({}) as { settings?: unknown; scenarioSettings?: unknown; position?: unknown });
 
-  // Both fields are independent and optional: a caller may update just the
-  // live sensitivity override, just the scenario/custom backtest settings,
-  // or both in one request.
+  // All three fields are independent and optional: a caller may update any
+  // subset of them in one request.
   if (body.settings !== undefined) {
     const settings = parseSettings(body.settings) ?? {};
     await updateWatchlistSettings(userId, ticker, settings);
@@ -210,6 +294,11 @@ watchlistRoute.patch('/watchlist/:ticker', requireAuth, async (c) => {
     const scenarioSettings = parseIndicatorSettings(body.scenarioSettings);
     if (!scenarioSettings) return c.json({ ok: false, reason: 'Invalid scenarioSettings' }, 400);
     await updateScenarioSettings(userId, ticker, scenarioSettings);
+  }
+  if (body.position !== undefined) {
+    const position = parsePosition(body.position);
+    if (position === 'invalid') return c.json({ ok: false, reason: 'Invalid position' }, 400);
+    await updatePosition(userId, ticker, position);
   }
 
   return c.json({ ok: true, ticker });
@@ -232,6 +321,10 @@ watchlistRoute.get('/watchlist/:ticker/report', requireAuth, async (c) => {
   if (detail) {
     const report = recomputeReport(detail.report, entry.settings ?? {});
     const failure = await getLatestFailure(ticker);
+    const computed = report.deterministic?.signal ?? null;
+    const ai = report.verdict.signal;
+    const currentPrice = report.deterministic?.values.close ?? null;
+    const risk = await applyPositionRisk(ticker, entry, currentPrice, resolveDualOverall(computed, ai));
     return c.json({
       ok: true,
       report,
@@ -240,6 +333,11 @@ watchlistRoute.get('/watchlist/:ticker/report', requireAuth, async (c) => {
       retrievedAt: detail.retrievedAt,
       stale: detail.stale,
       refreshAvailableAt: computeRefreshAvailableAt(detail.retrievedAt, failure?.occurredAt ?? null),
+      overall: risk.overall,
+      position: risk.position,
+      positionRisk: risk.positionRisk,
+      overallOverrideReason: risk.overallOverrideReason,
+      unrealizedPnl: risk.unrealizedPnl,
     });
   }
 

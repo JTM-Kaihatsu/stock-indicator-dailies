@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DeriveSignalOptions } from '@stock-indicator-dailies/shared';
 
 import { getSupabaseClient } from './supabaseClient.ts';
+import type { Position } from './positionRisk.ts';
 
 export interface WatchlistRow {
   ticker: string;
@@ -13,6 +14,10 @@ export interface WatchlistRow {
    * Opaque here — never interpreted server-side, just stored and returned
    * verbatim for the frontend to auto-rerun. */
   scenarioSettings: Record<string, unknown> | null;
+  /** A real entered position (when they bought, how many shares, at what
+   * price); null means none recorded. All three fields are set/cleared
+   * together, see updatePosition. */
+  position: Position | null;
 }
 
 interface WatchlistTickerRecord {
@@ -20,6 +25,14 @@ interface WatchlistTickerRecord {
   added_at: string;
   settings: DeriveSignalOptions | null;
   scenario_settings: Record<string, unknown> | null;
+  entry_date: string | null;
+  shares: number | null;
+  entry_price: number | null;
+}
+
+function toPosition(row: WatchlistTickerRecord): Position | null {
+  if (row.entry_date === null || row.shares === null || row.entry_price === null) return null;
+  return { entryDate: row.entry_date, shares: row.shares, entryPrice: row.entry_price };
 }
 
 /** A user's watchlisted tickers, in their chosen display order (see
@@ -33,7 +46,7 @@ export async function getWatchlist(userId: string): Promise<WatchlistRow[]> {
   try {
     const { data, error } = await db
       .from('watchlist_tickers')
-      .select('ticker, added_at, settings, scenario_settings')
+      .select('ticker, added_at, settings, scenario_settings, entry_date, shares, entry_price')
       .eq('user_id', userId)
       .order('sort_order', { ascending: true })
       .returns<WatchlistTickerRecord[]>();
@@ -43,6 +56,7 @@ export async function getWatchlist(userId: string): Promise<WatchlistRow[]> {
       addedAt: row.added_at,
       settings: row.settings ?? null,
       scenarioSettings: row.scenario_settings ?? null,
+      position: toPosition(row),
     }));
   } catch {
     return [];
@@ -133,6 +147,28 @@ export async function updateScenarioSettings(userId: string, ticker: string, set
 
   try {
     await db.from('watchlist_tickers').update({ scenario_settings: settings }).eq('user_id', userId).eq('ticker', ticker);
+  } catch {
+    // Best-effort.
+  }
+}
+
+/** Sets or clears this ticker's real entered position. `null` clears all
+ * three columns together (there's no meaningful "half a position"). A
+ * no-op if the row doesn't exist. */
+export async function updatePosition(userId: string, ticker: string, position: Position | null): Promise<void> {
+  const db = getSupabaseClient();
+  if (!db) return;
+
+  try {
+    await db
+      .from('watchlist_tickers')
+      .update({
+        entry_date: position?.entryDate ?? null,
+        shares: position?.shares ?? null,
+        entry_price: position?.entryPrice ?? null,
+      })
+      .eq('user_id', userId)
+      .eq('ticker', ticker);
   } catch {
     // Best-effort.
   }

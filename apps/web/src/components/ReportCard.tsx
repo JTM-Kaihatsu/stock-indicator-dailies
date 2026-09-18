@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { DeriveSignalOptions, IndicatorKey } from '@stock-indicator-dailies/shared';
+import type { DeriveSignalOptions, IndicatorKey, Signal } from '@stock-indicator-dailies/shared';
 import { deriveIndicatorSignal, resolveDualOverall } from '@stock-indicator-dailies/shared';
 import type { DailyReport } from '@/types/api';
 import { SignalPill } from './SignalPill';
@@ -20,6 +20,8 @@ export function ReportCard({
   report,
   options,
   onAddToWatchlist,
+  overallOverride,
+  overallOverrideReason,
 }: {
   report: DailyReport;
   options?: DeriveSignalOptions;
@@ -28,6 +30,13 @@ export function ReportCard({
    * signed out, or on a watchlisted ticker's own page (which has no
    * ad-hoc "add" concept — it's already on the list). */
   onAddToWatchlist?: () => Promise<{ ok: boolean; reason?: string }>;
+  /** When present, replaces the displayed Overall pill (Computed/AI below
+   * it still show their own true reads); the live position-risk sell-point
+   * override on a watchlisted ticker's page. */
+  overallOverride?: Signal | null;
+  /** Plain-language reason shown under the Overall pill when overallOverride
+   * is active. */
+  overallOverrideReason?: string | null;
 }) {
   const { ticker, verdict, deterministic, image, warnings, timings } = report;
   const [addState, setAddState] = useState<'idle' | 'adding' | 'added' | 'error'>('idle');
@@ -50,7 +59,7 @@ export function ReportCard({
   // A completed report's AI/chart read is always present, so the "still
   // pending" null case resolveDualOverall exists for (a watchlist ticker
   // with no capture yet) can never actually happen here.
-  const overallSignal = resolveDualOverall(detSignal, vlmSignal)!;
+  const overallSignal = overallOverride ?? resolveDualOverall(detSignal, vlmSignal)!;
 
   const vlmByKey = new Map(verdict.readings.map((r) => [r.indicator, r]));
   const detByKey = new Map((deterministic?.readings ?? []).map((r) => [r.indicator, r]));
@@ -112,6 +121,11 @@ export function ReportCard({
               AI: <b className={sigClass(vlmSignal)} style={{ fontFamily: 'var(--mono)' }}>{vlmSignal}</b>
             </span>
           </div>
+          {overallOverride && overallOverrideReason && (
+            <div style={{ marginTop: 8, maxWidth: 260, fontSize: 12, color: 'var(--sell)', textAlign: 'right' }}>
+              {overallOverrideReason}
+            </div>
+          )}
         </div>
       </header>
 

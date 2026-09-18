@@ -10,6 +10,32 @@ export type WatchlistSettings = DeriveSignalOptions;
 
 export type WatchlistTickerStatus = 'ready' | 'running' | 'failed' | 'stale';
 
+/** A real entered position: when they bought, how many shares, at what
+ * price. Powers unrealized gains/losses and the live ATR sell-point
+ * override. */
+export interface WatchlistPosition {
+  entryDate: string;
+  shares: number;
+  entryPrice: number;
+}
+
+/** Only present when both a position and ATR settings (Indicator
+ * Settings' "Enable ATR noise reduction") are set for this ticker. */
+export interface PositionRisk {
+  currentPrice: number;
+  peakSinceEntry: number;
+  atrValue: number;
+  atrMultiplier: number;
+  atrPeriod: number;
+  stopLevel: number;
+  triggered: boolean;
+}
+
+export interface UnrealizedPnl {
+  amount: number;
+  pct: number;
+}
+
 export interface WatchlistDashboardRow {
   ticker: string;
   overall: Signal | null;
@@ -26,6 +52,12 @@ export interface WatchlistDashboardRow {
   lastChangedAt: string | null;
   /** This ticker's sensitivity override; null means app defaults. */
   settings: WatchlistSettings | null;
+  position: WatchlistPosition | null;
+  positionRisk: PositionRisk | null;
+  /** Present exactly when positionRisk.triggered forced `overall` to
+   * 'SELL'; explains why in plain language for display. */
+  overallOverrideReason: string | null;
+  unrealizedPnl: UnrealizedPnl | null;
 }
 
 export type WatchlistResponse =
@@ -49,6 +81,14 @@ export type WatchlistReportResponse =
       /** ISO time the manual Refresh button becomes usable again (1h after
        * the last capture attempt); null means usable now. */
       refreshAvailableAt: string | null;
+      /** The Overall signal, already reflecting the position-risk override
+       * (if any) below; use this instead of report.verdict/deterministic
+       * when displaying the headline Overall read. */
+      overall: Signal | null;
+      position: WatchlistPosition | null;
+      positionRisk: PositionRisk | null;
+      overallOverrideReason: string | null;
+      unrealizedPnl: UnrealizedPnl | null;
     }
   | { ok: false; reason: string; pending: true }
   /** Rate-limited: too soon since the last attempt to try again. `userMessage`

@@ -2,11 +2,12 @@
 
 import { use, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { recomputeReport } from '@stock-indicator-dailies/shared';
+import { recomputeReport, type Signal } from '@stock-indicator-dailies/shared';
 import { useAuth } from '@/hooks/useAuth';
 import {
   fetchWatchlistTickerReport,
   refreshWatchlistTicker,
+  updatePosition,
   updateScenarioSettings,
   updateWatchlistSettings,
 } from '@/lib/watchlistApi';
@@ -22,7 +23,9 @@ import {
 import { stageLabel } from '@/lib/errorMessages';
 import { ReportCard } from '@/components/ReportCard';
 import { SettingsPanel } from '@/components/SettingsPanel';
+import { PositionPanel } from '@/components/PositionPanel';
 import { AiSuggestionPanel, type AcceptResult } from '@/components/AiSuggestionPanel';
+import type { PositionRisk, UnrealizedPnl, WatchlistPosition } from '@/types/watchlist';
 import { BacktestPanel, type BacktestPanelHandle } from '@/components/BacktestPanel';
 import { SignalHistoryPanel } from '@/components/SignalHistoryPanel';
 import type { DailyReport } from '@/types/api';
@@ -66,6 +69,11 @@ type Ready = {
   retrievedAt: string;
   stale: boolean;
   refreshAvailableAt: string | null;
+  overall: Signal | null;
+  position: WatchlistPosition | null;
+  positionRisk: PositionRisk | null;
+  overallOverrideReason: string | null;
+  unrealizedPnl: UnrealizedPnl | null;
 };
 
 type Status =
@@ -187,6 +195,11 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
             retrievedAt: res.retrievedAt,
             stale: res.stale,
             refreshAvailableAt: res.refreshAvailableAt,
+            overall: res.overall,
+            position: res.position,
+            positionRisk: res.positionRisk,
+            overallOverrideReason: res.overallOverrideReason,
+            unrealizedPnl: res.unrealizedPnl,
           });
           return;
         }
@@ -295,6 +308,24 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
     });
   }
 
+  /** Saves (or, with `null`, clears) this ticker's position, then re-fetches
+   * the report so unrealized P&L and the sell-point override reflect it
+   * immediately rather than waiting for the next poll. */
+  async function savePosition(position: WatchlistPosition | null): Promise<{ ok: boolean; reason?: string }> {
+    if (!session) return { ok: false, reason: 'Not signed in.' };
+    const res = await updatePosition(session.access_token, ticker, position);
+    if (!res.ok) return { ok: false, reason: res.reason };
+    const report = await fetchWatchlistTickerReport(session.access_token, ticker);
+    if (report.ok) {
+      setStatus((prev) =>
+        prev.kind === 'ready'
+          ? { ...prev, position: report.position, positionRisk: report.positionRisk, overallOverrideReason: report.overallOverrideReason, unrealizedPnl: report.unrealizedPnl, overall: report.overall }
+          : prev,
+      );
+    }
+    return { ok: true };
+  }
+
   async function runTesting(settings: IndicatorSettings): Promise<AcceptResult> {
     if (!backtestRef.current) return { ok: false, reason: 'Historical Testing is not ready yet.' };
     return backtestRef.current.runScenario(settings);
@@ -339,7 +370,19 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
 
       {status.kind === 'ready' && (
         <>
-          <ReportCard report={status.report} options={toLiveOptions(status.settings)} />
+          <ReportCard
+            report={status.report}
+            options={toLiveOptions(status.settings)}
+            overallOverride={status.overall}
+            overallOverrideReason={status.overallOverrideReason}
+          />
+
+          <PositionPanel
+            position={status.position}
+            positionRisk={status.positionRisk}
+            unrealizedPnl={status.unrealizedPnl}
+            onSave={savePosition}
+          />
 
           <RefreshBar
             retrievedAt={status.retrievedAt}
