@@ -1,6 +1,7 @@
 import type {
   WatchlistMutationResponse,
   WatchlistNotificationResponse,
+  WatchlistPosition,
   WatchlistRefreshResponse,
   WatchlistReportResponse,
   WatchlistResponse,
@@ -68,6 +69,20 @@ export async function updateScenarioSettings(
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ scenarioSettings }),
+  });
+  return res.json();
+}
+
+/** Sets or clears this ticker's real entered position (`null` clears it). */
+export async function updatePosition(
+  accessToken: string,
+  ticker: string,
+  position: WatchlistPosition | null,
+): Promise<WatchlistMutationResponse> {
+  const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}`), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ position }),
   });
   return res.json();
 }
