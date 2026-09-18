@@ -319,7 +319,7 @@ export const BacktestPanel = forwardRef<BacktestPanelHandle, {
 
               {scenario && scenarioSettings && baselineSettings && diffSettings(baselineSettings, scenarioSettings).length > 0 && (
                 <div className="compare-card">
-                  <div className="settings-group-title">Custom settings vs baseline</div>
+                  <div className="settings-group-title">Baseline vs custom settings</div>
                   {diffSettings(baselineSettings, scenarioSettings).map((f) => (
                     <div className="compare-row" key={f.key}>
                       <span className="compare-label">{f.label}</span>

@@ -13,14 +13,15 @@
  * RiskScoredProposal). */
 export type RiskTolerance = 'averse' | 'neutral' | 'seeking';
 
-/** One piece of Gemini's grounded research text, and the source(s) it was
- * attributed to. `claim` is the exact segment of research text Gemini's own
- * grounding metadata tied to these sources (not something we invented by
- * parsing prose); `sources[].url` is a Google grounding-redirect link, not
- * a direct link to the source, but it resolves to the original page when
+/** One raw grounded excerpt from Gemini's research text, and the source(s)
+ * it was attributed to. `quote` is the exact segment of research text
+ * Gemini's own grounding metadata tied to these sources (not something we
+ * invented by parsing prose, and not a synthesized claim; see FieldClaim
+ * for that); `sources[].url` is a Google grounding-redirect link, not a
+ * direct link to the source, but it resolves to the original page when
  * followed. */
-export interface ResearchCitation {
-  claim: string;
+export interface ResearchQuote {
+  quote: string;
   sources: Array<{ title: string; url: string }>;
 }
 
@@ -29,23 +30,36 @@ export interface ResearchCitation {
  * tool-call shape (Gemini's grounding tool doesn't combine with forced
  * structured output), so stage 2 (Claude) is what actually structures
  * anything out of it, `citations` included: stage 2 picks which of these
- * back each field it produces (see FieldCitations). */
+ * back each claim it makes (see FieldCitations). */
 export interface ResearchProposal {
   research: string;
-  citations: ResearchCitation[];
+  citations: ResearchQuote[];
 }
 
-/** Which research citations stage 2 (Claude) drew on for each field of its
- * own output; resolved (full claim + sources, not just indices) so a
- * cached suggestion stays self-contained even if research is later
- * regenerated. Powers the AI Suggestion panel's per-field "sources" info
- * button. Empty array is normal (a field can be pure synthesis/reasoning
- * with nothing to cite). */
+/** One synthesized claim stage 2 (Claude) made in support of one of its own
+ * output fields, plus the resolved research quotes backing it (full
+ * quote + sources, not just indices, so a cached suggestion stays
+ * self-contained even if research is later regenerated). `claim` is
+ * Claude's own short synthesized takeaway (e.g. "Google has historically
+ * overcome cloud-scaling challenges"), not a copy of the field text itself.
+ * `quotes` can legitimately be empty: a claim built from the research's
+ * own guided progression (likelihood, obstacles) is often synthesis rather
+ * than a single directly-citable sentence, and that's kept, not dropped;
+ * only a citation index a model got wrong is dropped (see resolveCitations). */
+export interface FieldClaim {
+  claim: string;
+  quotes: ResearchQuote[];
+}
+
+/** Which synthesized claims stage 2 (Claude) made for each field of its own
+ * output. Powers the AI Suggestion panel's per-field "sources" drawer.
+ * Empty array is normal (a field can be pure synthesis with nothing
+ * specific enough to break out as its own claim). */
 export interface FieldCitations {
-  rationale: ResearchCitation[];
-  fitReason: ResearchCitation[];
-  earningsOutlook: ResearchCitation[];
-  earningsLikelihoodReason: ResearchCitation[];
+  rationale: FieldClaim[];
+  fitReason: FieldClaim[];
+  earningsOutlook: FieldClaim[];
+  earningsLikelihoodReason: FieldClaim[];
 }
 
 /**
@@ -118,8 +132,11 @@ export const PROPOSE_SETTINGS_TOOL = {
       earningsOutlook: {
         type: 'string' as const,
         description:
-          'What analysts expect and are watching for at the next earnings report, and the upside if those ' +
-          "expectations are met or beaten, per the research. State honestly if the research doesn't cover this.",
+          'What would merit success by the next earnings report and over the next year, per analysts/investors, ' +
+          'and the consensus sentiment: highly positive, positive-but-cautious, negative-but-optimistic, or ' +
+          'highly negative. Include a rough percentage range for the upside if expectations are met or beaten, ' +
+          "and for the downside if they're missed, ONLY when the research actually supports an estimate; say " +
+          "plainly when it doesn't rather than inventing a number.",
       },
       earningsLikelihood: {
         type: 'string' as const,
@@ -132,33 +149,71 @@ export const PROPOSE_SETTINGS_TOOL = {
         type: 'string' as const,
         description: '1-3 sentence justification for the earnings likelihood, citing specifics from the research.',
       },
-      rationaleCitations: {
+      rationaleClaims: {
         type: 'array' as const,
-        items: { type: 'integer' as const, minimum: 0 },
+        items: {
+          type: 'object' as const,
+          properties: {
+            claim: {
+              type: 'string' as const,
+              description:
+                'A short, standalone synthesized claim from the research that supports rationale (e.g. "Google ' +
+                'has historically overcome cloud-scaling challenges"), not a copy of rationale itself.',
+            },
+            citationIndices: {
+              type: 'array' as const,
+              items: { type: 'integer' as const, minimum: 0 },
+              description: 'Indices into the numbered research citations list (given in the prompt) backing this specific claim.',
+            },
+          },
+          required: ['claim', 'citationIndices'],
+        },
         description:
-          'Indices into the numbered research citations list (given in the prompt) that support rationale. ' +
-          'Empty array if rationale is pure reasoning/synthesis with nothing specific to cite.',
+          '0 or more distinct synthesized claims from the research that support rationale, each tied to a ' +
+          'discrete part of the research (climate/changes, success criteria, likelihood, obstacles). Empty array ' +
+          'if rationale is pure reasoning with nothing specific to break out as its own claim.',
       },
-      fitReasonCitations: {
+      fitReasonClaims: {
         type: 'array' as const,
-        items: { type: 'integer' as const, minimum: 0 },
-        description: 'Same as rationaleCitations, for fitReason.',
+        items: {
+          type: 'object' as const,
+          properties: {
+            claim: { type: 'string' as const, description: 'Same as rationaleClaims, for fitReason.' },
+            citationIndices: { type: 'array' as const, items: { type: 'integer' as const, minimum: 0 } },
+          },
+          required: ['claim', 'citationIndices'],
+        },
+        description: 'Same as rationaleClaims, for fitReason.',
       },
-      earningsOutlookCitations: {
+      earningsOutlookClaims: {
         type: 'array' as const,
-        items: { type: 'integer' as const, minimum: 0 },
-        description: 'Same as rationaleCitations, for earningsOutlook.',
+        items: {
+          type: 'object' as const,
+          properties: {
+            claim: { type: 'string' as const, description: 'Same as rationaleClaims, for earningsOutlook.' },
+            citationIndices: { type: 'array' as const, items: { type: 'integer' as const, minimum: 0 } },
+          },
+          required: ['claim', 'citationIndices'],
+        },
+        description: 'Same as rationaleClaims, for earningsOutlook.',
       },
-      earningsLikelihoodReasonCitations: {
+      earningsLikelihoodReasonClaims: {
         type: 'array' as const,
-        items: { type: 'integer' as const, minimum: 0 },
-        description: 'Same as rationaleCitations, for earningsLikelihoodReason.',
+        items: {
+          type: 'object' as const,
+          properties: {
+            claim: { type: 'string' as const, description: 'Same as rationaleClaims, for earningsLikelihoodReason.' },
+            citationIndices: { type: 'array' as const, items: { type: 'integer' as const, minimum: 0 } },
+          },
+          required: ['claim', 'citationIndices'],
+        },
+        description: 'Same as rationaleClaims, for earningsLikelihoodReason.',
       },
     },
     required: [
       'rationale', 'settings', 'fit', 'fitReason',
       'nextEarningsDate', 'earningsOutlook', 'earningsLikelihood', 'earningsLikelihoodReason',
-      'rationaleCitations', 'fitReasonCitations', 'earningsOutlookCitations', 'earningsLikelihoodReasonCitations',
+      'rationaleClaims', 'fitReasonClaims', 'earningsOutlookClaims', 'earningsLikelihoodReasonClaims',
     ],
   },
 };
@@ -202,18 +257,31 @@ const RANGES: Record<keyof ProposedSettings, [number, number]> = {
   adxPeriod: [2, 100],
 };
 
-/** Resolves a field's raw citation-index array (as Claude returned it)
- * against the actual research citations list, dropping anything
- * out-of-range or malformed rather than throwing: an index a model got
- * wrong is a minor cosmetic loss (that one citation just doesn't show up),
- * not a reason to fail the whole proposal. */
-function resolveCitations(raw: unknown, citations: readonly ResearchCitation[]): ResearchCitation[] {
+/** Resolves one field's raw claim array (as Claude returned it) against the
+ * actual research citations list: each `{claim, citationIndices}` entry
+ * becomes `{claim, quotes}`, dropping any out-of-range/malformed index
+ * (an index a model got wrong is a minor cosmetic loss, not a reason to
+ * fail the whole proposal) and any malformed entry entirely (missing/non-
+ * string claim). A claim that resolves to zero quotes is still kept: research
+ * built from a guided progression (likelihood, obstacles) is often the
+ * model's own synthesis rather than a single directly-citable sentence, and
+ * dropping it would silently delete real content, not just a citation. */
+function resolveCitations(raw: unknown, citations: readonly ResearchQuote[]): FieldClaim[] {
   if (!Array.isArray(raw)) return [];
-  const resolved: ResearchCitation[] = [];
-  for (const i of raw) {
-    if (typeof i === 'number' && Number.isInteger(i) && i >= 0 && i < citations.length) {
-      resolved.push(citations[i]!);
+  const resolved: FieldClaim[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { claim, citationIndices } = entry as Record<string, unknown>;
+    if (typeof claim !== 'string' || claim.trim().length === 0) continue;
+    const quotes: ResearchQuote[] = [];
+    if (Array.isArray(citationIndices)) {
+      for (const i of citationIndices) {
+        if (typeof i === 'number' && Number.isInteger(i) && i >= 0 && i < citations.length) {
+          quotes.push(citations[i]!);
+        }
+      }
     }
+    resolved.push({ claim: claim.trim(), quotes });
   }
   return resolved;
 }
@@ -222,9 +290,9 @@ function resolveCitations(raw: unknown, citations: readonly ResearchCitation[]):
  * bounds the backend enforces. Throws with a specific message on the first
  * violation; the caller decides how to handle a model that ignored the
  * schema's declared bounds. `citations` is the same numbered list given to
- * the model in the prompt, used to resolve its citation-index fields into
- * full ResearchCitation objects. */
-export function validateRiskScoredProposal(input: unknown, citations: readonly ResearchCitation[] = []): RiskScoredProposal {
+ * the model in the prompt, used to resolve its claim fields' citation
+ * indices into full FieldClaim objects. */
+export function validateRiskScoredProposal(input: unknown, citations: readonly ResearchQuote[] = []): RiskScoredProposal {
   if (typeof input !== 'object' || input === null) {
     throw new Error('propose_settings input was not an object');
   }
@@ -304,10 +372,10 @@ export function validateRiskScoredProposal(input: unknown, citations: readonly R
     earningsLikelihood: obj.earningsLikelihood as EarningsLikelihood,
     earningsLikelihoodReason,
     fieldCitations: {
-      rationale: resolveCitations(obj.rationaleCitations, citations),
-      fitReason: resolveCitations(obj.fitReasonCitations, citations),
-      earningsOutlook: resolveCitations(obj.earningsOutlookCitations, citations),
-      earningsLikelihoodReason: resolveCitations(obj.earningsLikelihoodReasonCitations, citations),
+      rationale: resolveCitations(obj.rationaleClaims, citations),
+      fitReason: resolveCitations(obj.fitReasonClaims, citations),
+      earningsOutlook: resolveCitations(obj.earningsOutlookClaims, citations),
+      earningsLikelihoodReason: resolveCitations(obj.earningsLikelihoodReasonClaims, citations),
     },
   };
 }

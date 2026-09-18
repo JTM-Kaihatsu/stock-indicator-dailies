@@ -35,10 +35,10 @@ function proposeSettingsBlock(overrides: Record<string, unknown> = {}) {
       earningsOutlook: 'Analysts expect revenue growth of 15% year over year.',
       earningsLikelihood: 'moderate',
       earningsLikelihoodReason: 'The company has beaten expectations 3 of the last 4 quarters.',
-      rationaleCitations: [],
-      fitReasonCitations: [],
-      earningsOutlookCitations: [],
-      earningsLikelihoodReasonCitations: [],
+      rationaleClaims: [],
+      fitReasonClaims: [],
+      earningsOutlookClaims: [],
+      earningsLikelihoodReasonClaims: [],
       ...overrides,
     },
   };
@@ -126,7 +126,7 @@ test('extracts citations from grounding metadata', async () => {
   const result = await researchCompany('GOOG', { client });
   assert.deepEqual(result.citations, [
     {
-      claim: 'Google Cloud grew 34% YoY.',
+      quote: 'Google Cloud grew 34% YoY.',
       sources: [
         { title: 'Reuters', url: 'https://redirect/1' },
         { title: 'Bloomberg', url: 'https://redirect/2' },
@@ -151,7 +151,7 @@ test('drops a grounding support with no text or no resolvable sources', async ()
   const { client } = scriptedGeminiClient('Findings.', candidates);
   const result = await researchCompany('GOOG', { client });
   assert.equal(result.citations.length, 1);
-  assert.equal(result.citations[0]!.claim, 'Sourced claim.');
+  assert.equal(result.citations[0]!.quote, 'Sourced claim.');
 });
 
 test('researchCompany translates a 503 overloaded error into a friendly AdvisorUpstreamError', async () => {
@@ -252,7 +252,7 @@ test('returns the validated proposal from a single forced call', async () => {
 test('passes the ticker, research, citations, and risk tolerance label into the user message', async () => {
   const { client, bodies } = scriptedClaudeClient([{ content: [proposeSettingsBlock()] }]);
   const research = mkResearch('Findings about Apple.', [
-    { claim: 'Apple beat EPS estimates.', sources: [{ title: 'Reuters', url: 'https://x' }] },
+    { quote: 'Apple beat EPS estimates.', sources: [{ title: 'Reuters', url: 'https://x' }] },
   ]);
   await scoreForRiskTolerance('AAPL', research, 'seeking', { client });
   const body = bodies[0] as { messages: Array<{ content: string }> };
@@ -263,30 +263,58 @@ test('passes the ticker, research, citations, and risk tolerance label into the 
   assert.match(userContent, /\[0\] "Apple beat EPS estimates\." \(sources: Reuters\)/);
 });
 
-test('resolves citation indices into fieldCitations', async () => {
+test('resolves claims and citation indices into fieldCitations', async () => {
   const research = mkResearch('Findings.', [
-    { claim: 'Claim A.', sources: [{ title: 'Reuters', url: 'https://a' }] },
-    { claim: 'Claim B.', sources: [{ title: 'Bloomberg', url: 'https://b' }] },
+    { quote: 'Quote A.', sources: [{ title: 'Reuters', url: 'https://a' }] },
+    { quote: 'Quote B.', sources: [{ title: 'Bloomberg', url: 'https://b' }] },
   ]);
   const { client } = scriptedClaudeClient([
-    { content: [proposeSettingsBlock({ rationaleCitations: [0], fitReasonCitations: [1], earningsOutlookCitations: [0, 1] })] },
+    {
+      content: [
+        proposeSettingsBlock({
+          rationaleClaims: [{ claim: 'Claim A.', citationIndices: [0] }],
+          fitReasonClaims: [{ claim: 'Claim B.', citationIndices: [1] }],
+          earningsOutlookClaims: [{ claim: 'Claim C.', citationIndices: [0, 1] }],
+        }),
+      ],
+    },
   ]);
   const result = await scoreForRiskTolerance('NVDA', research, 'neutral', { client });
-  assert.deepEqual(result.fieldCitations.rationale, [research.citations[0]]);
-  assert.deepEqual(result.fieldCitations.fitReason, [research.citations[1]]);
-  assert.deepEqual(result.fieldCitations.earningsOutlook, research.citations);
+  assert.deepEqual(result.fieldCitations.rationale, [{ claim: 'Claim A.', quotes: [research.citations[0]] }]);
+  assert.deepEqual(result.fieldCitations.fitReason, [{ claim: 'Claim B.', quotes: [research.citations[1]] }]);
+  assert.deepEqual(result.fieldCitations.earningsOutlook, [{ claim: 'Claim C.', quotes: research.citations }]);
   assert.deepEqual(result.fieldCitations.earningsLikelihoodReason, []);
 });
 
-test('drops out-of-range or malformed citation indices rather than throwing', async () => {
+test('drops out-of-range or malformed citation indices within a claim rather than throwing', async () => {
   const research = mkResearch('Findings.', [
-    { claim: 'Claim A.', sources: [{ title: 'Reuters', url: 'https://a' }] },
+    { quote: 'Quote A.', sources: [{ title: 'Reuters', url: 'https://a' }] },
   ]);
   const { client } = scriptedClaudeClient([
-    { content: [proposeSettingsBlock({ rationaleCitations: [0, 5, -1, 'x'] })] },
+    { content: [proposeSettingsBlock({ rationaleClaims: [{ claim: 'Claim A.', citationIndices: [0, 5, -1, 'x'] }] })] },
   ]);
   const result = await scoreForRiskTolerance('NVDA', research, 'neutral', { client });
-  assert.deepEqual(result.fieldCitations.rationale, [research.citations[0]]);
+  assert.deepEqual(result.fieldCitations.rationale, [{ claim: 'Claim A.', quotes: [research.citations[0]] }]);
+});
+
+test('keeps a claim with zero resolvable quotes rather than dropping it', async () => {
+  const research = mkResearch('Findings.', [
+    { quote: 'Quote A.', sources: [{ title: 'Reuters', url: 'https://a' }] },
+  ]);
+  const { client } = scriptedClaudeClient([
+    { content: [proposeSettingsBlock({ rationaleClaims: [{ claim: 'Pure synthesis, nothing directly citable.', citationIndices: [] }] })] },
+  ]);
+  const result = await scoreForRiskTolerance('NVDA', research, 'neutral', { client });
+  assert.deepEqual(result.fieldCitations.rationale, [{ claim: 'Pure synthesis, nothing directly citable.', quotes: [] }]);
+});
+
+test('drops a malformed claim entry (missing/non-string claim) rather than throwing', async () => {
+  const research = mkResearch('Findings.', []);
+  const { client } = scriptedClaudeClient([
+    { content: [proposeSettingsBlock({ rationaleClaims: [{ citationIndices: [] }, { claim: '', citationIndices: [] }] })] },
+  ]);
+  const result = await scoreForRiskTolerance('NVDA', research, 'neutral', { client });
+  assert.deepEqual(result.fieldCitations.rationale, []);
 });
 
 test('rejects a proposal with an out-of-range field', async () => {

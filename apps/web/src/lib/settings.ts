@@ -56,6 +56,14 @@ export const RISK_TOLERANCE_OPTIONS: ReadonlyArray<{ value: RiskTolerance; label
   { value: 'seeking', label: 'Risk-seeking', hint: 'Comfortable with fast, higher-variance bets.' },
 ];
 
+/** Looks up a risk tolerance's display label from RISK_TOLERANCE_OPTIONS.
+ * Single source of truth so the AI Suggestion panel's own selector and the
+ * read-only "AI analysis suggested..." provenance text (Indicator Settings,
+ * Historical Testing) never drift in wording. */
+export function riskToleranceLabel(v: RiskTolerance): string {
+  return RISK_TOLERANCE_OPTIONS.find((o) => o.value === v)?.label ?? v;
+}
+
 export interface BacktestOnlySettings {
   persistenceBars: number;
   minHoldingDays: number;
@@ -70,7 +78,7 @@ export const DEFAULT_LIVE_SETTINGS: LiveSettings = {
   buyConsensus: 2,
   sellConsensus: 3,
   recencyDays: 3,
-  riskTolerance: 'neutral',
+  riskTolerance: undefined,
   atrMultiplier: undefined,
   atrPeriod: 14,
   adxThreshold: undefined,
@@ -136,10 +144,16 @@ export function toBacktestOptions(settings: IndicatorSettings): BacktestOptions 
   };
 }
 
+/** Whether the actual sensitivity levers (not riskTolerance, which is just
+ * read-only AI-provenance metadata riding along on this type, not itself a
+ * lever a user tunes) are all at their defaults. Excluding it means a
+ * ticker AI happened to tag with a risk tolerance, but whose numeric
+ * settings are otherwise untouched, still reads as "Default", not
+ * "Custom": same reasoning DiffableSettingsKey already applies below. */
 export function isDefault(settings: LiveSettings): boolean {
-  return (Object.keys(DEFAULT_LIVE_SETTINGS) as Array<keyof LiveSettings>).every(
-    (key) => settings[key] === DEFAULT_LIVE_SETTINGS[key],
-  );
+  return (Object.keys(DEFAULT_LIVE_SETTINGS) as Array<keyof LiveSettings>)
+    .filter((key) => key !== 'riskTolerance')
+    .every((key) => settings[key] === DEFAULT_LIVE_SETTINGS[key]);
 }
 
 /** The numeric backtest levers Historical Testing's diff view compares.

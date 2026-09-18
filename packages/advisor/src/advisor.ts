@@ -4,8 +4,8 @@ import { GoogleGenAI } from '@google/genai';
 import {
   PROPOSE_SETTINGS_TOOL,
   validateRiskScoredProposal,
-  type ResearchCitation,
   type ResearchProposal,
+  type ResearchQuote,
   type RiskScoredProposal,
   type RiskTolerance,
 } from './tool.ts';
@@ -61,25 +61,25 @@ export interface GeminiLike {
 }
 
 /** Turns Gemini's grounding metadata (which segments of its response text
- * were backed by which web sources) into our own ResearchCitation shape.
+ * were backed by which web sources) into our own ResearchQuote shape.
  * Drops a support with no text, no attributed chunks, or chunks with no
- * usable URI; best-effort, since a citation we can't fully resolve is
- * useless for display anyway. */
-function extractCitations(response: GeminiResponse): ResearchCitation[] {
+ * usable URI; best-effort, since a quote we can't fully resolve is useless
+ * for display anyway. */
+function extractCitations(response: GeminiResponse): ResearchQuote[] {
   const metadata = response.candidates?.[0]?.groundingMetadata;
   const chunks = metadata?.groundingChunks ?? [];
   const supports = metadata?.groundingSupports ?? [];
 
-  const citations: ResearchCitation[] = [];
+  const citations: ResearchQuote[] = [];
   for (const support of supports) {
-    const claim = support.segment?.text?.trim();
-    if (!claim) continue;
+    const quote = support.segment?.text?.trim();
+    if (!quote) continue;
     const sources = (support.groundingChunkIndices ?? [])
       .map((i) => chunks[i]?.web)
       .filter((web): web is { title?: string; uri: string } => typeof web?.uri === 'string')
       .map((web) => ({ title: web.title?.trim() || web.uri, url: web.uri }));
     if (sources.length === 0) continue;
-    citations.push({ claim, sources });
+    citations.push({ quote, sources });
   }
   return citations;
 }
@@ -240,22 +240,34 @@ technical-analysis trading tool. This brief will be used later, in a separate st
 tune indicator settings for different investor risk tolerances and to judge whether the stock suits each one;
 write it to stand on its own, not slanted toward any one risk profile.
 
-Use Google Search to research the company:
-- Its industry and sector, current trends affecting it, recent relevant news, its competitors, and how volatile
-  or speculative its stock currently is.
-- Its next scheduled earnings report: the exact date if officially confirmed by the company, or an estimated
-  date or range if not yet confirmed (many companies' earnings dates can be estimated weeks or months ahead
-  from their historical reporting pattern, even before an official confirmation; report that estimate rather
-  than omitting the date entirely, and say plainly whether it's confirmed or estimated). Also cover what
-  analysts expect and are watching for, and the upside if those expectations are met or beaten.
-- How likely those expectations are to be met, reasoned from the company's own historical pattern of beating or
-  missing expectations, current industry trends, and any relevant political or regulatory news that could help
-  or hinder it (e.g. tariffs, regulation, supply constraints, public sentiment). Ground this in what you find
-  for THIS company; do not assume any particular kind of catalyst applies.
+Use Google Search to work through these 4 questions IN ORDER. Each answer should build on and, where relevant,
+adjust the previous one, not stand independently: this is a chain of reasoning, not 4 unrelated paragraphs.
 
-Base your findings on what you find via search, not general knowledge alone. Write a single findings summary,
-covering both the general company research and the earnings outlook above, as prose (4-10 sentences). Respond
-with only that summary; no preamble, no headers.`;
+1. What is the overall company, industry, and political/regulatory climate around this company? Have there been
+   recent changes in any of the three?
+2. Given that climate, what would merit success for the company in the eyes of analysts and investors by its
+   next earnings report, and over the next year? Classify the consensus sentiment as one of: highly positive,
+   positive but cautious, negative but optimistic, or highly negative.
+3. Given the company's own historical track record, how likely is it to actually achieve that success? If it
+   does, what's the likely effect on the stock in rough percent upside; if it doesn't, what's the likely percent
+   downside? Only give a percentage when the research actually supports an estimate; say plainly when it
+   doesn't rather than inventing a number.
+4. What specific factors stand in the way of that success? Is this an ongoing, previously-existing problem, or
+   something new? Has anything changed recently (within the company, its supply chain, the broader industry, or
+   the political/regulatory climate) that would remedy or worsen it now, as opposed to before? Ground this in
+   what you find for THIS company; do not assume any particular kind of catalyst applies just because it's
+   common for the sector.
+
+Also note the company's next scheduled earnings report date: the exact date if officially confirmed, or an
+estimated date/range if not (many companies' dates can be estimated from their historical reporting pattern
+even before official confirmation; report that estimate rather than omitting it, and say plainly whether it's
+confirmed or estimated).
+
+Base your findings on what you find via search, not general knowledge alone. Write a single findings summary
+that reads as the running synthesis described above (climate, then success criteria, then likelihood and
+upside/downside, then obstacles), as prose (6-14 sentences). Respond with only that summary; no preamble, no
+headers, no numbered list matching the 4 questions verbatim; write it as connected prose that a reader could
+follow question-to-question without needing the numbers.`;
 
 /** Researches `ticker`'s company via Gemini + Grounding with Google Search
  * and returns a reusable research brief. Stage 1 of 2 (see
@@ -344,8 +356,11 @@ export async function checkForMaterialUpdates(
 
 const SCORE_SYSTEM_PROMPT = `You are tuning a technical-analysis trading tool's indicator settings for one
 stock, for an investor with a specific, stated risk tolerance. You are given a research brief gathered
-separately in an earlier step, and a numbered list of specific claims from that research with their sources; no
-search tool is available here, so work only from what you're given.
+separately in an earlier step (itself built as a chain of reasoning: company/industry/political climate and
+recent changes, then what would merit success and the consensus sentiment, then the likelihood of success and
+the rough upside/downside, then the obstacles in the way and what's changed), and a numbered list of specific
+quotes from that research with their sources; no search tool is available here, so work only from what you're
+given.
 
 Investor risk tolerance definitions:
 - risk-averse: prefers certainty and will choose the lower-risk option. Favor settings that require strong
@@ -357,28 +372,34 @@ Investor risk tolerance definitions:
 
 Using the research and whichever one of these is stated in the request, you must:
 1. Propose specific settings tuned for that risk tolerance.
-2. Judge the "fit": whether the STOCK ITSELF, per the research, actually suits that risk tolerance, independent
-   of how you tuned the settings. Tuning settings defensively does not make an unsuitable stock
-   "within-bounds"; judge the company, not the knobs. Reserve "caution"/"not-recommended" for a genuine
-   mismatch the research supports (e.g. a risk-averse investor and a stock the research shows is unusually
-   volatile, speculative, or driven by frequent, hard-to-predict catalysts), not routine market movement.
+2. Judge the "fit": whether the STOCK ITSELF, per the research, actually suits that risk tolerance. This is the
+   final step of the research's own chain of reasoning (climate → success criteria → likelihood/upside/downside
+   → obstacles → overall risk level), independent of how you tuned the settings. Tuning settings defensively
+   does not make an unsuitable stock "within-bounds"; judge the company, not the knobs. Reserve
+   "caution"/"not-recommended" for a genuine mismatch the research supports (e.g. a risk-averse investor and a
+   stock the research shows is unusually volatile, speculative, or driven by frequent, hard-to-predict
+   catalysts), not routine market movement.
 3. Extract the earnings outlook from the research: the next earnings date if the research gives one, confirmed
    or estimated (resolve an estimated range to its earlier end; null only if the research gives no timing
-   indication at all), what analysts expect and the upside if achieved, and a likelihood assessment
+   indication at all), what would merit success by the next report and over the next year, the consensus
+   sentiment, rough upside/downside percentages when the research supports them, and a likelihood assessment
    (low/moderate/high) for whether those expectations will be met, reasoned from the company's historical
    earnings pattern, current industry trends, and any political/regulatory factors the research covers. If the
    date is an estimate rather than officially confirmed, say so in earningsOutlook. If the research doesn't
    cover earnings specifics for this company at all, say so honestly in earningsOutlook rather than inventing
    detail, and reason earningsLikelihood from whatever general volatility/predictability information the
    research does contain.
-4. For each of rationale, fitReason, earningsOutlook, and earningsLikelihoodReason, list which of the numbered
-   research claims (if any) it draws on, as an array of indices in the matching *Citations field (e.g.
-   rationaleCitations for rationale). Only cite a claim that field actually relies on; an empty array is normal
-   and expected when a field is your own reasoning/synthesis rather than a specific claim from the research.
-   Never cite a claim to a field it doesn't actually support just to fill in a citation.
+4. For each of rationale, fitReason, earningsOutlook, and earningsLikelihoodReason, break out 0 or more distinct
+   synthesized claims it relies on, in the matching *Claims field (e.g. rationaleClaims for rationale). Each
+   claim is your own short takeaway sentence tied to a discrete part of the research's chain (a climate change,
+   a success criterion, a likelihood/upside factor, an obstacle), not a restatement of the field's own text,
+   paired with which of the numbered research quotes (if any) support it, as citationIndices. A claim can have
+   an empty citationIndices array when it's your own reasoning/synthesis rather than something a specific quote
+   backs. Only attach a quote to a claim it actually supports; never cite one to pad out a claim, and never
+   invent a claim just to have something to cite.
 
 You MUST end by calling propose_settings exactly once, as your final action, with a rationale, the settings,
-the fit verdict + its reason, the earnings outlook fields, and the citation fields. Do not give your answer as
+the fit verdict + its reason, the earnings outlook fields, and the claims fields. Do not give your answer as
 plain text.`;
 
 const RISK_TOLERANCE_LABELS: Record<RiskTolerance, string> = {
@@ -387,16 +408,16 @@ const RISK_TOLERANCE_LABELS: Record<RiskTolerance, string> = {
   seeking: 'risk-seeking',
 };
 
-/** Formats research citations as a numbered list for the scoring prompt,
- * e.g. `[0] "Google Cloud grew 34% YoY..." (sources: Reuters, Bloomberg)`.
- * Claude references these back by index in its own citation fields; it
- * never needs to reproduce the URL itself, so this stays compact. Empty
- * string (not an empty list rendering) when there are no citations, so the
+/** Formats research quotes as a numbered list for the scoring prompt, e.g.
+ * `[0] "Google Cloud grew 34% YoY..." (sources: Reuters, Bloomberg)`.
+ * Claude references these back by index in its own claims' citationIndices;
+ * it never needs to reproduce the URL itself, so this stays compact. Empty
+ * string (not an empty list rendering) when there are no quotes, so the
  * prompt doesn't dangle an empty header. */
-function formatCitationsList(citations: readonly ResearchCitation[]): string {
-  if (citations.length === 0) return '(no specific sourced claims available)';
+function formatCitationsList(citations: readonly ResearchQuote[]): string {
+  if (citations.length === 0) return '(no specific sourced quotes available)';
   return citations
-    .map((c, i) => `[${i}] "${c.claim}" (sources: ${c.sources.map((s) => s.title).join(', ')})`)
+    .map((c, i) => `[${i}] "${c.quote}" (sources: ${c.sources.map((s) => s.title).join(', ')})`)
     .join('\n');
 }
 
