@@ -210,8 +210,22 @@ export function AiSuggestionPanel({
       </div>
 
       <button type="button" className="analyze-btn" onClick={request} disabled={loading || onCooldown}>
-        {loading ? `Researching ${ticker}…` : onCooldown ? `Retry in ${cooldownRemaining}s` : 'Get AI Suggestion'}
+        {loading
+          ? proposal
+            ? 'Refreshing…'
+            : `Researching ${ticker}…`
+          : onCooldown
+            ? `Retry in ${cooldownRemaining}s`
+            : proposal
+              ? 'Refresh AI Suggestion'
+              : 'Get AI Suggestion'}
       </button>
+
+      {proposal && (
+        <div className="fact" style={{ marginTop: 6 }}>
+          Last updated {new Date(proposal.retrievedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+        </div>
+      )}
 
       {error && (
         <div className="error-card" style={{ marginTop: 12 }}>
@@ -251,6 +265,11 @@ export function AiSuggestionPanel({
             </div>
           )}
           <div className="advisor-rationale">{proposal.rationale}</div>
+          {proposal.quickUpdateNote && (
+            <div className="settings-group-hint" style={{ marginTop: 6, fontStyle: 'italic' }}>
+              {proposal.quickUpdateNote}
+            </div>
+          )}
 
           {earningsStyle && (
             <div
