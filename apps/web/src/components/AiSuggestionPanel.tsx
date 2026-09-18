@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { RiskTolerance } from '@stock-indicator-dailies/shared';
 import { AdvisorRequestError, fetchCachedAdvice, requestAiSuggestion } from '@/lib/advisorApi';
+import { CitationButton } from '@/components/CitationButton';
 import {
   FIELD_LABELS,
   RISK_TOLERANCE_OPTIONS,
@@ -261,10 +262,14 @@ export function AiSuggestionPanel({
               }}
             >
               <b>{fitStyle.label}</b>
+              <CitationButton citations={proposal.fieldCitations.fitReason} />
               <div style={{ marginTop: 4, fontWeight: 400 }}>{proposal.fitReason}</div>
             </div>
           )}
-          <div className="advisor-rationale">{proposal.rationale}</div>
+          <div className="advisor-rationale">
+            {proposal.rationale}
+            <CitationButton citations={proposal.fieldCitations.rationale} />
+          </div>
           {proposal.quickUpdateNote && (
             <div className="settings-group-hint" style={{ marginTop: 6, fontStyle: 'italic' }}>
               {proposal.quickUpdateNote}
@@ -289,8 +294,14 @@ export function AiSuggestionPanel({
                   Next earnings: {proposal.nextEarningsDate ?? 'not found in research'}
                 </span>
               </div>
-              <div style={{ marginTop: 4, fontWeight: 400 }}>{proposal.earningsOutlook}</div>
-              <div style={{ marginTop: 4, fontWeight: 400 }}>{proposal.earningsLikelihoodReason}</div>
+              <div style={{ marginTop: 4, fontWeight: 400 }}>
+                {proposal.earningsOutlook}
+                <CitationButton citations={proposal.fieldCitations.earningsOutlook} />
+              </div>
+              <div style={{ marginTop: 4, fontWeight: 400 }}>
+                {proposal.earningsLikelihoodReason}
+                <CitationButton citations={proposal.fieldCitations.earningsLikelihoodReason} />
+              </div>
             </div>
           )}
 
