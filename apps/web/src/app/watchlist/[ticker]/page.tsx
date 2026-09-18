@@ -277,7 +277,15 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
    * write to the exact same watchlist entry, so both go through here to
    * stay in sync. Recomputes the on-screen report immediately on success
    * rather than waiting for a re-fetch, same instant-feedback pattern as
-   * the main page's own settings panel. */
+   * the main page's own settings panel; `overall`/`positionRisk`/
+   * `unrealizedPnl` can't be recomputed the same way client-side (the ATR
+   * sell-point override needs a server-side OHLC fetch), so those stay
+   * whatever they were until the follow-up re-fetch below corrects them.
+   * Without that follow-up, changing settings could leave Overall showing
+   * a stale value while Computed/AI have already updated to match the new
+   * settings (a real bug, caught live: e.g. Computed and AI both freshly
+   * reading BUY under new low-consensus settings, but Overall still HOLD
+   * from before the change). */
   async function persistSettings(newSettings: LiveSettings): Promise<{ ok: boolean; reason?: string }> {
     if (!session || status.kind !== 'ready') return { ok: false, reason: 'Report not loaded yet.' };
     const res = await updateWatchlistSettings(session.access_token, ticker, newSettings);
@@ -287,6 +295,14 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
         ? { ...prev, settings: newSettings, report: recomputeReport(prev.report, toLiveOptions(newSettings)) }
         : prev,
     );
+    const report = await fetchWatchlistTickerReport(session.access_token, ticker);
+    if (report.ok) {
+      setStatus((prev) =>
+        prev.kind === 'ready'
+          ? { ...prev, position: report.position, positionRisk: report.positionRisk, overallOverrideReason: report.overallOverrideReason, unrealizedPnl: report.unrealizedPnl, overall: report.overall }
+          : prev,
+      );
+    }
     return { ok: true };
   }
 
