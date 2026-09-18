@@ -9,6 +9,7 @@ import {
   RISK_TOLERANCE_OPTIONS,
   diffSettings,
   fromProposedSettings,
+  riskToleranceLabel,
   type DiffableSettingsKey,
   type IndicatorSettings,
   type LiveSettings,
@@ -141,10 +142,14 @@ export function AiSuggestionPanel({
     // Fills the fields and auto-runs in one click; the user already saw
     // the proposed diff, so a second manual "Run" click would just be
     // redundant confirmation. Rationale and diff stay visible, nothing
-    // collapses, whether this succeeds or not.
+    // collapses, whether this succeeds or not. Tags the scenario with the
+    // risk tolerance it was actually generated for, so Historical Testing's
+    // own read-only provenance line (see SettingsFields) is correct right
+    // after accepting, and so "Apply to stock watchlist settings" persists
+    // the right tag too.
     setAccepting(true);
     setAcceptError(null);
-    const result = await onAccept(fromProposedSettings(proposal.settings));
+    const result = await onAccept({ ...fromProposedSettings(proposal.settings), riskTolerance });
     setAccepting(false);
     if (!result.ok) {
       setAcceptError(result.reason ?? 'Could not run Historical Testing with these settings.');
@@ -191,7 +196,6 @@ export function AiSuggestionPanel({
   const onCooldown = cooldownRemaining > 0;
   const fitStyle = proposal ? FIT_STYLES[proposal.fit] : null;
   const earningsStyle = proposal ? EARNINGS_LIKELIHOOD_STYLES[proposal.earningsLikelihood] : null;
-  const riskToleranceLabel = (v: RiskTolerance) => RISK_TOLERANCE_OPTIONS.find((o) => o.value === v)?.label ?? v;
   /** What applying this proposal as Indicator Settings would change,
    * denoted against the CURRENT indicator settings (not just Historical
    * Testing's own baseline/scenario comparison, and including risk

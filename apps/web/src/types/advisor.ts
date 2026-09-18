@@ -25,22 +25,32 @@ export type FitVerdict = 'not-recommended' | 'caution' | 'within-bounds';
  * political/regulatory factors it found). */
 export type EarningsLikelihood = 'low' | 'moderate' | 'high';
 
-/** One piece of Gemini's grounded research text and the source(s) it was
- * attributed to. `sources[].url` is a Google grounding-redirect link, not
- * a direct link to the source, but it resolves to the original page. */
-export interface ResearchCitation {
-  claim: string;
+/** One raw grounded excerpt from Gemini's research text and the source(s)
+ * it was attributed to (not a synthesized claim; see FieldClaim for that).
+ * `sources[].url` is a Google grounding-redirect link, not a direct link
+ * to the source, but it resolves to the original page. */
+export interface ResearchQuote {
+  quote: string;
   sources: Array<{ title: string; url: string }>;
 }
 
-/** Which research citations back each field of the proposal; powers the
- * "sources" info button next to each claim in the AI Suggestion panel. An
- * empty array for a field is normal (pure reasoning, nothing to cite). */
+/** One synthesized claim the advisor made in support of one of its output
+ * fields, plus the resolved research quotes backing it. `quotes` can
+ * legitimately be empty (pure reasoning/synthesis with nothing directly
+ * citable); that's normal, not an error. */
+export interface FieldClaim {
+  claim: string;
+  quotes: ResearchQuote[];
+}
+
+/** Which synthesized claims back each field of the proposal; powers the
+ * "sources" drawer next to each claim in the AI Suggestion panel. An empty
+ * array for a field is normal (nothing specific enough to break out). */
 export interface FieldCitations {
-  rationale: ResearchCitation[];
-  fitReason: ResearchCitation[];
-  earningsOutlook: ResearchCitation[];
-  earningsLikelihoodReason: ResearchCitation[];
+  rationale: FieldClaim[];
+  fitReason: FieldClaim[];
+  earningsOutlook: FieldClaim[];
+  earningsLikelihoodReason: FieldClaim[];
 }
 
 export interface AdvisorProposal {

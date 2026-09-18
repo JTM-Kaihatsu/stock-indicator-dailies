@@ -1,4 +1,4 @@
-import type { FieldCitations, ResearchCitation, ResearchProposal, RiskScoredProposal, RiskTolerance } from '@stock-indicator-dailies/advisor';
+import type { FieldCitations, FieldClaim, ResearchProposal, ResearchQuote, RiskScoredProposal, RiskTolerance } from '@stock-indicator-dailies/advisor';
 
 import { getSupabaseClient as getClient } from './supabaseClient.ts';
 
@@ -23,7 +23,28 @@ interface ResearchCacheRow {
   ticker: string;
   retrieved_at: string;
   research: string;
-  citations: ResearchCitation[];
+  citations: ResearchQuote[];
+}
+
+/** True for a research quote in the new {quote, sources} shape; false for
+ * an old-shaped {claim, sources} row (or anything else malformed) from
+ * before the citation-claim restructure, so a stale cached row degrades to
+ * "no citations" instead of crashing the frontend. */
+function isResearchQuote(v: unknown): v is ResearchQuote {
+  return typeof v === 'object' && v !== null && typeof (v as { quote?: unknown }).quote === 'string';
+}
+
+/** Same guard as isResearchQuote, for a FieldClaim ({claim, quotes}) versus
+ * the old flat ResearchCitation ({claim, sources}) shape it replaced: both
+ * happen to have a string `claim`, so the distinguishing field is `quotes`
+ * being an array (old rows have no `quotes` key at all). */
+function isFieldClaim(v: unknown): v is FieldClaim {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    typeof (v as { claim?: unknown }).claim === 'string' &&
+    Array.isArray((v as { quotes?: unknown }).quotes)
+  );
 }
 
 /** Look up cached research for `ticker`, regardless of which risk
@@ -41,7 +62,7 @@ export async function getCachedResearch(ticker: string): Promise<ResearchProposa
       .eq('ticker', ticker)
       .maybeSingle<ResearchCacheRow>();
     if (error || !data || !isFresh(data.retrieved_at)) return null;
-    return { research: data.research, citations: data.citations ?? [] };
+    return { research: data.research, citations: (data.citations ?? []).filter(isResearchQuote) };
   } catch {
     return null;
   }
@@ -97,7 +118,24 @@ function toProposal(row: SuggestionCacheRow): RiskScoredProposal {
     earningsOutlook: row.earnings_outlook,
     earningsLikelihood: row.earnings_likelihood as RiskScoredProposal['earningsLikelihood'],
     earningsLikelihoodReason: row.earnings_likelihood_reason,
-    fieldCitations: { ...EMPTY_FIELD_CITATIONS, ...row.field_citations },
+    fieldCitations: sanitizeFieldCitations(row.field_citations),
+  };
+}
+
+/** Merges a cached field_citations blob over the empty default (backfilling
+ * any field missing entirely, e.g. an older row from before a field
+ * existed), then drops any array entry that isn't a well-formed FieldClaim:
+ * a row cached before the claim/quote restructure has old-shaped
+ * ResearchCitation entries ({claim, sources}, no `quotes`) that would
+ * otherwise crash the frontend's `.quotes.map(...)`. Degrades a stale row
+ * to "no citations shown" rather than throwing. */
+function sanitizeFieldCitations(raw: Partial<FieldCitations> | null | undefined): FieldCitations {
+  const merged = { ...EMPTY_FIELD_CITATIONS, ...raw };
+  return {
+    rationale: (merged.rationale ?? []).filter(isFieldClaim),
+    fitReason: (merged.fitReason ?? []).filter(isFieldClaim),
+    earningsOutlook: (merged.earningsOutlook ?? []).filter(isFieldClaim),
+    earningsLikelihoodReason: (merged.earningsLikelihoodReason ?? []).filter(isFieldClaim),
   };
 }
 

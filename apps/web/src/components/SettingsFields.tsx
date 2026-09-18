@@ -1,6 +1,6 @@
 'use client';
 
-import { RISK_TOLERANCE_OPTIONS, type BacktestOnlySettings, type LiveSettings } from '@/lib/settings';
+import { riskToleranceLabel, type BacktestOnlySettings, type LiveSettings } from '@/lib/settings';
 
 const num = (v: string, fallback: number) => {
   const n = Number(v);
@@ -28,8 +28,13 @@ export function LiveSettingsFields({
   onChange: (next: LiveSettings) => void;
   idPrefix?: string;
 }) {
+  /** Every field edited here also clears riskTolerance: it's no longer a
+   * user-editable lever (see the read-only provenance line below), so the
+   * only way it changes is via this side effect. The moment any field is
+   * hand-edited, the settings no longer exactly match what AI proposed, so
+   * the "AI analysis suggested..." claim must stop being true. */
   function set<K extends keyof LiveSettings>(key: K, v: LiveSettings[K]) {
-    onChange({ ...value, [key]: v });
+    onChange({ ...value, [key]: v, riskTolerance: undefined });
   }
 
   return (
@@ -120,28 +125,10 @@ export function LiveSettingsFields({
           </div>
         </>
       )}
-      <div className="settings-field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-        <label>Risk tolerance</label>
-        <div role="radiogroup" aria-label="Risk tolerance" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-          {RISK_TOLERANCE_OPTIONS.map((opt) => (
-            <label
-              key={opt.value}
-              htmlFor={`${idPrefix}riskTolerance-${opt.value}`}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 400, cursor: 'pointer' }}
-              title={opt.hint}
-            >
-              <input
-                id={`${idPrefix}riskTolerance-${opt.value}`}
-                type="radio"
-                name={`${idPrefix}riskTolerance`}
-                value={opt.value}
-                checked={(value.riskTolerance ?? 'neutral') === opt.value}
-                onChange={() => set('riskTolerance', opt.value)}
-              />
-              {opt.label}
-            </label>
-          ))}
-        </div>
+      <div className="settings-group-hint" style={{ marginTop: 4 }}>
+        {value.riskTolerance
+          ? `AI analysis suggested the current settings under the risk-tolerance: ${riskToleranceLabel(value.riskTolerance)}`
+          : 'AI analysis was not used for the current settings'}
       </div>
     </div>
   );
