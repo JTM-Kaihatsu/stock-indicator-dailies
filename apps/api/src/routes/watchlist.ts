@@ -39,9 +39,10 @@ export interface WatchlistDashboardRow {
 
 const RISK_TOLERANCES: readonly RiskTolerance[] = ['averse', 'neutral', 'seeking'];
 
-/** Picks out only the 4 recognized fields, dropping anything else and any
+/** Picks out only the 8 recognized fields, dropping anything else and any
  * invalid value. Not a full schema validator; a malformed field degrading
- * to "unset" (app default) is an acceptable failure mode here. */
+ * to "unset" (app default) is an acceptable failure mode here. Bounds for
+ * the ATR/ADX fields mirror apps/api/src/routes/backtest.ts's clampOptions. */
 function parseSettings(raw: unknown): DeriveSignalOptions | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
@@ -51,6 +52,18 @@ function parseSettings(raw: unknown): DeriveSignalOptions | null {
   if (typeof r.recencyDays === 'number' && Number.isFinite(r.recencyDays)) out.recencyDays = r.recencyDays;
   if (typeof r.riskTolerance === 'string' && RISK_TOLERANCES.includes(r.riskTolerance as RiskTolerance)) {
     out.riskTolerance = r.riskTolerance as RiskTolerance;
+  }
+  if (typeof r.atrMultiplier === 'number' && Number.isFinite(r.atrMultiplier) && r.atrMultiplier >= 0 && r.atrMultiplier <= 20) {
+    out.atrMultiplier = r.atrMultiplier;
+  }
+  if (typeof r.atrPeriod === 'number' && Number.isFinite(r.atrPeriod) && r.atrPeriod >= 2 && r.atrPeriod <= 100) {
+    out.atrPeriod = r.atrPeriod;
+  }
+  if (typeof r.adxThreshold === 'number' && Number.isFinite(r.adxThreshold) && r.adxThreshold >= 0 && r.adxThreshold <= 100) {
+    out.adxThreshold = r.adxThreshold;
+  }
+  if (typeof r.adxPeriod === 'number' && Number.isFinite(r.adxPeriod) && r.adxPeriod >= 2 && r.adxPeriod <= 100) {
+    out.adxPeriod = r.adxPeriod;
   }
   return Object.keys(out).length > 0 ? out : null;
 }

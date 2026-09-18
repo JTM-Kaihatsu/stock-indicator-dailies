@@ -22,6 +22,18 @@ export interface DeriveSignalOptions {
    * fit for a ticker.
    */
   riskTolerance?: RiskTolerance;
+  /**
+   * Not consumed by deriveSignal/resolveDualOverall either; carried here for
+   * the same reason as riskTolerance above. Once set, this is what a
+   * watchlisted ticker's live position-risk override (a stop level computed
+   * from a user-entered purchase date/price) actually reads, so it stays a
+   * stable, standing value rather than resetting with whatever's being
+   * experimented with in Historical Testing's scratch fields.
+   */
+  atrMultiplier?: number;
+  atrPeriod?: number;
+  adxThreshold?: number;
+  adxPeriod?: number;
 }
 
 /**

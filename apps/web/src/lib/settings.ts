@@ -3,11 +3,12 @@ import type { BacktestOptions } from '@stock-indicator-dailies/eval-backtest';
 
 /**
  * The 9 tunable levers, split by where they take effect. `LiveSettings`
- * drives both the live report (client-side recompute) and is global,
- * session-persisted state. `BacktestOnlySettings` only matters once there's
- * a multi-day position to hold/exit; `deriveSignal` has no concept of that
- * for a single-day snapshot; so it lives locally inside Historical Testing,
- * not in global settings.
+ * drives the live report (client-side recompute) and is global, persisted
+ * (session storage on the main page; per-ticker on a watchlist row) state.
+ * `BacktestOnlySettings` only matters once there's a multi-day position to
+ * hold/exit; `deriveSignal` has no concept of that for a single-day
+ * snapshot; so it lives locally inside Historical Testing, not in global
+ * settings.
  */
 export interface LiveSettings {
   buyConsensus: number;
@@ -26,6 +27,24 @@ export interface LiveSettings {
    * about it can treat it as present there.
    */
   riskTolerance?: RiskTolerance;
+  /**
+   * Not read by deriveSignal or the live report either; lives here (rather
+   * than BacktestOnlySettings) so it persists as a stable, standing value
+   * per ticker instead of resetting with whatever's being experimented
+   * with in Historical Testing's own scratch fields. This is what a
+   * ticker's live position-risk override (see the watchlist position
+   * feature) actually computes its stop level from once set, whether set
+   * manually here, via "Apply AI Suggestions as the Indicator Settings",
+   * or via Historical Testing's "Apply to stock watchlist settings".
+   * `undefined` disables the ATR noise-reduction filter / position-risk
+   * override.
+   */
+  atrMultiplier: number | undefined;
+  atrPeriod: number;
+  /** `undefined` disables the ADX trend-strength gate. Same persistence
+   * reasoning as atrMultiplier/atrPeriod above. */
+  adxThreshold: number | undefined;
+  adxPeriod: number;
 }
 
 /** Single source of truth for the 3-way risk-tolerance selector's copy,
@@ -40,33 +59,28 @@ export const RISK_TOLERANCE_OPTIONS: ReadonlyArray<{ value: RiskTolerance; label
 export interface BacktestOnlySettings {
   persistenceBars: number;
   minHoldingDays: number;
-  /** `undefined` disables the ATR noise-reduction filter. */
-  atrMultiplier: number | undefined;
-  atrPeriod: number;
-  /** `undefined` disables the ADX trend-strength gate. */
-  adxThreshold: number | undefined;
-  adxPeriod: number;
 }
 
 export type IndicatorSettings = LiveSettings & BacktestOnlySettings;
 
-/** Mirrors the backend's actual defaults in packages/shared/src/signal.ts;
- * keep in sync if that ever changes. */
+/** Mirrors the backend's actual defaults in packages/shared/src/signal.ts
+ * (buyConsensus/sellConsensus/recencyDays) and evals/backtest/src/simulate.ts
+ * (atrPeriod/adxPeriod, off by default); keep in sync if those ever change. */
 export const DEFAULT_LIVE_SETTINGS: LiveSettings = {
   buyConsensus: 2,
   sellConsensus: 3,
   recencyDays: 3,
   riskTolerance: 'neutral',
+  atrMultiplier: undefined,
+  atrPeriod: 14,
+  adxThreshold: undefined,
+  adxPeriod: 14,
 };
 
 /** Mirrors evals/backtest/src/simulate.ts's defaults. */
 export const DEFAULT_BACKTEST_ONLY_SETTINGS: BacktestOnlySettings = {
   persistenceBars: 1,
   minHoldingDays: 0,
-  atrMultiplier: undefined,
-  atrPeriod: 14,
-  adxThreshold: undefined,
-  adxPeriod: 14,
 };
 
 export const DEFAULT_SETTINGS: IndicatorSettings = {

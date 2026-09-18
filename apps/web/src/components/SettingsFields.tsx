@@ -58,6 +58,68 @@ export function LiveSettingsFields({
           onChange={(e) => set('recencyDays', num(e.target.value, value.recencyDays))}
         />
       </div>
+      <div className="settings-field">
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+          <label htmlFor={`${idPrefix}atrEnabled`}>Enable ATR noise reduction</label>
+          <InfoIcon text="Plain English: Tracks if the stock has fallen below the peak price for a period enough to warrant selling it. Once set, also defines this ticker's live position-risk sell point (see Manage Watchlist)." />
+        </span>
+        <input
+          id={`${idPrefix}atrEnabled`} type="checkbox"
+          checked={value.atrMultiplier !== undefined}
+          onChange={(e) => set('atrMultiplier', e.target.checked ? 2 : undefined)}
+        />
+      </div>
+      {value.atrMultiplier !== undefined && (
+        <>
+          <div className="settings-field settings-subfield">
+            <label htmlFor={`${idPrefix}atrMultiplier`}>ATR multiplier</label>
+            <input
+              id={`${idPrefix}atrMultiplier`} type="number" min={0} max={20} step={0.5}
+              value={value.atrMultiplier}
+              onChange={(e) => set('atrMultiplier', num(e.target.value, value.atrMultiplier ?? 2))}
+            />
+          </div>
+          <div className="settings-field settings-subfield">
+            <label htmlFor={`${idPrefix}atrPeriod`}>ATR period</label>
+            <input
+              id={`${idPrefix}atrPeriod`} type="number" min={2} max={100}
+              value={value.atrPeriod}
+              onChange={(e) => set('atrPeriod', num(e.target.value, value.atrPeriod))}
+            />
+          </div>
+        </>
+      )}
+      <div className="settings-field">
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+          <label htmlFor={`${idPrefix}adxEnabled`}>Enable ADX trend-strength gate</label>
+          <InfoIcon text="Plain English: Measures trend by seeing how steep the slope is." />
+        </span>
+        <input
+          id={`${idPrefix}adxEnabled`} type="checkbox"
+          checked={value.adxThreshold !== undefined}
+          onChange={(e) => set('adxThreshold', e.target.checked ? 25 : undefined)}
+        />
+      </div>
+      {value.adxThreshold !== undefined && (
+        <>
+          <div className="settings-field settings-subfield">
+            <label htmlFor={`${idPrefix}adxThreshold`}>ADX threshold</label>
+            <input
+              id={`${idPrefix}adxThreshold`} type="number" min={0} max={100}
+              value={value.adxThreshold}
+              onChange={(e) => set('adxThreshold', num(e.target.value, value.adxThreshold ?? 25))}
+            />
+          </div>
+          <div className="settings-field settings-subfield">
+            <label htmlFor={`${idPrefix}adxPeriod`}>ADX period</label>
+            <input
+              id={`${idPrefix}adxPeriod`} type="number" min={2} max={100}
+              value={value.adxPeriod}
+              onChange={(e) => set('adxPeriod', num(e.target.value, value.adxPeriod))}
+            />
+          </div>
+        </>
+      )}
       <div className="settings-field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
         <label>Risk tolerance</label>
         <div role="radiogroup" aria-label="Risk tolerance" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
@@ -85,7 +147,7 @@ export function LiveSettingsFields({
   );
 }
 
-/** The 6 execution-filter levers that only affect Historical Testing. Used
+/** The 2 execution-filter levers that only affect Historical Testing. Used
  * inline inside BacktestPanel; never global. */
 export function BacktestOnlySettingsFields({
   value,
@@ -116,68 +178,6 @@ export function BacktestOnlySettingsFields({
           onChange={(e) => set('minHoldingDays', num(e.target.value, value.minHoldingDays))}
         />
       </div>
-      <div className="settings-field">
-        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-          <label htmlFor="atrEnabled">Enable ATR noise reduction</label>
-          <InfoIcon text="Plain English: Tracks if the stock has fallen below the peak price for a period enough to warrant selling it." />
-        </span>
-        <input
-          id="atrEnabled" type="checkbox"
-          checked={value.atrMultiplier !== undefined}
-          onChange={(e) => set('atrMultiplier', e.target.checked ? 2 : undefined)}
-        />
-      </div>
-      {value.atrMultiplier !== undefined && (
-        <>
-          <div className="settings-field settings-subfield">
-            <label htmlFor="atrMultiplier">ATR multiplier</label>
-            <input
-              id="atrMultiplier" type="number" min={0} max={20} step={0.5}
-              value={value.atrMultiplier}
-              onChange={(e) => set('atrMultiplier', num(e.target.value, value.atrMultiplier ?? 2))}
-            />
-          </div>
-          <div className="settings-field settings-subfield">
-            <label htmlFor="atrPeriod">ATR period</label>
-            <input
-              id="atrPeriod" type="number" min={2} max={100}
-              value={value.atrPeriod}
-              onChange={(e) => set('atrPeriod', num(e.target.value, value.atrPeriod))}
-            />
-          </div>
-        </>
-      )}
-      <div className="settings-field">
-        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-          <label htmlFor="adxEnabled">Enable ADX trend-strength gate</label>
-          <InfoIcon text="Plain English: Measures trend by seeing how steep the slope is." />
-        </span>
-        <input
-          id="adxEnabled" type="checkbox"
-          checked={value.adxThreshold !== undefined}
-          onChange={(e) => set('adxThreshold', e.target.checked ? 25 : undefined)}
-        />
-      </div>
-      {value.adxThreshold !== undefined && (
-        <>
-          <div className="settings-field settings-subfield">
-            <label htmlFor="adxThreshold">ADX threshold</label>
-            <input
-              id="adxThreshold" type="number" min={0} max={100}
-              value={value.adxThreshold}
-              onChange={(e) => set('adxThreshold', num(e.target.value, value.adxThreshold ?? 25))}
-            />
-          </div>
-          <div className="settings-field settings-subfield">
-            <label htmlFor="adxPeriod">ADX period</label>
-            <input
-              id="adxPeriod" type="number" min={2} max={100}
-              value={value.adxPeriod}
-              onChange={(e) => set('adxPeriod', num(e.target.value, value.adxPeriod))}
-            />
-          </div>
-        </>
-      )}
     </div>
   );
 }

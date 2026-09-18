@@ -164,6 +164,10 @@ export function AiSuggestionPanel({
       sellConsensus: full.sellConsensus,
       recencyDays: full.recencyDays,
       riskTolerance: settings.riskTolerance,
+      atrMultiplier: full.atrMultiplier,
+      atrPeriod: full.atrPeriod,
+      adxThreshold: full.adxThreshold,
+      adxPeriod: full.adxPeriod,
     });
   }
 
@@ -173,7 +177,11 @@ export function AiSuggestionPanel({
     proposedSettings !== null &&
     settings.buyConsensus === proposedSettings.buyConsensus &&
     settings.sellConsensus === proposedSettings.sellConsensus &&
-    settings.recencyDays === proposedSettings.recencyDays;
+    settings.recencyDays === proposedSettings.recencyDays &&
+    settings.atrMultiplier === proposedSettings.atrMultiplier &&
+    settings.atrPeriod === proposedSettings.atrPeriod &&
+    settings.adxThreshold === proposedSettings.adxThreshold &&
+    settings.adxPeriod === proposedSettings.adxPeriod;
   const onCooldown = cooldownRemaining > 0;
   const fitStyle = proposal ? FIT_STYLES[proposal.fit] : null;
   const earningsStyle = proposal ? EARNINGS_LIKELIHOOD_STYLES[proposal.earningsLikelihood] : null;

@@ -143,14 +143,19 @@ export const BacktestPanel = forwardRef<BacktestPanelHandle, {
 
   function splitSettings(settings: IndicatorSettings): { policy: LiveSettings; backtestOnly: BacktestOnlySettings } {
     return {
-      policy: { buyConsensus: settings.buyConsensus, sellConsensus: settings.sellConsensus, recencyDays: settings.recencyDays },
-      backtestOnly: {
-        persistenceBars: settings.persistenceBars,
-        minHoldingDays: settings.minHoldingDays,
+      policy: {
+        buyConsensus: settings.buyConsensus,
+        sellConsensus: settings.sellConsensus,
+        recencyDays: settings.recencyDays,
+        riskTolerance: settings.riskTolerance,
         atrMultiplier: settings.atrMultiplier,
         atrPeriod: settings.atrPeriod,
         adxThreshold: settings.adxThreshold,
         adxPeriod: settings.adxPeriod,
+      },
+      backtestOnly: {
+        persistenceBars: settings.persistenceBars,
+        minHoldingDays: settings.minHoldingDays,
       },
     };
   }
