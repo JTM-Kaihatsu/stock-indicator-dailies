@@ -199,8 +199,11 @@ write it to stand on its own, not slanted toward any one risk profile.
 Use Google Search to research the company:
 - Its industry and sector, current trends affecting it, recent relevant news, its competitors, and how volatile
   or speculative its stock currently is.
-- Its next scheduled earnings report: when it is (if publicly known), what analysts expect and are watching
-  for, and the upside if those expectations are met or beaten.
+- Its next scheduled earnings report: the exact date if officially confirmed by the company, or an estimated
+  date or range if not yet confirmed (many companies' earnings dates can be estimated weeks or months ahead
+  from their historical reporting pattern, even before an official confirmation; report that estimate rather
+  than omitting the date entirely, and say plainly whether it's confirmed or estimated). Also cover what
+  analysts expect and are watching for, and the upside if those expectations are met or beaten.
 - How likely those expectations are to be met, reasoned from the company's own historical pattern of beating or
   missing expectations, current industry trends, and any relevant political or regulatory news that could help
   or hinder it (e.g. tariffs, regulation, supply constraints, public sentiment). Ground this in what you find
@@ -314,13 +317,15 @@ Using the research and whichever one of these is stated in the request, you must
    "within-bounds"; judge the company, not the knobs. Reserve "caution"/"not-recommended" for a genuine
    mismatch the research supports (e.g. a risk-averse investor and a stock the research shows is unusually
    volatile, speculative, or driven by frequent, hard-to-predict catalysts), not routine market movement.
-3. Extract the earnings outlook from the research: the next earnings date if the research mentions one
-   (otherwise null; do not guess), what analysts expect and the upside if achieved, and a likelihood assessment
+3. Extract the earnings outlook from the research: the next earnings date if the research gives one, confirmed
+   or estimated (resolve an estimated range to its earlier end; null only if the research gives no timing
+   indication at all), what analysts expect and the upside if achieved, and a likelihood assessment
    (low/moderate/high) for whether those expectations will be met, reasoned from the company's historical
    earnings pattern, current industry trends, and any political/regulatory factors the research covers. If the
-   research doesn't cover earnings specifics for this company, say so honestly in earningsOutlook rather than
-   inventing detail, and reason earningsLikelihood from whatever general volatility/predictability information
-   the research does contain.
+   date is an estimate rather than officially confirmed, say so in earningsOutlook. If the research doesn't
+   cover earnings specifics for this company at all, say so honestly in earningsOutlook rather than inventing
+   detail, and reason earningsLikelihood from whatever general volatility/predictability information the
+   research does contain.
 
 You MUST end by calling propose_settings exactly once, as your final action, with a rationale, the settings,
 the fit verdict + its reason, and the earnings outlook fields. Do not give your answer as plain text.`;
