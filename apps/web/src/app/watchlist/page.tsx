@@ -189,10 +189,10 @@ export default function ManageWatchlistPage() {
 
       {rows && rows.some((r) => r.heldShares > 0) && (
         <div className="settings-panel" style={{ marginBottom: 20 }}>
-          <div className="section-label">Positions at risk</div>
+          <div className="section-label">Your Positions</div>
           <div className="settings-group-hint" style={{ marginBottom: 12 }}>
-            Every ticker with shares currently held, sell points first. Manage individual buys/sells on each
-            ticker&apos;s own page.
+            Every ticker with shares currently held, sell points first. A breached sell point also forces that
+            ticker&apos;s Overall signal to SELL. Manage individual buys/sells on each ticker&apos;s own page.
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {rows
