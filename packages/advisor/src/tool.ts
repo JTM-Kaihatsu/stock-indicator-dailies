@@ -17,12 +17,14 @@ export type RiskTolerance = 'averse' | 'neutral' | 'seeking';
  * it was attributed to. `quote` is the exact segment of research text
  * Gemini's own grounding metadata tied to these sources (not something we
  * invented by parsing prose, and not a synthesized claim; see FieldClaim
- * for that); `sources[].url` is a Google grounding-redirect link, not a
- * direct link to the source, but it resolves to the original page when
- * followed. */
+ * for that); `sources[].url` is already resolved to the source's real
+ * destination by extractCitations (advisor.ts), not the raw Google
+ * grounding-redirect link Gemini itself returns. `thumbnailUrl` is a
+ * best-effort og:image/twitter:image scrape of that same page and is
+ * commonly absent (scrape failure, or the page simply has neither tag). */
 export interface ResearchQuote {
   quote: string;
-  sources: Array<{ title: string; url: string }>;
+  sources: Array<{ title: string; url: string; thumbnailUrl?: string }>;
 }
 
 /** Stage 1's output: a reusable research brief, gathered by Gemini via

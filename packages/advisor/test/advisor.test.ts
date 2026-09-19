@@ -78,17 +78,49 @@ function scriptedGeminiClient(text: string | undefined, candidates?: unknown[]) 
 
 /** Fake `fetch` for citation-URL resolution (see resolveSourceUrl in
  * advisor.ts): `resolutions` maps a requested URL to the `res.url` it
- * should report resolving to (the "real" redirect-resolved URL). A URL
- * mapped to the sentinel `'THROW'` simulates a resolution failure (timeout,
- * blocked HEAD, network error). Also counts calls so tests can assert a
- * distinct URL is only resolved once even if cited by multiple quotes. */
-function fakeResolveFetch(resolutions: Record<string, string> = {}): { fetchFn: typeof fetch; calls: string[] } {
+ * should report resolving to (the "real" redirect-resolved URL), for the
+ * HEAD request resolveSourceUrl makes. A URL mapped to the sentinel
+ * `'THROW'` simulates a resolution failure (timeout, blocked HEAD, network
+ * error). `pages` maps a (resolved) URL to the fake GET response
+ * scrapeThumbnail makes against it: `status`/`contentType`/`html`, or
+ * `throws` to simulate a network failure; a URL with no entry in `pages`
+ * behaves as a failed GET (thumbnail scraping is best-effort, so most
+ * tests that don't care about thumbnails can omit `pages` entirely). Also
+ * counts every call (both HEAD and GET) so tests can assert a distinct URL
+ * is only resolved/scraped once even if cited by multiple quotes. */
+function fakeResolveFetch(
+  resolutions: Record<string, string> = {},
+  pages: Record<string, { status?: number; contentType?: string; html?: string; throws?: boolean }> = {},
+): { fetchFn: typeof fetch; calls: string[] } {
   const calls: string[] = [];
-  const fetchFn = (async (url: string | URL) => {
+  const fetchFn = (async (url: string | URL, init?: RequestInit) => {
     const key = String(url);
     calls.push(key);
-    if (resolutions[key] === 'THROW') throw new Error('simulated network failure');
-    return { url: resolutions[key] ?? key } as Response;
+    const method = init?.method ?? 'GET';
+    if (method === 'HEAD') {
+      if (resolutions[key] === 'THROW') throw new Error('simulated network failure');
+      return { url: resolutions[key] ?? key } as Response;
+    }
+    const page = pages[key];
+    if (!page || page.throws) throw new Error('simulated network failure');
+    const status = page.status ?? 200;
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      url: key,
+      headers: { get: (h: string) => (h.toLowerCase() === 'content-type' ? (page.contentType ?? 'text/html') : null) } as Headers,
+      // Chunked (not one single enqueue) so a test can exercise the
+      // byte-cap early-bailout: scrapeThumbnail's cap check only runs
+      // between reads, so a single giant chunk would defeat it.
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          const bytes = new TextEncoder().encode(page.html ?? '');
+          const chunkSize = 4096;
+          for (let i = 0; i < bytes.length; i += chunkSize) controller.enqueue(bytes.slice(i, i + chunkSize));
+          controller.close();
+        },
+      }),
+    } as unknown as Response;
   }) as typeof fetch;
   return { fetchFn, calls };
 }
@@ -186,7 +218,7 @@ test('resolves a distinct URL only once even when cited by multiple quotes', asy
   const { client } = scriptedGeminiClient('Findings.', candidates);
   const { fetchFn, calls } = fakeResolveFetch({ 'https://redirect/1': 'https://reuters.com/article' });
   const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
-  assert.deepEqual(calls, ['https://redirect/1']);
+  assert.deepEqual(calls, ['https://redirect/1', 'https://reuters.com/article']);
   assert.equal(result.citations[0]!.sources[0]!.url, 'https://reuters.com/article');
   assert.equal(result.citations[1]!.sources[0]!.url, 'https://reuters.com/article');
 });
@@ -209,6 +241,127 @@ test('drops a grounding support with no text or no resolvable sources', async ()
   const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
   assert.equal(result.citations.length, 1);
   assert.equal(result.citations[0]!.quote, 'Sourced claim.');
+});
+
+// --- extractCitations: thumbnail scraping ---
+
+function singleSourceCandidates() {
+  return [
+    {
+      groundingMetadata: {
+        groundingChunks: [{ web: { title: 'Reuters', uri: 'https://redirect/1' } }],
+        groundingSupports: [{ segment: { text: 'A claim.' }, groundingChunkIndices: [0] }],
+      },
+    },
+  ];
+}
+
+test('scrapes an og:image thumbnail from the resolved page', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    { 'https://reuters.com/article': { html: '<head><meta property="og:image" content="https://cdn.reuters.com/thumb.jpg"></head>' } },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sources[0]!.thumbnailUrl, 'https://cdn.reuters.com/thumb.jpg');
+});
+
+test('falls back to twitter:image when og:image is absent', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    { 'https://reuters.com/article': { html: '<head><meta name="twitter:image" content="https://cdn.reuters.com/tw.jpg"></head>' } },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sources[0]!.thumbnailUrl, 'https://cdn.reuters.com/tw.jpg');
+});
+
+test('prefers og:image over twitter:image when both are present', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    {
+      'https://reuters.com/article': {
+        html:
+          '<head><meta name="twitter:image" content="https://cdn.reuters.com/tw.jpg">' +
+          '<meta property="og:image" content="https://cdn.reuters.com/og.jpg"></head>',
+      },
+    },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sources[0]!.thumbnailUrl, 'https://cdn.reuters.com/og.jpg');
+});
+
+test('resolves a relative og:image URL against the resolved page URL', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    { 'https://reuters.com/article': { html: '<head><meta property="og:image" content="/img/thumb.jpg"></head>' } },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sources[0]!.thumbnailUrl, 'https://reuters.com/img/thumb.jpg');
+});
+
+test('omits thumbnailUrl when the page has no og:image or twitter:image tag', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    { 'https://reuters.com/article': { html: '<head><title>No image here</title></head>' } },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal('thumbnailUrl' in result.citations[0]!.sources[0]!, false);
+});
+
+test('omits thumbnailUrl when the thumbnail GET fails, without affecting URL resolution', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    { 'https://reuters.com/article': { throws: true } },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sources[0]!.url, 'https://reuters.com/article');
+  assert.equal('thumbnailUrl' in result.citations[0]!.sources[0]!, false);
+});
+
+test('omits thumbnailUrl for a non-200 response even if the body contains a usable tag', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    {
+      'https://reuters.com/article': {
+        status: 404,
+        html: '<head><meta property="og:image" content="https://cdn.reuters.com/thumb.jpg"></head>',
+      },
+    },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal('thumbnailUrl' in result.citations[0]!.sources[0]!, false);
+});
+
+test('omits thumbnailUrl for a non-HTML content-type', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    {
+      'https://reuters.com/article': {
+        contentType: 'application/pdf',
+        html: '<head><meta property="og:image" content="https://cdn.reuters.com/thumb.jpg"></head>',
+      },
+    },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal('thumbnailUrl' in result.citations[0]!.sources[0]!, false);
+});
+
+test('omits thumbnailUrl when the og:image tag sits beyond the byte cap', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const filler = '<!--' + 'x'.repeat(210 * 1024) + '-->';
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    { 'https://reuters.com/article': { html: `<head>${filler}<meta property="og:image" content="https://cdn.reuters.com/thumb.jpg"></head>` } },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal('thumbnailUrl' in result.citations[0]!.sources[0]!, false);
 });
 
 test('researchCompany translates a 503 overloaded error into a friendly AdvisorUpstreamError', async () => {
