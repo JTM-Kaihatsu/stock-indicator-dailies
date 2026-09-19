@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { RiskTolerance } from '@stock-indicator-dailies/shared';
 import { AdvisorRequestError, fetchCachedAdvice, requestAiSuggestion } from '@/lib/advisorApi';
+import { loadLastRiskTolerance, saveLastRiskTolerance } from '@/lib/aiPanelPrefs';
 import { CitationButton } from '@/components/CitationButton';
 import {
   FIELD_LABELS,
@@ -70,10 +71,15 @@ export function AiSuggestionPanel({
    * a Historical Testing scenario. */
   onAccept: (settings: IndicatorSettings) => Promise<AcceptResult>;
 }) {
-  // Defaults to the ticker's own saved Indicator Settings preference, but
-  // changeable per-request here without persisting it; only saving the
-  // Indicator Settings panel itself changes the ticker's stored default.
-  const [riskTolerance, setRiskTolerance] = useState<RiskTolerance>(settings.riskTolerance ?? 'neutral');
+  // Defaults to the last tolerance the user picked here for this ticker
+  // (remembered across visits, even a closed-and-reopened tab; see
+  // aiPanelPrefs.ts), falling back to the ticker's own saved Indicator
+  // Settings preference. Changeable per-request without persisting it as
+  // the ticker's actual settings; only the Indicator Settings panel itself
+  // changes that.
+  const [riskTolerance, setRiskTolerance] = useState<RiskTolerance>(
+    loadLastRiskTolerance(ticker) ?? settings.riskTolerance ?? 'neutral',
+  );
   const [loading, setLoading] = useState(false);
   const [proposal, setProposal] = useState<AdvisorProposal | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,13 +89,18 @@ export function AiSuggestionPanel({
   const [accepting, setAccepting] = useState(false);
   const [acceptError, setAcceptError] = useState<string | null>(null);
 
-  // A different ticker means a different saved preference to default the
-  // selector back to (not carrying forward whatever was picked for the
+  // A different ticker means a different remembered preference to default
+  // the selector back to (not carrying forward whatever was picked for the
   // previous ticker).
   useEffect(() => {
-    setRiskTolerance(settings.riskTolerance ?? 'neutral');
+    setRiskTolerance(loadLastRiskTolerance(ticker) ?? settings.riskTolerance ?? 'neutral');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker]);
+
+  function selectRiskTolerance(value: RiskTolerance) {
+    setRiskTolerance(value);
+    saveLastRiskTolerance(ticker, value);
+  }
 
   // Seed from any prior cached suggestion for this exact (ticker, risk
   // tolerance) pair, so an already-run suggestion (rationale + proposed
@@ -232,7 +243,7 @@ export function AiSuggestionPanel({
               name={`riskTolerance-${ticker}`}
               value={opt.value}
               checked={riskTolerance === opt.value}
-              onChange={() => setRiskTolerance(opt.value)}
+              onChange={() => selectRiskTolerance(opt.value)}
               disabled={loading}
             />
             {opt.label}

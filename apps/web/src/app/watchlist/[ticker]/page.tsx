@@ -5,11 +5,16 @@ import Link from 'next/link';
 import { recomputeReport, type Signal } from '@stock-indicator-dailies/shared';
 import { useAuth } from '@/hooks/useAuth';
 import {
+  addPositionLot,
+  clearPositionLots,
+  deletePositionLot,
+  fetchDayRange,
   fetchWatchlistTickerReport,
   refreshWatchlistTicker,
-  updatePosition,
+  updatePositionLot,
   updateScenarioSettings,
   updateWatchlistSettings,
+  type LotInput,
 } from '@/lib/watchlistApi';
 import { sleep } from '@/lib/polling.ts';
 import {
@@ -23,9 +28,9 @@ import {
 import { stageLabel } from '@/lib/errorMessages';
 import { ReportCard } from '@/components/ReportCard';
 import { SettingsPanel } from '@/components/SettingsPanel';
-import { PositionPanel } from '@/components/PositionPanel';
+import { PositionPanel, type LotActionResult } from '@/components/PositionPanel';
 import { AiSuggestionPanel, type AcceptResult } from '@/components/AiSuggestionPanel';
-import type { PositionRisk, UnrealizedPnl, WatchlistPosition } from '@/types/watchlist';
+import type { LedgerRow, PositionRisk, UnrealizedPnl } from '@/types/watchlist';
 import { BacktestPanel, type BacktestPanelHandle } from '@/components/BacktestPanel';
 import { SignalHistoryPanel } from '@/components/SignalHistoryPanel';
 import type { DailyReport } from '@/types/api';
@@ -70,7 +75,7 @@ type Ready = {
   stale: boolean;
   refreshAvailableAt: string | null;
   overall: Signal | null;
-  position: WatchlistPosition | null;
+  ledgerRows: LedgerRow[];
   positionRisk: PositionRisk | null;
   overallOverrideReason: string | null;
   unrealizedPnl: UnrealizedPnl | null;
@@ -135,7 +140,7 @@ function RefreshBar({
         ) : null}
         <button
           type="button"
-          className="settings-toggle"
+          className="btn-sm"
           onClick={onRefresh}
           disabled={refreshing || onCooldown}
         >
@@ -196,7 +201,7 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
             stale: res.stale,
             refreshAvailableAt: res.refreshAvailableAt,
             overall: res.overall,
-            position: res.position,
+            ledgerRows: res.ledgerRows,
             positionRisk: res.positionRisk,
             overallOverrideReason: res.overallOverrideReason,
             unrealizedPnl: res.unrealizedPnl,
@@ -299,7 +304,7 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
     if (report.ok) {
       setStatus((prev) =>
         prev.kind === 'ready'
-          ? { ...prev, position: report.position, positionRisk: report.positionRisk, overallOverrideReason: report.overallOverrideReason, unrealizedPnl: report.unrealizedPnl, overall: report.overall }
+          ? { ...prev, ledgerRows: report.ledgerRows, positionRisk: report.positionRisk, overallOverrideReason: report.overallOverrideReason, unrealizedPnl: report.unrealizedPnl, overall: report.overall }
           : prev,
       );
     }
@@ -324,22 +329,56 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
     });
   }
 
-  /** Saves (or, with `null`, clears) this ticker's position, then re-fetches
-   * the report so unrealized P&L and the sell-point override reflect it
-   * immediately rather than waiting for the next poll. */
-  async function savePosition(position: WatchlistPosition | null): Promise<{ ok: boolean; reason?: string }> {
-    if (!session) return { ok: false, reason: 'Not signed in.' };
-    const res = await updatePosition(session.access_token, ticker, position);
-    if (!res.ok) return { ok: false, reason: res.reason };
+  /** Refetches the report after any lot mutation so the ledger, unrealized
+   * P&L, and the sell-point override all reflect it immediately rather
+   * than waiting for the next poll. Shared by add/edit/delete/clear below. */
+  async function refreshAfterLotChange() {
+    if (!session) return;
     const report = await fetchWatchlistTickerReport(session.access_token, ticker);
     if (report.ok) {
       setStatus((prev) =>
         prev.kind === 'ready'
-          ? { ...prev, position: report.position, positionRisk: report.positionRisk, overallOverrideReason: report.overallOverrideReason, unrealizedPnl: report.unrealizedPnl, overall: report.overall }
+          ? { ...prev, ledgerRows: report.ledgerRows, positionRisk: report.positionRisk, overallOverrideReason: report.overallOverrideReason, unrealizedPnl: report.unrealizedPnl, overall: report.overall }
           : prev,
       );
     }
+  }
+
+  async function addLot(lot: LotInput): Promise<LotActionResult> {
+    if (!session) return { ok: false, reason: 'Not signed in.' };
+    const res = await addPositionLot(session.access_token, ticker, lot);
+    if (!res.ok) return { ok: false, reason: res.reason };
+    await refreshAfterLotChange();
     return { ok: true };
+  }
+
+  async function editLot(lotId: string, lot: LotInput): Promise<LotActionResult> {
+    if (!session) return { ok: false, reason: 'Not signed in.' };
+    const res = await updatePositionLot(session.access_token, ticker, lotId, lot);
+    if (!res.ok) return { ok: false, reason: res.reason };
+    await refreshAfterLotChange();
+    return { ok: true };
+  }
+
+  async function removeLot(lotId: string): Promise<LotActionResult> {
+    if (!session) return { ok: false, reason: 'Not signed in.' };
+    const res = await deletePositionLot(session.access_token, ticker, lotId);
+    if (!res.ok) return { ok: false, reason: res.reason };
+    await refreshAfterLotChange();
+    return { ok: true };
+  }
+
+  async function clearAllLots(): Promise<LotActionResult> {
+    if (!session) return { ok: false, reason: 'Not signed in.' };
+    const res = await clearPositionLots(session.access_token, ticker);
+    if (!res.ok) return { ok: false, reason: res.reason };
+    await refreshAfterLotChange();
+    return { ok: true };
+  }
+
+  async function getDayRange(date: string) {
+    if (!session) return { ok: false as const, reason: 'Not signed in.' };
+    return fetchDayRange(session.access_token, ticker, date);
   }
 
   async function runTesting(settings: IndicatorSettings): Promise<AcceptResult> {
@@ -393,13 +432,6 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
             overallOverrideReason={status.overallOverrideReason}
           />
 
-          <PositionPanel
-            position={status.position}
-            positionRisk={status.positionRisk}
-            unrealizedPnl={status.unrealizedPnl}
-            onSave={savePosition}
-          />
-
           <RefreshBar
             retrievedAt={status.retrievedAt}
             stale={status.stale}
@@ -407,6 +439,17 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
             refreshing={refreshing}
             error={refreshError}
             onRefresh={handleRefresh}
+          />
+
+          <PositionPanel
+            ledgerRows={status.ledgerRows}
+            positionRisk={status.positionRisk}
+            unrealizedPnl={status.unrealizedPnl}
+            onAdd={addLot}
+            onEdit={editLot}
+            onDelete={removeLot}
+            onClear={clearAllLots}
+            onFetchDayRange={getDayRange}
           />
 
           <SettingsPanel settings={status.settings} onApply={applySettings} />

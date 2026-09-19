@@ -10,13 +10,26 @@ export type WatchlistSettings = DeriveSignalOptions;
 
 export type WatchlistTickerStatus = 'ready' | 'running' | 'failed' | 'stale';
 
-/** A real entered position: when they bought, how many shares, at what
- * price. Powers unrealized gains/losses and the live ATR sell-point
- * override. */
-export interface WatchlistPosition {
-  entryDate: string;
+/** One recorded buy or sell lot for a ticker. Multiple lots over time make
+ * up the full position; realized gains are computed FIFO across them (see
+ * apps/api/src/positionRisk.ts). */
+export interface PositionLot {
+  id: string;
+  action: 'buy' | 'sell';
+  tradeDate: string;
   shares: number;
-  entryPrice: number;
+  price: number;
+  createdAt: string;
+}
+
+/** One row of the position ledger table: a lot plus the running totals
+ * immediately after it, in trade order. realizedGain/Pct are null for a
+ * buy row (a buy never itself realizes anything). */
+export interface LedgerRow {
+  lot: PositionLot;
+  totalHeldShares: number;
+  realizedGain: number | null;
+  realizedGainPct: number | null;
 }
 
 /** Only present when both a position and ATR settings (Indicator
@@ -52,7 +65,11 @@ export interface WatchlistDashboardRow {
   lastChangedAt: string | null;
   /** This ticker's sensitivity override; null means app defaults. */
   settings: WatchlistSettings | null;
-  position: WatchlistPosition | null;
+  /** Total shares currently held across all open (not yet sold) lots; 0
+   * means nothing currently held. */
+  heldShares: number;
+  /** The oldest still-open lot's trade date; null whenever heldShares is 0. */
+  sinceDate: string | null;
   positionRisk: PositionRisk | null;
   /** Present exactly when positionRisk.triggered forced `overall` to
    * 'SELL'; explains why in plain language for display. */
@@ -85,7 +102,8 @@ export type WatchlistReportResponse =
        * (if any) below; use this instead of report.verdict/deterministic
        * when displaying the headline Overall read. */
       overall: Signal | null;
-      position: WatchlistPosition | null;
+      lots: PositionLot[];
+      ledgerRows: LedgerRow[];
       positionRisk: PositionRisk | null;
       overallOverrideReason: string | null;
       unrealizedPnl: UnrealizedPnl | null;
@@ -107,4 +125,12 @@ export type WatchlistRefreshResponse =
  * between BUY/SELL. */
 export type WatchlistNotificationResponse =
   | { ok: true; emailOnSignal: boolean }
+  | { ok: false; reason: string };
+
+export type LotMutationResponse =
+  | { ok: true; lots: PositionLot[]; ledgerRows: LedgerRow[] }
+  | { ok: false; reason: string };
+
+export type DayRangeResponse =
+  | { ok: true; low: number; high: number }
   | { ok: false; reason: string };

@@ -276,6 +276,100 @@ body {
 }
 .advisor-diff-empty { font-size: 13px; color: var(--muted); margin-top: 8px; }
 
+/* --- Small button (Refresh, Clear-table) --- */
+/* Unlike .settings-toggle (plain text, no border), this reads as an
+   actual button, just smaller than .analyze-btn. */
+.btn-sm {
+  font-family: var(--sans); font-size: 12px; font-weight: 600;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: opacity .12s;
+}
+.btn-sm:hover { opacity: .8; }
+.btn-sm:disabled { opacity: .4; cursor: not-allowed; }
+
+/* --- Danger button (delete/clear confirmation) --- */
+.danger-btn {
+  font-family: var(--sans); font-size: 13px; font-weight: 600;
+  background: var(--sell-bg); color: var(--sell); border: 1px solid var(--sell);
+  border-radius: 8px; padding: 8px 16px; cursor: pointer; transition: opacity .12s;
+}
+.danger-btn:hover { opacity: .85; }
+.danger-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Icon-plus-text buttons (e.g. "+ Record a position") reuse
+   .settings-toggle's plain styling; this just lays out an inline SVG +
+   label without affecting any existing text-only .settings-toggle button. */
+.settings-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.settings-toggle svg { width: 14px; height: 14px; flex-shrink: 0; }
+.icon-btn {
+  background: none; border: none; cursor: pointer; color: var(--muted);
+  padding: 4px; display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn:hover { color: var(--accent); }
+.icon-btn svg { width: 14px; height: 14px; }
+
+/* --- Position ledger (date/select/text-numeric inputs, $ adornment) --- */
+input[type="date"] {
+  font-family: var(--mono); background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+}
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.7); cursor: pointer; }
+@media (prefers-color-scheme: light) {
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: none; }
+}
+
+.pos-field input[type="text"] {
+  font-family: var(--mono); background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; width: 100px;
+}
+.pos-price-wrap { position: relative; display: inline-flex; align-items: center; }
+.pos-price-wrap .pos-price-prefix {
+  position: absolute; left: 8px; color: var(--muted); font-family: var(--mono); font-size: 13px; pointer-events: none;
+}
+.pos-price-wrap input[type="text"] { padding-left: 18px; }
+
+.select-wrap { position: relative; display: inline-flex; align-items: center; }
+.select-wrap::after {
+  content: '▾'; position: absolute; right: 10px; pointer-events: none;
+  color: var(--faint); font-size: 11px;
+}
+.select-wrap select {
+  appearance: none; -webkit-appearance: none; font-family: var(--mono);
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 24px 4px 8px; cursor: pointer; min-width: 90px;
+}
+
+/* Entry-price info popup: JS-controlled (auto-opens on entry, or shows on
+   hover), unlike .tip's pure-CSS-hover-only behavior, so it's its own
+   floating box rather than reusing .tip. */
+.pos-tooltip {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 20;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-family: var(--mono); font-size: 12px; color: var(--text);
+  width: max-content; max-width: 260px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.28);
+}
+.pos-tooltip-close {
+  position: absolute; top: 2px; right: 4px; background: none; border: none;
+  color: var(--faint); cursor: pointer; font-size: 12px; line-height: 1; padding: 4px;
+}
+.pos-tooltip-close:hover { color: var(--text); }
+
+/* --- Centered confirm modal (e.g. "Clear all positions?") --- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 300;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.modal-box {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 20px 22px; max-width: 380px; width: 100%; box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.modal-box p { font-size: 13px; color: var(--text); margin-bottom: 16px; line-height: 1.5; }
+
+.ledger-gain { font-weight: 600; }
+.ledger-gain.pos { color: var(--buy); }
+.ledger-gain.neg { color: var(--sell); }
+
 /* --- Auth corner pill --- */
 /* Fixed to the viewport, not .wrap's centered column, so it stays a
    subtle, out-of-the-way affordance in the top-right corner regardless of
