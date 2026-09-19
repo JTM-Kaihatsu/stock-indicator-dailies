@@ -77,6 +77,67 @@ async function resolveSourceUrl(url: string, resolveFetch: typeof fetch): Promis
   }
 }
 
+const THUMBNAIL_FETCH_TIMEOUT_MS = 5000;
+/** Enough to cover the <head> of essentially any real page; a scrape that
+ * hasn't found a usable tag by this many bytes gives up rather than
+ * reading an arbitrarily large body. */
+const THUMBNAIL_MAX_BYTES = 200 * 1024;
+
+/** Finds a meta tag's `content` value by `attr` (property or name),
+ * matching either attribute order since real-world markup varies
+ * (`<meta property=".." content="..">` vs `<meta content=".." property="..">`). */
+function metaContent(html: string, attr: 'property' | 'name', key: string): string | undefined {
+  const a = new RegExp(`<meta[^>]*?${attr}=["']${key}["'][^>]*?content=["']([^"']+)["'][^>]*>`, 'i');
+  const b = new RegExp(`<meta[^>]*?content=["']([^"']+)["'][^>]*?${attr}=["']${key}["'][^>]*>`, 'i');
+  return html.match(a)?.[1] ?? html.match(b)?.[1];
+}
+
+function extractMetaImage(html: string): string | undefined {
+  return metaContent(html, 'property', 'og:image') ?? metaContent(html, 'name', 'twitter:image');
+}
+
+/** Best-effort og:image/twitter:image scrape of an already-resolved source
+ * page, for the citation drawer's per-source thumbnail. Kept independent
+ * of resolveSourceUrl (a separate GET, not folded into its HEAD) so a bug
+ * here can never affect URL resolution, which every citation link already
+ * depends on. Streams the body with a byte cap and bails out early once
+ * `</head>` is seen, so one slow or huge page can't block the whole
+ * citation-resolution step. Returns undefined on any failure (timeout,
+ * non-2xx, non-HTML content-type, no usable meta tag, an unresolvable or
+ * non-http(s) image URL); never throws, same graceful-fallback posture as
+ * resolveSourceUrl, just "no thumbnail" instead of "original URL". */
+async function scrapeThumbnail(url: string, resolveFetch: typeof fetch): Promise<string | undefined> {
+  try {
+    const res = await resolveFetch(url, { redirect: 'follow', signal: AbortSignal.timeout(THUMBNAIL_FETCH_TIMEOUT_MS) });
+    if (!res.ok) return undefined;
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!contentType.toLowerCase().includes('text/html')) return undefined;
+    if (!res.body) return undefined;
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let html = '';
+    try {
+      while (html.length < THUMBNAIL_MAX_BYTES) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        html += decoder.decode(value, { stream: true });
+        if (/<\/head>/i.test(html)) break;
+      }
+    } finally {
+      await reader.cancel().catch(() => {});
+    }
+
+    const image = extractMetaImage(html);
+    if (!image) return undefined;
+    const absolute = new URL(image, res.url || url);
+    if (absolute.protocol !== 'http:' && absolute.protocol !== 'https:') return undefined;
+    return absolute.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 /** Turns Gemini's grounding metadata (which segments of its response text
  * were backed by which web sources) into our own ResearchQuote shape, with
  * every source's URL resolved to its real destination (see
@@ -107,13 +168,26 @@ async function extractCitations(response: GeminiResponse, resolveFetch: typeof f
   for (const citation of citations) {
     for (const source of citation.sources) uniqueUrls.add(source.url);
   }
-  const resolved = new Map<string, string>(
+  interface ResolvedSource {
+    url: string;
+    thumbnailUrl?: string;
+  }
+  const resolved = new Map<string, ResolvedSource>(
     await Promise.all(
-      Array.from(uniqueUrls, async (url): Promise<[string, string]> => [url, await resolveSourceUrl(url, resolveFetch)]),
+      Array.from(uniqueUrls, async (url): Promise<[string, ResolvedSource]> => {
+        const resolvedUrl = await resolveSourceUrl(url, resolveFetch);
+        const thumbnailUrl = await scrapeThumbnail(resolvedUrl, resolveFetch);
+        return [url, { url: resolvedUrl, thumbnailUrl }];
+      }),
     ),
   );
   for (const citation of citations) {
-    for (const source of citation.sources) source.url = resolved.get(source.url) ?? source.url;
+    for (const source of citation.sources) {
+      const r = resolved.get(source.url);
+      if (!r) continue;
+      source.url = r.url;
+      if (r.thumbnailUrl) source.thumbnailUrl = r.thumbnailUrl;
+    }
   }
 
   return citations;

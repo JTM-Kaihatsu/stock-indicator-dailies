@@ -102,11 +102,25 @@ export function CitationButton({ citations }: { citations: FieldClaim[] }) {
                               rel="noreferrer"
                               title={s.url}
                               style={{
-                                color: 'var(--accent)', display: 'block', minWidth: 0, maxWidth: '100%',
-                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 8,
+                                minWidth: 0, maxWidth: '100%',
                               }}
                             >
-                              {s.url}
+                              {s.thumbnailUrl && (
+                                <img
+                                  src={s.thumbnailUrl}
+                                  alt=""
+                                  loading="lazy"
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                  style={{
+                                    width: 36, height: 36, objectFit: 'cover', borderRadius: 4,
+                                    border: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface)',
+                                  }}
+                                />
+                              )}
+                              <span style={{ minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                                {s.url}
+                              </span>
                             </a>
                           ))}
                         </div>
