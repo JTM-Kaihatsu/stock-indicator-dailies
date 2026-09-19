@@ -1,7 +1,88 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { FieldClaim } from '@/types/advisor';
+import type { FieldClaim, ResearchQuote } from '@/types/advisor';
+
+/** Pure fallback (no network) for an older cached source that predates
+ * server-side site-name scraping, mirroring the backend's
+ * prettifyHostname (packages/advisor/src/advisor.ts): strips a leading
+ * www., takes the label before the first remaining dot, capitalizes it. */
+function prettifySiteName(url: string): string {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    const label = host.split('.')[0] || host;
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  } catch {
+    return url;
+  }
+}
+
+/** One quote's sources, collapsed into a single pill (e.g. "Reuters +2")
+ * next to the quote text; clicking opens a small anchored popout listing
+ * every source in order (site name, article title, URL, thumbnail).
+ * Multiple sources per quote is normal: Gemini's grounding metadata
+ * attributes one segment of its research text to every search result that
+ * corroborates it, not just one. */
+function SourcePill({ sources }: { sources: ResearchQuote['sources'] }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  if (sources.length === 0) return null;
+  const first = sources[0]!;
+  const label = (first.siteName ?? prettifySiteName(first.url)) + (sources.length > 1 ? ` +${sources.length - 1}` : '');
+
+  return (
+    <span ref={rootRef} style={{ position: 'relative', display: 'inline-block', marginTop: 6 }}>
+      <button
+        type="button"
+        className="pill-source"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={open ? 'Hide sources' : 'Show sources'}
+      >
+        {label}
+      </button>
+      {open && (
+        <div className="source-popout" role="dialog" aria-label="Sources">
+          {sources.map((s, i) => (
+            <a key={i} href={s.url} target="_blank" rel="noreferrer" className="source-entry">
+              <span className="source-entry-text">
+                <span className="source-entry-site">{s.siteName ?? prettifySiteName(s.url)}</span>
+                {s.articleTitle && <span className="source-entry-title">{s.articleTitle}</span>}
+                <span className="source-entry-url">{s.url}</span>
+              </span>
+              {s.thumbnailUrl && (
+                <img
+                  src={s.thumbnailUrl}
+                  alt=""
+                  loading="lazy"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  className="source-entry-thumb"
+                />
+              )}
+            </a>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
 
 /** A small "sources" info button placed next to an AI-generated claim
  * (fit reason, rationale, earnings outlook, earnings likelihood reason).
@@ -92,38 +173,8 @@ export function CitationButton({ citations }: { citations: FieldClaim[] }) {
                           fontSize: 'calc(12.5px * var(--type-scale))',
                         }}
                       >
-                        <div style={{ color: 'var(--muted)', fontStyle: 'italic' }}>&ldquo;{q.quote}&rdquo;</div>
-                        <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-                          {q.sources.map((s, k) => (
-                            <a
-                              key={k}
-                              href={s.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              title={s.url}
-                              style={{
-                                color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 8,
-                                minWidth: 0, maxWidth: '100%',
-                              }}
-                            >
-                              {s.thumbnailUrl && (
-                                <img
-                                  src={s.thumbnailUrl}
-                                  alt=""
-                                  loading="lazy"
-                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                  style={{
-                                    width: 36, height: 36, objectFit: 'cover', borderRadius: 4,
-                                    border: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface)',
-                                  }}
-                                />
-                              )}
-                              <span style={{ minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                                {s.url}
-                              </span>
-                            </a>
-                          ))}
-                        </div>
+                        <div style={{ color: 'var(--muted)', fontStyle: 'italic' }}>{q.quote}</div>
+                        <SourcePill sources={q.sources} />
                       </div>
                     ))}
                   </div>
