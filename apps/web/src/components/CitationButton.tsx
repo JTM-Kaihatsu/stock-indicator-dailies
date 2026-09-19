@@ -93,10 +93,20 @@ export function CitationButton({ citations }: { citations: FieldClaim[] }) {
                         }}
                       >
                         <div style={{ color: 'var(--muted)', fontStyle: 'italic' }}>&ldquo;{q.quote}&rdquo;</div>
-                        <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
                           {q.sources.map((s, k) => (
-                            <a key={k} href={s.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
-                              {s.title}
+                            <a
+                              key={k}
+                              href={s.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={s.url}
+                              style={{
+                                color: 'var(--accent)', display: 'block', minWidth: 0, maxWidth: '100%',
+                                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                              }}
+                            >
+                              {s.url}
                             </a>
                           ))}
                         </div>

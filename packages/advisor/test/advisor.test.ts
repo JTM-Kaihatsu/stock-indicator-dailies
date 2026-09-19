@@ -76,6 +76,23 @@ function scriptedGeminiClient(text: string | undefined, candidates?: unknown[]) 
   return { client, params };
 }
 
+/** Fake `fetch` for citation-URL resolution (see resolveSourceUrl in
+ * advisor.ts): `resolutions` maps a requested URL to the `res.url` it
+ * should report resolving to (the "real" redirect-resolved URL). A URL
+ * mapped to the sentinel `'THROW'` simulates a resolution failure (timeout,
+ * blocked HEAD, network error). Also counts calls so tests can assert a
+ * distinct URL is only resolved once even if cited by multiple quotes. */
+function fakeResolveFetch(resolutions: Record<string, string> = {}): { fetchFn: typeof fetch; calls: string[] } {
+  const calls: string[] = [];
+  const fetchFn = (async (url: string | URL) => {
+    const key = String(url);
+    calls.push(key);
+    if (resolutions[key] === 'THROW') throw new Error('simulated network failure');
+    return { url: resolutions[key] ?? key } as Response;
+  }) as typeof fetch;
+  return { fetchFn, calls };
+}
+
 // --- researchCompany: Gemini + Grounding with Google Search ---
 
 test('returns the trimmed text from a successful Gemini call', async () => {
@@ -108,7 +125,7 @@ test('returns no citations when the response carries no grounding metadata', asy
   assert.deepEqual(result.citations, []);
 });
 
-test('extracts citations from grounding metadata', async () => {
+test('extracts citations from grounding metadata, with each source URL resolved to its real destination', async () => {
   const candidates = [
     {
       groundingMetadata: {
@@ -123,16 +140,55 @@ test('extracts citations from grounding metadata', async () => {
     },
   ];
   const { client } = scriptedGeminiClient('Findings.', candidates);
-  const result = await researchCompany('GOOG', { client });
+  const { fetchFn } = fakeResolveFetch({
+    'https://redirect/1': 'https://reuters.com/tech/google-cloud-q3-2026',
+    'https://redirect/2': 'https://bloomberg.com/news/articles/google-cloud-growth',
+  });
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
   assert.deepEqual(result.citations, [
     {
       quote: 'Google Cloud grew 34% YoY.',
       sources: [
-        { title: 'Reuters', url: 'https://redirect/1' },
-        { title: 'Bloomberg', url: 'https://redirect/2' },
+        { title: 'Reuters', url: 'https://reuters.com/tech/google-cloud-q3-2026' },
+        { title: 'Bloomberg', url: 'https://bloomberg.com/news/articles/google-cloud-growth' },
       ],
     },
   ]);
+});
+
+test('falls back to the original redirect URL when resolution fails', async () => {
+  const candidates = [
+    {
+      groundingMetadata: {
+        groundingChunks: [{ web: { title: 'Reuters', uri: 'https://redirect/1' } }],
+        groundingSupports: [{ segment: { text: 'A claim.' }, groundingChunkIndices: [0] }],
+      },
+    },
+  ];
+  const { client } = scriptedGeminiClient('Findings.', candidates);
+  const { fetchFn } = fakeResolveFetch({ 'https://redirect/1': 'THROW' });
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sources[0]!.url, 'https://redirect/1');
+});
+
+test('resolves a distinct URL only once even when cited by multiple quotes', async () => {
+  const candidates = [
+    {
+      groundingMetadata: {
+        groundingChunks: [{ web: { title: 'Reuters', uri: 'https://redirect/1' } }],
+        groundingSupports: [
+          { segment: { text: 'First claim.' }, groundingChunkIndices: [0] },
+          { segment: { text: 'Second claim.' }, groundingChunkIndices: [0] },
+        ],
+      },
+    },
+  ];
+  const { client } = scriptedGeminiClient('Findings.', candidates);
+  const { fetchFn, calls } = fakeResolveFetch({ 'https://redirect/1': 'https://reuters.com/article' });
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.deepEqual(calls, ['https://redirect/1']);
+  assert.equal(result.citations[0]!.sources[0]!.url, 'https://reuters.com/article');
+  assert.equal(result.citations[1]!.sources[0]!.url, 'https://reuters.com/article');
 });
 
 test('drops a grounding support with no text or no resolvable sources', async () => {
@@ -149,7 +205,8 @@ test('drops a grounding support with no text or no resolvable sources', async ()
     },
   ];
   const { client } = scriptedGeminiClient('Findings.', candidates);
-  const result = await researchCompany('GOOG', { client });
+  const { fetchFn } = fakeResolveFetch();
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
   assert.equal(result.citations.length, 1);
   assert.equal(result.citations[0]!.quote, 'Sourced claim.');
 });
