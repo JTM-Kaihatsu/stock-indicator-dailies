@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DeriveSignalOptions } from '@stock-indicator-dailies/shared';
 
 import { getSupabaseClient } from './supabaseClient.ts';
-import type { Position } from './positionRisk.ts';
+import type { PositionLot } from './positionRisk.ts';
 
 export interface WatchlistRow {
   ticker: string;
@@ -14,10 +14,6 @@ export interface WatchlistRow {
    * Opaque here — never interpreted server-side, just stored and returned
    * verbatim for the frontend to auto-rerun. */
   scenarioSettings: Record<string, unknown> | null;
-  /** A real entered position (when they bought, how many shares, at what
-   * price); null means none recorded. All three fields are set/cleared
-   * together, see updatePosition. */
-  position: Position | null;
 }
 
 interface WatchlistTickerRecord {
@@ -25,14 +21,6 @@ interface WatchlistTickerRecord {
   added_at: string;
   settings: DeriveSignalOptions | null;
   scenario_settings: Record<string, unknown> | null;
-  entry_date: string | null;
-  shares: number | null;
-  entry_price: number | null;
-}
-
-function toPosition(row: WatchlistTickerRecord): Position | null {
-  if (row.entry_date === null || row.shares === null || row.entry_price === null) return null;
-  return { entryDate: row.entry_date, shares: row.shares, entryPrice: row.entry_price };
 }
 
 /** A user's watchlisted tickers, in their chosen display order (see
@@ -46,7 +34,7 @@ export async function getWatchlist(userId: string): Promise<WatchlistRow[]> {
   try {
     const { data, error } = await db
       .from('watchlist_tickers')
-      .select('ticker, added_at, settings, scenario_settings, entry_date, shares, entry_price')
+      .select('ticker, added_at, settings, scenario_settings')
       .eq('user_id', userId)
       .order('sort_order', { ascending: true })
       .returns<WatchlistTickerRecord[]>();
@@ -56,10 +44,156 @@ export async function getWatchlist(userId: string): Promise<WatchlistRow[]> {
       addedAt: row.added_at,
       settings: row.settings ?? null,
       scenarioSettings: row.scenario_settings ?? null,
-      position: toPosition(row),
     }));
   } catch {
     return [];
+  }
+}
+
+interface PositionLotRecord {
+  id: string;
+  action: 'buy' | 'sell';
+  trade_date: string;
+  shares: number;
+  price: number;
+  created_at: string;
+}
+
+function toLot(row: PositionLotRecord): PositionLot {
+  return { id: row.id, action: row.action, tradeDate: row.trade_date, shares: row.shares, price: row.price, createdAt: row.created_at };
+}
+
+/** All recorded buy/sell lots for one ticker, oldest first (computeLedger
+ * re-sorts anyway, but a stable order here makes debugging easier). Empty
+ * on any failure. */
+export async function getPositionLots(userId: string, ticker: string): Promise<PositionLot[]> {
+  const db = getSupabaseClient();
+  if (!db) return [];
+
+  try {
+    const { data, error } = await db
+      .from('watchlist_position_lots')
+      .select('id, action, trade_date, shares, price, created_at')
+      .eq('user_id', userId)
+      .eq('ticker', ticker)
+      .order('trade_date', { ascending: true })
+      .order('created_at', { ascending: true })
+      .returns<PositionLotRecord[]>();
+    if (error || !data) return [];
+    return data.map(toLot);
+  } catch {
+    return [];
+  }
+}
+
+/** Every lot across every ticker for one user, in a single query, grouped
+ * by ticker: used by `GET /watchlist` so its per-row loop doesn't N+1
+ * fetch lots per ticker (mirrors getWatchlist's own one-query-for-the-
+ * whole-list shape). Empty map on any failure. */
+export async function getAllPositionLotsForUser(userId: string): Promise<Map<string, PositionLot[]>> {
+  const db = getSupabaseClient();
+  const byTicker = new Map<string, PositionLot[]>();
+  if (!db) return byTicker;
+
+  try {
+    const { data, error } = await db
+      .from('watchlist_position_lots')
+      .select('id, ticker, action, trade_date, shares, price, created_at')
+      .eq('user_id', userId)
+      .order('trade_date', { ascending: true })
+      .order('created_at', { ascending: true })
+      .returns<Array<PositionLotRecord & { ticker: string }>>();
+    if (error || !data) return byTicker;
+    for (const row of data) {
+      const lots = byTicker.get(row.ticker) ?? [];
+      lots.push(toLot(row));
+      byTicker.set(row.ticker, lots);
+    }
+    return byTicker;
+  } catch {
+    return byTicker;
+  }
+}
+
+export interface LotInput {
+  action: 'buy' | 'sell';
+  tradeDate: string;
+  shares: number;
+  price: number;
+}
+
+/** Inserts a new lot and returns it (with its generated id/createdAt), or
+ * null on failure: the caller needs the generated fields to recompute the
+ * ledger immediately, so unlike most writes in this file this one isn't
+ * silently best-effort. */
+export async function insertLot(userId: string, ticker: string, lot: LotInput): Promise<PositionLot | null> {
+  const db = getSupabaseClient();
+  if (!db) return null;
+
+  try {
+    const { data, error } = await db
+      .from('watchlist_position_lots')
+      .insert({ user_id: userId, ticker, action: lot.action, trade_date: lot.tradeDate, shares: lot.shares, price: lot.price })
+      .select('id, action, trade_date, shares, price, created_at')
+      .single<PositionLotRecord>();
+    if (error || !data) return null;
+    return toLot(data);
+  } catch {
+    return null;
+  }
+}
+
+/** Updates an existing lot's fields in place (its id/ticker/user_id don't
+ * change); returns whether it actually matched a row. */
+export async function updateLot(userId: string, ticker: string, lotId: string, lot: LotInput): Promise<boolean> {
+  const db = getSupabaseClient();
+  if (!db) return false;
+
+  try {
+    const { data, error } = await db
+      .from('watchlist_position_lots')
+      .update({ action: lot.action, trade_date: lot.tradeDate, shares: lot.shares, price: lot.price })
+      .eq('user_id', userId)
+      .eq('ticker', ticker)
+      .eq('id', lotId)
+      .select('id')
+      .maybeSingle();
+    return !error && !!data;
+  } catch {
+    return false;
+  }
+}
+
+export async function deleteLot(userId: string, ticker: string, lotId: string): Promise<boolean> {
+  const db = getSupabaseClient();
+  if (!db) return false;
+
+  try {
+    const { data, error } = await db
+      .from('watchlist_position_lots')
+      .delete()
+      .eq('user_id', userId)
+      .eq('ticker', ticker)
+      .eq('id', lotId)
+      .select('id')
+      .maybeSingle();
+    return !error && !!data;
+  } catch {
+    return false;
+  }
+}
+
+/** Deletes every recorded lot for this ticker; best-effort, matching every
+ * other write in this file (the frontend's confirm modal is the actual
+ * safety check, not this being reversible). */
+export async function clearLots(userId: string, ticker: string): Promise<void> {
+  const db = getSupabaseClient();
+  if (!db) return;
+
+  try {
+    await db.from('watchlist_position_lots').delete().eq('user_id', userId).eq('ticker', ticker);
+  } catch {
+    // Best-effort.
   }
 }
 
@@ -147,28 +281,6 @@ export async function updateScenarioSettings(userId: string, ticker: string, set
 
   try {
     await db.from('watchlist_tickers').update({ scenario_settings: settings }).eq('user_id', userId).eq('ticker', ticker);
-  } catch {
-    // Best-effort.
-  }
-}
-
-/** Sets or clears this ticker's real entered position. `null` clears all
- * three columns together (there's no meaningful "half a position"). A
- * no-op if the row doesn't exist. */
-export async function updatePosition(userId: string, ticker: string, position: Position | null): Promise<void> {
-  const db = getSupabaseClient();
-  if (!db) return;
-
-  try {
-    await db
-      .from('watchlist_tickers')
-      .update({
-        entry_date: position?.entryDate ?? null,
-        shares: position?.shares ?? null,
-        entry_price: position?.entryPrice ?? null,
-      })
-      .eq('user_id', userId)
-      .eq('ticker', ticker);
   } catch {
     // Best-effort.
   }

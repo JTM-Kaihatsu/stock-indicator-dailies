@@ -1,7 +1,8 @@
 import type {
+  DayRangeResponse,
+  LotMutationResponse,
   WatchlistMutationResponse,
   WatchlistNotificationResponse,
-  WatchlistPosition,
   WatchlistRefreshResponse,
   WatchlistReportResponse,
   WatchlistResponse,
@@ -73,16 +74,59 @@ export async function updateScenarioSettings(
   return res.json();
 }
 
-/** Sets or clears this ticker's real entered position (`null` clears it). */
-export async function updatePosition(
+export interface LotInput {
+  action: 'buy' | 'sell';
+  tradeDate: string;
+  shares: number;
+  price: number;
+}
+
+/** Records a new buy or sell lot for this ticker. */
+export async function addPositionLot(accessToken: string, ticker: string, lot: LotInput): Promise<LotMutationResponse> {
+  const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}/positions`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(lot),
+  });
+  return res.json();
+}
+
+/** Edits an existing lot's fields in place. */
+export async function updatePositionLot(
   accessToken: string,
   ticker: string,
-  position: WatchlistPosition | null,
-): Promise<WatchlistMutationResponse> {
-  const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}`), {
+  lotId: string,
+  lot: LotInput,
+): Promise<LotMutationResponse> {
+  const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}/positions/${encodeURIComponent(lotId)}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ position }),
+    body: JSON.stringify(lot),
+  });
+  return res.json();
+}
+
+export async function deletePositionLot(accessToken: string, ticker: string, lotId: string): Promise<LotMutationResponse> {
+  const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}/positions/${encodeURIComponent(lotId)}`), {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return res.json();
+}
+
+/** Deletes every recorded lot for this ticker. */
+export async function clearPositionLots(accessToken: string, ticker: string): Promise<WatchlistMutationResponse> {
+  const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}/positions`), {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return res.json();
+}
+
+/** This day's trading range for the entry-price tooltip. */
+export async function fetchDayRange(accessToken: string, ticker: string, date: string): Promise<DayRangeResponse> {
+  const res = await fetch(apiUrl(`/api/watchlist/${encodeURIComponent(ticker)}/day-range?date=${encodeURIComponent(date)}`), {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
   return res.json();
 }

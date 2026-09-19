@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { yahooDataSource } from '@stock-indicator-dailies/indicators';
 import { outageMessageFor, recomputeReport, resolveDualOverall, type DeriveSignalOptions, type RiskTolerance, type Signal } from '@stock-indicator-dailies/shared';
 
 import { getCachedReportDetail, getCachedReportMeta, getLatestFailure } from '../cache.ts';
@@ -7,19 +8,33 @@ import { computeRefreshAvailableAt } from '../refreshCooldown.ts';
 import { parseTicker } from '../ticker.ts';
 import {
   addToWatchlist,
+  clearLots,
+  deleteLot,
+  getAllPositionLotsForUser,
+  getPositionLots,
   getWatchlist,
+  insertLot,
   removeFromWatchlist,
   reorderWatchlist,
-  updatePosition,
+  updateLot,
   updateScenarioSettings,
   updateWatchlistSettings,
+  type LotInput,
   type WatchlistRow,
 } from '../watchlist.ts';
 import { requireAuth } from '../authMiddleware.ts';
 import { runDailyWatchlistJobAndNotify } from '../scheduler.ts';
 import { getLastChangedMap } from '../signalHistory.ts';
 import { getEmailOnSignal, setEmailOnSignal } from '../notificationPrefs.ts';
-import { computePositionRisk, computeUnrealizedPnl, type Position, type PositionRisk, type UnrealizedPnl } from '../positionRisk.ts';
+import {
+  computeLedger,
+  computePositionRisk,
+  computeUnrealizedPnl,
+  type LedgerRow,
+  type PositionLot,
+  type PositionRisk,
+  type UnrealizedPnl,
+} from '../positionRisk.ts';
 
 export const watchlistRoute = new Hono();
 
@@ -45,9 +60,13 @@ export interface WatchlistDashboardRow {
   lastChangedAt: string | null;
   /** This ticker's sensitivity override; null means app defaults. */
   settings: DeriveSignalOptions | null;
-  /** A real entered position; null means none recorded. */
-  position: Position | null;
-  /** Only computed when both a position and ATR settings are set; null
+  /** Total shares currently held across all open (not yet sold) lots; 0
+   * means nothing currently held (whether never bought or fully sold). */
+  heldShares: number;
+  /** The oldest still-open lot's trade date (FIFO's current position-risk
+   * anchor); null whenever heldShares is 0. */
+  sinceDate: string | null;
+  /** Only computed when something is held and ATR settings are set; null
    * otherwise. When `triggered`, `overall` above has already been forced
    * to 'SELL' and `overallOverrideReason` explains why. */
   positionRisk: PositionRisk | null;
@@ -56,7 +75,7 @@ export interface WatchlistDashboardRow {
 }
 
 /** Applies the live ATR sell-point override to one row's Overall signal, in
- * place of whatever resolveDualOverall computed: entering a position and
+ * place of whatever resolveDualOverall computed: holding shares and
  * setting ATR noise-reduction in Indicator Settings is an explicit choice
  * to have this ticker's stop level watched, so a breach takes priority
  * over the ordinary computed/AI disagreement-resolution logic. Only ever
@@ -65,32 +84,41 @@ export interface WatchlistDashboardRow {
  * degrades to "no override," not a broken row. */
 async function applyPositionRisk(
   ticker: string,
-  entry: WatchlistRow,
+  lots: PositionLot[],
   currentPrice: number | null,
   overall: Signal | null,
-): Promise<Pick<WatchlistDashboardRow, 'position' | 'positionRisk' | 'overallOverrideReason' | 'unrealizedPnl'> & { overall: Signal | null }> {
-  const position = entry.position;
-  const atrMultiplier = entry.settings?.atrMultiplier;
-  const atrPeriod = entry.settings?.atrPeriod;
+  atrMultiplier: number | undefined,
+  atrPeriod: number | undefined,
+): Promise<
+  Pick<WatchlistDashboardRow, 'heldShares' | 'sinceDate' | 'positionRisk' | 'overallOverrideReason' | 'unrealizedPnl'> & {
+    overall: Signal | null;
+  }
+> {
+  const { openLots } = computeLedger(lots);
+  const heldShares = openLots.reduce((sum, lot) => sum + lot.shares, 0);
+  const sinceDate =
+    openLots.length > 0 ? openLots.reduce((min, lot) => (lot.tradeDate < min ? lot.tradeDate : min), openLots[0]!.tradeDate) : null;
 
-  if (!position) return { position: null, positionRisk: null, overallOverrideReason: null, unrealizedPnl: null, overall };
-
-  const unrealizedPnl = currentPrice !== null ? computeUnrealizedPnl(position, currentPrice) : null;
-
-  if (atrMultiplier === undefined || atrPeriod === undefined) {
-    return { position, positionRisk: null, overallOverrideReason: null, unrealizedPnl, overall };
+  if (openLots.length === 0) {
+    return { heldShares: 0, sinceDate: null, positionRisk: null, overallOverrideReason: null, unrealizedPnl: null, overall };
   }
 
-  const positionRisk = await computePositionRisk(ticker, position, atrMultiplier, atrPeriod);
+  const unrealizedPnl = currentPrice !== null ? computeUnrealizedPnl(openLots, currentPrice) : null;
+
+  if (atrMultiplier === undefined || atrPeriod === undefined) {
+    return { heldShares, sinceDate, positionRisk: null, overallOverrideReason: null, unrealizedPnl, overall };
+  }
+
+  const positionRisk = await computePositionRisk(ticker, openLots, atrMultiplier, atrPeriod);
   if (!positionRisk?.triggered) {
-    return { position, positionRisk, overallOverrideReason: null, unrealizedPnl, overall };
+    return { heldShares, sinceDate, positionRisk, overallOverrideReason: null, unrealizedPnl, overall };
   }
 
   const reason =
     `Overall forced to SELL: price ($${positionRisk.currentPrice.toFixed(2)}) fell below your ATR stop ` +
     `($${positionRisk.stopLevel.toFixed(2)} = peak $${positionRisk.peakSinceEntry.toFixed(2)} since entry minus ` +
     `${positionRisk.atrMultiplier}x the ${positionRisk.atrPeriod}-day ATR of $${positionRisk.atrValue.toFixed(2)}).`;
-  return { position, positionRisk, overallOverrideReason: reason, unrealizedPnl, overall: 'SELL' };
+  return { heldShares, sinceDate, positionRisk, overallOverrideReason: reason, unrealizedPnl, overall: 'SELL' };
 }
 
 const RISK_TOLERANCES: readonly RiskTolerance[] = ['averse', 'neutral', 'seeking'];
@@ -141,21 +169,27 @@ function parseIndicatorSettings(raw: unknown): Record<string, unknown> | null {
 }
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const LOT_ACTIONS = ['buy', 'sell'] as const;
 
-/** Validates a `{ entryDate, shares, entryPrice }` position, or `null` to
- * clear one. `undefined` (the field omitted entirely) means "leave the
- * stored position as-is," distinct from an explicit `null`; the caller
- * tells these apart before calling this. */
-function parsePosition(raw: unknown): Position | null | 'invalid' {
-  if (raw === null) return null;
+/** Validates a `{ action, tradeDate, shares, price }` lot. shares must be a
+ * positive whole number (no fractional shares); price a positive number.
+ * Client-side keystroke filtering already discourages bad input, but this
+ * is the actual authority (a paste or a direct API call can bypass that). */
+function parseLotInput(raw: unknown): LotInput | 'invalid' {
   if (!raw || typeof raw !== 'object') return 'invalid';
   const r = raw as Record<string, unknown>;
-  if (typeof r.entryDate !== 'string' || !DATE_PATTERN.test(r.entryDate) || Number.isNaN(Date.parse(r.entryDate))) {
-    return 'invalid';
-  }
-  if (typeof r.shares !== 'number' || !Number.isFinite(r.shares) || r.shares <= 0) return 'invalid';
-  if (typeof r.entryPrice !== 'number' || !Number.isFinite(r.entryPrice) || r.entryPrice <= 0) return 'invalid';
-  return { entryDate: r.entryDate, shares: r.shares, entryPrice: r.entryPrice };
+  if (typeof r.action !== 'string' || !LOT_ACTIONS.includes(r.action as (typeof LOT_ACTIONS)[number])) return 'invalid';
+  if (typeof r.tradeDate !== 'string' || !DATE_PATTERN.test(r.tradeDate) || Number.isNaN(Date.parse(r.tradeDate))) return 'invalid';
+  if (typeof r.shares !== 'number' || !Number.isInteger(r.shares) || r.shares <= 0) return 'invalid';
+  if (typeof r.price !== 'number' || !Number.isFinite(r.price) || r.price <= 0) return 'invalid';
+  return { action: r.action as 'buy' | 'sell', tradeDate: r.tradeDate, shares: r.shares, price: r.price };
+}
+
+/** The first ledger row (in trade order) whose running total goes
+ * negative, if any: used to build a specific "this would sell more than
+ * held as of {date}" message rather than a generic rejection. */
+function firstNegativeRow(rows: LedgerRow[]): LedgerRow | undefined {
+  return rows.find((row) => row.totalHeldShares < 0);
 }
 
 // requireAuth is applied per-route below, not via a blanket `/watchlist/*`
@@ -168,15 +202,20 @@ watchlistRoute.get('/watchlist', requireAuth, async (c) => {
   const tickers = entries.map((e) => e.ticker);
   const lastChangedMap = await getLastChangedMap(tickers);
   const entryByTicker = new Map(entries.map((e) => [e.ticker, e]));
+  // One query for every ticker's lots, grouped in memory below, instead of
+  // fetching per-row inside the Promise.all; mirrors getWatchlist's own
+  // one-query-for-the-whole-list shape.
+  const lotsByTicker = await getAllPositionLotsForUser(userId);
 
   const blankRow = (ticker: string, status: WatchlistTickerStatus, lastChangedAt: string | null, entry: WatchlistRow): WatchlistDashboardRow => ({
     ticker, overall: null, computed: null, ai: null, asOf: null, status, lastChangedAt,
-    settings: entry.settings, position: entry.position, positionRisk: null, overallOverrideReason: null, unrealizedPnl: null,
+    settings: entry.settings, heldShares: 0, sinceDate: null, positionRisk: null, overallOverrideReason: null, unrealizedPnl: null,
   });
 
   const rows: WatchlistDashboardRow[] = await Promise.all(
     entries.map(async ({ ticker, settings }): Promise<WatchlistDashboardRow> => {
       const entry = entryByTicker.get(ticker)!;
+      const lots = lotsByTicker.get(ticker) ?? [];
       const lastChangedAt = lastChangedMap.get(ticker) ?? null;
       const meta = await getCachedReportMeta(ticker);
 
@@ -187,7 +226,9 @@ watchlistRoute.get('/watchlist', requireAuth, async (c) => {
       const computed = report.deterministic?.signal ?? null;
       const ai = report.verdict.signal;
       const currentPrice = report.deterministic?.values.close ?? null;
-      const risk = await applyPositionRisk(ticker, entry, currentPrice, resolveDualOverall(computed, ai));
+      const risk = await applyPositionRisk(
+        ticker, lots, currentPrice, resolveDualOverall(computed, ai), settings?.atrMultiplier, settings?.atrPeriod,
+      );
       const withSignal = {
         ticker,
         overall: risk.overall,
@@ -196,7 +237,8 @@ watchlistRoute.get('/watchlist', requireAuth, async (c) => {
         asOf: report.deterministic?.asOf ?? null,
         lastChangedAt,
         settings,
-        position: risk.position,
+        heldShares: risk.heldShares,
+        sinceDate: risk.sinceDate,
         positionRisk: risk.positionRisk,
         overallOverrideReason: risk.overallOverrideReason,
         unrealizedPnl: risk.unrealizedPnl,
@@ -281,11 +323,12 @@ watchlistRoute.patch('/watchlist/:ticker', requireAuth, async (c) => {
   if (!ticker) return c.json({ ok: false, reason: 'Invalid ticker' }, 400);
 
   const body = await c.req
-    .json<{ settings?: unknown; scenarioSettings?: unknown; position?: unknown }>()
-    .catch(() => ({}) as { settings?: unknown; scenarioSettings?: unknown; position?: unknown });
+    .json<{ settings?: unknown; scenarioSettings?: unknown }>()
+    .catch(() => ({}) as { settings?: unknown; scenarioSettings?: unknown });
 
-  // All three fields are independent and optional: a caller may update any
-  // subset of them in one request.
+  // Both fields are independent and optional: a caller may update either or
+  // both in one request. Position lots have their own dedicated routes
+  // below (a list, not a single overwrite-able field).
   if (body.settings !== undefined) {
     const settings = parseSettings(body.settings) ?? {};
     await updateWatchlistSettings(userId, ticker, settings);
@@ -294,11 +337,6 @@ watchlistRoute.patch('/watchlist/:ticker', requireAuth, async (c) => {
     const scenarioSettings = parseIndicatorSettings(body.scenarioSettings);
     if (!scenarioSettings) return c.json({ ok: false, reason: 'Invalid scenarioSettings' }, 400);
     await updateScenarioSettings(userId, ticker, scenarioSettings);
-  }
-  if (body.position !== undefined) {
-    const position = parsePosition(body.position);
-    if (position === 'invalid') return c.json({ ok: false, reason: 'Invalid position' }, 400);
-    await updatePosition(userId, ticker, position);
   }
 
   return c.json({ ok: true, ticker });
@@ -324,7 +362,10 @@ watchlistRoute.get('/watchlist/:ticker/report', requireAuth, async (c) => {
     const computed = report.deterministic?.signal ?? null;
     const ai = report.verdict.signal;
     const currentPrice = report.deterministic?.values.close ?? null;
-    const risk = await applyPositionRisk(ticker, entry, currentPrice, resolveDualOverall(computed, ai));
+    const lots = await getPositionLots(userId, ticker);
+    const risk = await applyPositionRisk(
+      ticker, lots, currentPrice, resolveDualOverall(computed, ai), entry.settings?.atrMultiplier, entry.settings?.atrPeriod,
+    );
     return c.json({
       ok: true,
       report,
@@ -334,7 +375,8 @@ watchlistRoute.get('/watchlist/:ticker/report', requireAuth, async (c) => {
       stale: detail.stale,
       refreshAvailableAt: computeRefreshAvailableAt(detail.retrievedAt, failure?.occurredAt ?? null),
       overall: risk.overall,
-      position: risk.position,
+      lots,
+      ledgerRows: computeLedger(lots).rows,
       positionRisk: risk.positionRisk,
       overallOverrideReason: risk.overallOverrideReason,
       unrealizedPnl: risk.unrealizedPnl,
@@ -363,6 +405,134 @@ watchlistRoute.get('/watchlist/:ticker/report', requireAuth, async (c) => {
     reason,
     userMessage: outageMessageFor(stage, reason) ?? undefined,
   });
+});
+
+/** This day's `{low, high}` from a fresh 2y bar fetch, or null if there's
+ * no trading data for that date (weekend/holiday, or before the ticker's
+ * history). Shared by the day-range lookup endpoint and lot save
+ * validation below, so both stay consistent about what counts as "no data
+ * for that date." */
+async function dayRangeFor(ticker: string, date: string): Promise<{ low: number; high: number } | null> {
+  const { bars } = await yahooDataSource.fetchDailyBars(ticker, '2y');
+  const bar = bars.find((b) => b.date === date);
+  return bar ? { low: bar.low, high: bar.high } : null;
+}
+
+watchlistRoute.get('/watchlist/:ticker/day-range', requireAuth, async (c) => {
+  const ticker = parseTicker(c.req.param('ticker'));
+  if (!ticker) return c.json({ ok: false, reason: 'Invalid ticker' }, 400);
+  const date = c.req.query('date');
+  if (!date || !DATE_PATTERN.test(date)) return c.json({ ok: false, reason: 'Invalid date' }, 400);
+
+  try {
+    const range = await dayRangeFor(ticker, date);
+    if (!range) return c.json({ ok: false, reason: 'No trading data for that date' });
+    return c.json({ ok: true, low: range.low, high: range.high });
+  } catch {
+    return c.json({ ok: false, reason: 'Could not fetch price data' }, 502);
+  }
+});
+
+/** Shared by create/edit: validates the day-range and held-shares rules
+ * against a candidate full lot list (the caller builds `candidateLots` by
+ * inserting or replacing the one lot being saved), returning a rejection
+ * reason or null if it's clean to persist. */
+async function validateLotSave(ticker: string, tradeDate: string, price: number, candidateLots: PositionLot[]): Promise<string | null> {
+  const range = await dayRangeFor(ticker, tradeDate);
+  if (!range) return `No trading data found for ${ticker} on ${tradeDate}.`;
+  if (price < range.low || price > range.high) {
+    return `Entry price must be between $${range.low.toFixed(2)} and $${range.high.toFixed(2)} for ${tradeDate}.`;
+  }
+  const negative = firstNegativeRow(computeLedger(candidateLots).rows);
+  if (negative) {
+    return `This would sell more shares than held as of ${negative.lot.tradeDate}.`;
+  }
+  return null;
+}
+
+watchlistRoute.post('/watchlist/:ticker/positions', requireAuth, async (c) => {
+  const userId = c.get('userId');
+  const ticker = parseTicker(c.req.param('ticker'));
+  if (!ticker) return c.json({ ok: false, reason: 'Invalid ticker' }, 400);
+
+  const entries = await getWatchlist(userId);
+  if (!entries.some((e) => e.ticker === ticker)) return c.json({ ok: false, reason: 'Not on your watchlist' }, 404);
+
+  const body = await c.req.json<unknown>().catch(() => null);
+  const input = parseLotInput(body);
+  if (input === 'invalid') return c.json({ ok: false, reason: 'Invalid position input' }, 400);
+
+  const existingLots = await getPositionLots(userId, ticker);
+  const pending: PositionLot = { id: 'pending', createdAt: new Date().toISOString(), ...input };
+  const rejection = await validateLotSave(ticker, input.tradeDate, input.price, [...existingLots, pending]);
+  if (rejection) return c.json({ ok: false, reason: rejection }, 400);
+
+  const inserted = await insertLot(userId, ticker, input);
+  if (!inserted) return c.json({ ok: false, reason: 'Could not save position' }, 500);
+
+  const ledger = computeLedger([...existingLots, inserted]);
+  return c.json({ ok: true, lots: [...existingLots, inserted], ledgerRows: ledger.rows });
+});
+
+watchlistRoute.patch('/watchlist/:ticker/positions/:id', requireAuth, async (c) => {
+  const userId = c.get('userId');
+  const ticker = parseTicker(c.req.param('ticker'));
+  if (!ticker) return c.json({ ok: false, reason: 'Invalid ticker' }, 400);
+  const lotId = c.req.param('id');
+  if (!lotId) return c.json({ ok: false, reason: 'Invalid position id' }, 400);
+
+  const body = await c.req.json<unknown>().catch(() => null);
+  const input = parseLotInput(body);
+  if (input === 'invalid') return c.json({ ok: false, reason: 'Invalid position input' }, 400);
+
+  const existingLots = await getPositionLots(userId, ticker);
+  if (!existingLots.some((l) => l.id === lotId)) return c.json({ ok: false, reason: 'Position not found' }, 404);
+
+  const candidateLots = existingLots.map((l) => (l.id === lotId ? { ...l, ...input } : l));
+  const rejection = await validateLotSave(ticker, input.tradeDate, input.price, candidateLots);
+  if (rejection) return c.json({ ok: false, reason: rejection }, 400);
+
+  const ok = await updateLot(userId, ticker, lotId, input);
+  if (!ok) return c.json({ ok: false, reason: 'Could not save position' }, 500);
+
+  return c.json({ ok: true, lots: candidateLots, ledgerRows: computeLedger(candidateLots).rows });
+});
+
+watchlistRoute.delete('/watchlist/:ticker/positions/:id', requireAuth, async (c) => {
+  const userId = c.get('userId');
+  const ticker = parseTicker(c.req.param('ticker'));
+  if (!ticker) return c.json({ ok: false, reason: 'Invalid ticker' }, 400);
+  const lotId = c.req.param('id');
+  if (!lotId) return c.json({ ok: false, reason: 'Invalid position id' }, 400);
+
+  const existingLots = await getPositionLots(userId, ticker);
+  const remaining = existingLots.filter((l) => l.id !== lotId);
+  if (remaining.length === existingLots.length) return c.json({ ok: false, reason: 'Position not found' }, 404);
+
+  const negative = firstNegativeRow(computeLedger(remaining).rows);
+  if (negative) {
+    return c.json(
+      {
+        ok: false,
+        reason: `This deletion would cause an invalid number of shares to be sold on ${negative.lot.tradeDate}, please modify or remove that value first.`,
+      },
+      400,
+    );
+  }
+
+  const ok = await deleteLot(userId, ticker, lotId);
+  if (!ok) return c.json({ ok: false, reason: 'Could not delete position' }, 500);
+
+  return c.json({ ok: true, lots: remaining, ledgerRows: computeLedger(remaining).rows });
+});
+
+watchlistRoute.delete('/watchlist/:ticker/positions', requireAuth, async (c) => {
+  const userId = c.get('userId');
+  const ticker = parseTicker(c.req.param('ticker'));
+  if (!ticker) return c.json({ ok: false, reason: 'Invalid ticker' }, 400);
+
+  await clearLots(userId, ticker);
+  return c.json({ ok: true });
 });
 
 watchlistRoute.post('/watchlist/:ticker/refresh', requireAuth, async (c) => {

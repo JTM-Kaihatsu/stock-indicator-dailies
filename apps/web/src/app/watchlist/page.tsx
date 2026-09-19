@@ -10,12 +10,11 @@ import {
   removeTicker,
   reorderWatchlist,
   setNotificationPrefs,
-  updatePosition,
   updateWatchlistSettings,
 } from '@/lib/watchlistApi';
 import { DEFAULT_LIVE_SETTINGS, isDefault, type LiveSettings } from '@/lib/settings';
 import { LiveSettingsFields } from '@/components/SettingsFields';
-import type { WatchlistDashboardRow, WatchlistPosition } from '@/types/watchlist';
+import type { WatchlistDashboardRow } from '@/types/watchlist';
 
 const TICKER_PATTERN = /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/;
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
@@ -36,9 +35,6 @@ export default function ManageWatchlistPage() {
 
   const [editingTicker, setEditingTicker] = useState<string | null>(null);
   const [editSettings, setEditSettings] = useState<LiveSettings>(DEFAULT_LIVE_SETTINGS);
-  const [editEntryDate, setEditEntryDate] = useState('');
-  const [editShares, setEditShares] = useState('');
-  const [editEntryPrice, setEditEntryPrice] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [dragTicker, setDragTicker] = useState<string | null>(null);
@@ -102,7 +98,7 @@ export default function ManageWatchlistPage() {
         ...withoutDuplicate,
         {
           ticker, overall: null, computed: null, ai: null, asOf: null, status: 'running', lastChangedAt: null,
-          settings: settingsToSend ?? null, position: null, positionRisk: null, overallOverrideReason: null, unrealizedPnl: null,
+          settings: settingsToSend ?? null, heldShares: 0, sinceDate: null, positionRisk: null, overallOverrideReason: null, unrealizedPnl: null,
         },
       ];
     });
@@ -118,9 +114,6 @@ export default function ManageWatchlistPage() {
   function openEditor(row: WatchlistDashboardRow) {
     setEditingTicker(row.ticker);
     setEditSettings(resolvedSettings(row));
-    setEditEntryDate(row.position?.entryDate ?? '');
-    setEditShares(row.position?.shares?.toString() ?? '');
-    setEditEntryPrice(row.position?.entryPrice?.toString() ?? '');
   }
 
   function closeEditor() {
@@ -158,50 +151,17 @@ export default function ManageWatchlistPage() {
     });
   }
 
-  /** `undefined` means "leave the stored position alone" (all 3 fields
-   * blank); `'invalid'` means some but not all 3 fields are filled;
-   * otherwise a position to save or, with all 3 blank on a ticker that
-   * already had one, null to clear it. */
-  function parseEditPosition(): WatchlistPosition | null | undefined | 'invalid' {
-    const hasAny = editEntryDate.trim() !== '' || editShares.trim() !== '' || editEntryPrice.trim() !== '';
-    if (!hasAny) return undefined;
-    const sharesNum = Number(editShares);
-    const priceNum = Number(editEntryPrice);
-    if (!editEntryDate || !Number.isFinite(sharesNum) || sharesNum <= 0 || !Number.isFinite(priceNum) || priceNum <= 0) {
-      return 'invalid';
-    }
-    return { entryDate: editEntryDate, shares: sharesNum, entryPrice: priceNum };
-  }
-
   async function saveEditor(ticker: string) {
     if (!session) return;
-    const editingRow = (rows ?? []).find((r) => r.ticker === ticker);
-    const hadPosition = !!editingRow?.position;
-    const position = parseEditPosition() ?? (hadPosition ? null : undefined);
-    if (position === 'invalid') {
-      setError('Enter a valid entry date, a positive share count, and a positive entry price, or leave all three blank.');
-      return;
-    }
-
     setSaving(true);
     setError(null);
     const res = await updateWatchlistSettings(session.access_token, ticker, editSettings);
-    if (res.ok && position !== undefined) {
-      const posRes = await updatePosition(session.access_token, ticker, position);
-      if (!posRes.ok) {
-        setSaving(false);
-        setError(posRes.reason);
-        return;
-      }
-    }
     setSaving(false);
     if (!res.ok) {
       setError(res.reason);
       return;
     }
-    setRows((prev) =>
-      (prev ?? []).map((r) => (r.ticker === ticker ? { ...r, settings: editSettings, position: position === undefined ? r.position : position } : r)),
-    );
+    setRows((prev) => (prev ?? []).map((r) => (r.ticker === ticker ? { ...r, settings: editSettings } : r)));
     setEditingTicker(null);
   }
 
@@ -227,15 +187,16 @@ export default function ManageWatchlistPage() {
         ← Back
       </Link>
 
-      {rows && rows.some((r) => r.position) && (
+      {rows && rows.some((r) => r.heldShares > 0) && (
         <div className="settings-panel" style={{ marginBottom: 20 }}>
           <div className="section-label">Positions at risk</div>
           <div className="settings-group-hint" style={{ marginBottom: 12 }}>
-            Every ticker with a recorded position, sell points first.
+            Every ticker with shares currently held, sell points first. Manage individual buys/sells on each
+            ticker&apos;s own page.
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {rows
-              .filter((r): r is WatchlistDashboardRow & { position: WatchlistPosition } => !!r.position)
+              .filter((r) => r.heldShares > 0)
               .sort((a, b) => Number(b.positionRisk?.triggered ?? false) - Number(a.positionRisk?.triggered ?? false))
               .map((row) => (
                 <Link
@@ -250,7 +211,7 @@ export default function ManageWatchlistPage() {
                 >
                   <span style={{ fontWeight: 700, fontFamily: 'var(--mono)' }}>{row.ticker}</span>
                   <span className="fact">
-                    {row.position.shares} sh @ {usd(row.position.entryPrice)} since {row.position.entryDate}
+                    {row.heldShares} sh held{row.sinceDate ? ` since ${row.sinceDate}` : ''}
                   </span>
                   {row.unrealizedPnl && (
                     <span className="fact" style={{ color: row.unrealizedPnl.amount >= 0 ? 'var(--buy)' : 'var(--sell)' }}>
@@ -374,30 +335,7 @@ export default function ManageWatchlistPage() {
                               <LiveSettingsFields value={editSettings} onChange={setEditSettings} idPrefix={`edit-${row.ticker}-`} />
 
                               <div className="settings-group-hint" style={{ marginTop: 16, marginBottom: 4 }}>
-                                Your position (leave all three blank to clear it):
-                              </div>
-                              <div className="settings-group">
-                                <div className="settings-field">
-                                  <label htmlFor={`edit-${row.ticker}-entryDate`}>Entry date</label>
-                                  <input
-                                    id={`edit-${row.ticker}-entryDate`} type="date"
-                                    value={editEntryDate} onChange={(e) => setEditEntryDate(e.target.value)}
-                                  />
-                                </div>
-                                <div className="settings-field">
-                                  <label htmlFor={`edit-${row.ticker}-shares`}>Shares</label>
-                                  <input
-                                    id={`edit-${row.ticker}-shares`} type="number" min={0} step="any"
-                                    value={editShares} onChange={(e) => setEditShares(e.target.value)}
-                                  />
-                                </div>
-                                <div className="settings-field">
-                                  <label htmlFor={`edit-${row.ticker}-entryPrice`}>Entry price ($)</label>
-                                  <input
-                                    id={`edit-${row.ticker}-entryPrice`} type="number" min={0} step="any"
-                                    value={editEntryPrice} onChange={(e) => setEditEntryPrice(e.target.value)}
-                                  />
-                                </div>
+                                Manage this ticker&apos;s individual buy/sell positions on its own page.
                               </div>
 
                               <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
