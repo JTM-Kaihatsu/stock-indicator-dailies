@@ -36,8 +36,7 @@ export interface LiveSettings {
    * feature) actually computes its stop level from once set, whether set
    * manually here, via "Apply AI Suggestions as the Indicator Settings",
    * or via Historical Testing's "Apply to stock watchlist settings".
-   * `undefined` disables the ATR noise-reduction filter / position-risk
-   * override.
+   * `undefined` disables the ATR stop-loss / position-risk override.
    */
   atrMultiplier: number | undefined;
   atrPeriod: number;

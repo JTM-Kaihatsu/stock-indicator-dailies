@@ -65,7 +65,7 @@ export function LiveSettingsFields({
       </div>
       <div className="settings-field">
         <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-          <label htmlFor={`${idPrefix}atrEnabled`}>Enable ATR noise reduction</label>
+          <label htmlFor={`${idPrefix}atrEnabled`}>Enable ATR stop-loss</label>
           <InfoIcon text="Plain English: Tracks if the stock has fallen below the peak price for a period enough to warrant selling it. Once set, also defines this ticker's live position-risk sell point (see Manage Watchlist)." />
         </span>
         <input

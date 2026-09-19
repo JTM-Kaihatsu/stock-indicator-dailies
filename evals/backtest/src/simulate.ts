@@ -18,7 +18,9 @@ import { adx, atr } from './volatility.ts';
  *     chart say today" policy the app ships, not a reimplementation.
  *   - `applyStrategy` takes any raw signal sequence and simulates trading
  *     it, applying the execution-layer filters (persistence, minimum
- *     holding period, ATR noise reduction, ADX trend gate) before acting.
+ *     holding period, ADX trend gate) before acting, plus the independent
+ *     ATR stop-loss (see StrategyOptions.atrMultiplier), which isn't a
+ *     filter on the raw signal at all but its own unconditional trigger.
  *
  * `runBacktest` wires the two together for real use; tests exercise
  * `applyStrategy` directly with synthetic signal sequences.
@@ -59,9 +61,21 @@ export interface StrategyOptions {
    */
   minHoldingDays?: number;
   /**
-   * ATR noise-reduction filter: while holding, suppress a SELL unless price
-   * has fallen at least this many ATR multiples below the highest close
-   * seen since entry. `undefined` (default) disables the filter.
+   * ATR stop-loss: while holding, an independent price-only trigger that
+   * forces a SELL the moment price has fallen at least this many ATR
+   * multiples below the highest close seen since entry, regardless of what
+   * the raw deterministic signal says that bar (it can fire on a HOLD or
+   * even a BUY bar). Matches the live app's position-risk sell-point
+   * override (see apps/api/src/positionRisk.ts's `triggered`), which is
+   * likewise unconditional; bypasses `minHoldingDays`, `persistenceBars`,
+   * and `adxThreshold` for the same reason those don't apply to it live: a
+   * stop-loss's entire purpose is protecting against the indicators lagging
+   * a sharp move, so gating it behind the same filters that tune the
+   * indicators would defeat that purpose. A raw SELL signal is otherwise
+   * unaffected by this option; it always executes on its own (subject only
+   * to `minHoldingDays`/`persistenceBars`/`adxThreshold` as before) whether
+   * or not the ATR threshold has been cleared. `undefined` (default)
+   * disables the stop entirely.
    */
   atrMultiplier?: number;
   /** ATR lookback period. Default 14 (Wilder's original). */
@@ -145,6 +159,25 @@ export function applyStrategy(
 
     if (holding) peakSinceEntry = Math.max(peakSinceEntry, bar.close);
 
+    // ATR stop-loss: independent of the raw/filtered signal below, exactly
+    // like the live app's positionRisk override (see StrategyOptions'
+    // atrMultiplier doc comment). Checked, and can fire, before the normal
+    // action evaluation; bypasses minHoldingDays/persistenceBars/
+    // adxThreshold entirely.
+    if (holding && atrMultiplier !== undefined) {
+      // Yesterday's ATR, not today's; today's true range would include the
+      // very drop being evaluated, self-inflating the threshold on exactly
+      // the bar a real sharp move happens.
+      const atrVal = atrSeries![barIndex - 1]!;
+      if (!Number.isNaN(atrVal) && peakSinceEntry - bar.close >= atrMultiplier * atrVal) {
+        cash = shares * bar.close;
+        shares = 0;
+        holding = false;
+        trades.push({ type: 'SELL', date: bar.date, price: bar.close, portfolioValue: cash });
+        continue;
+      }
+    }
+
     let action: Signal = rawSignal;
     if (action !== 'HOLD' && adxThreshold !== undefined) {
       const adxVal = adxSeries![barIndex]!;
@@ -161,13 +194,6 @@ export function applyStrategy(
       trades.push({ type: 'BUY', date: bar.date, price: bar.close, portfolioValue: shares * bar.close });
     } else if (action === 'SELL' && holding) {
       if (barIndex - entryIndex < minHoldingDays) continue;
-      if (atrMultiplier !== undefined) {
-        // Yesterday's ATR, not today's; today's true range would include
-        // the very drop being evaluated, self-inflating the threshold on
-        // exactly the bar a real sharp move happens.
-        const atrVal = atrSeries![barIndex - 1]!;
-        if (Number.isNaN(atrVal) || peakSinceEntry - bar.close < atrMultiplier * atrVal) continue;
-      }
       cash = shares * bar.close;
       shares = 0;
       holding = false;
