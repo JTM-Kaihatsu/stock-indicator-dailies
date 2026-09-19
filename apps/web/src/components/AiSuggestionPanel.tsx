@@ -353,7 +353,7 @@ export function AiSuggestionPanel({
            * just the backtest-relevant fields Historical Testing's own
            * baseline/scenario diff covers) shows current → proposed
            * instead of a bare value. */}
-          <div className="compare-card" style={{ marginTop: 0 }}>
+          <div className="compare-card">
             {compareRows.map((row) => (
               <div className="compare-row" key={row.key}>
                 <span className="compare-label">{row.label}</span>

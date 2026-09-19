@@ -485,9 +485,11 @@ export function PositionPanel({
             <button type="button" className="settings-toggle" onClick={() => setHistoryOpen((v) => !v)}>
               {historyOpen ? '▾' : '▸'} Position history
             </button>
-            <button type="button" className="btn-sm" onClick={() => setShowClearConfirm(true)}>
-              Clear
-            </button>
+            {historyOpen && (
+              <button type="button" className="btn-sm" onClick={() => setShowClearConfirm(true)}>
+                <TrashIcon /> Clear
+              </button>
+            )}
           </div>
           {historyOpen && (
           <table className="trade-list">
