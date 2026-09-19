@@ -5,7 +5,8 @@ import type { DayRangeResponse, LedgerRow, PositionRisk, UnrealizedPnl } from '@
 import type { LotInput } from '@/lib/watchlistApi';
 
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
-const usd = (n: number) => `$${n.toFixed(2)}`;
+const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const int = (n: number) => n.toLocaleString('en-US');
 
 const CONTROL_KEYS = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', 'Escape'];
 
@@ -410,7 +411,7 @@ export function PositionPanel({
                 {usd(unrealizedAmount)} ({unrealizedPctDisplay})
               </div>
               <div style={{ marginTop: 4, fontSize: 'calc(11px * var(--type-scale))', fontWeight: 400, color: 'var(--faint)' }}>
-                Current shares held: {heldShares}
+                Current shares held: {int(heldShares)}
               </div>
             </div>
             <div className="backtest-stat">
@@ -496,6 +497,7 @@ export function PositionPanel({
             <thead>
               <tr>
                 <th>Entry or Sale Date</th>
+                <th>Action</th>
                 <th>Shares Added or Sold</th>
                 <th>Total Held Shares</th>
                 <th>Entry price</th>
@@ -508,7 +510,7 @@ export function PositionPanel({
               {ledgerRows.map((row) =>
                 editingLotId === row.lot.id ? (
                   <tr key={row.lot.id}>
-                    <td colSpan={7} style={{ padding: '8px 0' }}>
+                    <td colSpan={8} style={{ padding: '8px 0' }}>
                       <LotFields value={editLot} onChange={setEditLot} idPrefix={`posEdit${row.lot.id}`} onFetchDayRange={onFetchDayRange} />
                       {editError && (
                         <div className="error-card" style={{ marginTop: 4 }}>
@@ -531,11 +533,12 @@ export function PositionPanel({
                 ) : (
                   <tr key={row.lot.id}>
                     <td className="tabular">{row.lot.tradeDate}</td>
+                    <td className="tabular">{row.lot.action === 'buy' ? 'Buy' : 'Sell'}</td>
                     <td className="tabular">
                       {row.lot.action === 'buy' ? '+' : '-'}
-                      {row.lot.shares}
+                      {int(row.lot.shares)}
                     </td>
-                    <td className="tabular">{row.totalHeldShares}</td>
+                    <td className="tabular">{int(row.totalHeldShares)}</td>
                     <td className="tabular">{usd(row.lot.price)}</td>
                     <td className={`tabular ${row.realizedGain !== null ? `ledger-gain ${row.realizedGain >= 0 ? 'pos' : 'neg'}` : ''}`}>
                       {row.realizedGain !== null ? `${row.realizedGain >= 0 ? '+' : ''}${usd(row.realizedGain)}` : 'N/A'}
