@@ -32,6 +32,11 @@ export interface LedgerRow {
   /** null for a buy row (a buy never itself realizes anything). */
   realizedGain: number | null;
   realizedGainPct: number | null;
+  /** The $ cost basis of the shares consumed by this sell (null for a buy
+   * row); exposed so callers can compute a correctly weighted aggregate
+   * realized % across every sell (summing cost basis, not averaging
+   * per-row percentages, which would misweight sells of different sizes). */
+  costBasis: number | null;
 }
 
 export interface Ledger {
@@ -65,7 +70,7 @@ export function computeLedger(lots: readonly PositionLot[]): Ledger {
     if (lot.action === 'buy') {
       queue.push({ tradeDate: lot.tradeDate, shares: lot.shares, price: lot.price });
       totalHeldShares += lot.shares;
-      rows.push({ lot, totalHeldShares, realizedGain: null, realizedGainPct: null });
+      rows.push({ lot, totalHeldShares, realizedGain: null, realizedGainPct: null, costBasis: null });
       continue;
     }
 
@@ -84,7 +89,7 @@ export function computeLedger(lots: readonly PositionLot[]): Ledger {
     totalHeldShares -= lot.shares;
     const realizedGain = proceeds - costBasis;
     const realizedGainPct = costBasis > 0 ? (realizedGain / costBasis) * 100 : null;
-    rows.push({ lot, totalHeldShares, realizedGain, realizedGainPct });
+    rows.push({ lot, totalHeldShares, realizedGain, realizedGainPct, costBasis });
   }
 
   return { rows, openLots: queue };
@@ -160,6 +165,11 @@ export async function computePositionRisk(
 export interface UnrealizedPnl {
   amount: number;
   pct: number;
+  /** Total $ cost basis of currently open lots; exposed (alongside
+   * LedgerRow.costBasis) so callers can combine unrealized and realized
+   * cost bases into a single correctly weighted "Total Value" percentage
+   * instead of averaging two already-weighted percentages together. */
+  costBasis: number;
 }
 
 /** Unrealized P&L across whatever's currently held (the FIFO queue's
@@ -171,5 +181,5 @@ export function computeUnrealizedPnl(openLots: readonly OpenLot[], currentPrice:
   const costBasis = openLots.reduce((sum, lot) => sum + lot.price * lot.shares, 0);
   const amount = openLots.reduce((sum, lot) => sum + (currentPrice - lot.price) * lot.shares, 0);
   const pct = costBasis > 0 ? (amount / costBasis) * 100 : 0;
-  return { amount, pct };
+  return { amount, pct, costBasis };
 }

@@ -293,6 +293,8 @@ export function PositionPanel({
   const [clearing, setClearing] = useState(false);
   const [clearError, setClearError] = useState<string | null>(null);
 
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   function openAddForm() {
     setNewLot(EMPTY_FORM);
     setAddError(null);
@@ -367,7 +369,25 @@ export function PositionPanel({
     setShowClearConfirm(false);
   }
 
-  const hasHolding = ledgerRows.length > 0 && ledgerRows[ledgerRows.length - 1]!.totalHeldShares > 0;
+  const heldShares = ledgerRows.length > 0 ? ledgerRows[ledgerRows.length - 1]!.totalHeldShares : 0;
+  const hasHolding = heldShares > 0;
+
+  // Realized gain/loss, summed across every sell (weighted by each sell's
+  // own cost basis, not an average of per-row percentages, which would
+  // misweight sells of different sizes).
+  const hasRealized = ledgerRows.some((row) => row.realizedGain !== null);
+  const totalRealizedGain = ledgerRows.reduce((sum, row) => sum + (row.realizedGain ?? 0), 0);
+  const totalRealizedCostBasis = ledgerRows.reduce((sum, row) => sum + (row.costBasis ?? 0), 0);
+  const realizedPctDisplay = hasRealized && totalRealizedCostBasis > 0 ? pct((totalRealizedGain / totalRealizedCostBasis) * 100) : 'N/A';
+
+  // Total Value = Unrealized gain/loss + Realized gain/loss: the combined
+  // profit/loss this position has produced across its whole lifetime, not
+  // just what's currently held.
+  const unrealizedAmount = unrealizedPnl?.amount ?? 0;
+  const unrealizedPctDisplay = unrealizedPnl ? pct(unrealizedPnl.pct) : 'N/A';
+  const totalValueAmount = unrealizedAmount + totalRealizedGain;
+  const totalCostBasisAll = (unrealizedPnl?.costBasis ?? 0) + totalRealizedCostBasis;
+  const totalValuePctDisplay = totalCostBasisAll > 0 ? pct((totalValueAmount / totalCostBasisAll) * 100) : 'N/A';
 
   return (
     <section className="settings-panel" style={{ marginTop: 20 }}>
@@ -380,20 +400,35 @@ export function PositionPanel({
         </div>
       )}
 
-      {hasHolding && (
+      {ledgerRows.length > 0 && (
         <div style={{ marginBottom: 12 }}>
-          {unrealizedPnl && (
-            <div className="backtest-stats" style={{ marginBottom: 8 }}>
-              <div className="backtest-stat">
-                <div className="backtest-stat-label">Unrealized gain/loss</div>
-                <div className={`backtest-stat-value ${unrealizedPnl.amount >= 0 ? 'pos' : 'neg'}`}>
-                  {unrealizedPnl.amount >= 0 ? '+' : ''}
-                  {usd(unrealizedPnl.amount)} ({pct(unrealizedPnl.pct)})
-                </div>
+          <div className="backtest-stats" style={{ marginBottom: 8 }}>
+            <div className="backtest-stat">
+              <div className="backtest-stat-label">Unrealized gain/loss</div>
+              <div className={`backtest-stat-value ${unrealizedAmount >= 0 ? 'pos' : 'neg'}`}>
+                {unrealizedAmount >= 0 ? '+' : ''}
+                {usd(unrealizedAmount)} ({unrealizedPctDisplay})
+              </div>
+              <div style={{ marginTop: 4, fontSize: 11, fontWeight: 400, color: 'var(--faint)' }}>
+                Current shares held: {heldShares}
               </div>
             </div>
-          )}
-          {positionRisk ? (
+            <div className="backtest-stat">
+              <div className="backtest-stat-label">Realized gain/loss</div>
+              <div className={`backtest-stat-value ${totalRealizedGain >= 0 ? 'pos' : 'neg'}`}>
+                {totalRealizedGain >= 0 ? '+' : ''}
+                {usd(totalRealizedGain)} ({realizedPctDisplay})
+              </div>
+            </div>
+            <div className="backtest-stat">
+              <div className="backtest-stat-label">Total Value</div>
+              <div className={`backtest-stat-value ${totalValueAmount >= 0 ? 'pos' : 'neg'}`}>
+                {totalValueAmount >= 0 ? '+' : ''}
+                {usd(totalValueAmount)} ({totalValuePctDisplay})
+              </div>
+            </div>
+          </div>
+          {!hasHolding ? null : positionRisk ? (
             <div
               style={{
                 padding: '8px 12px',
@@ -447,11 +482,14 @@ export function PositionPanel({
       {ledgerRows.length > 0 && (
         <div style={{ marginTop: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div className="settings-group-title">Position history</div>
+            <button type="button" className="settings-toggle" onClick={() => setHistoryOpen((v) => !v)}>
+              {historyOpen ? '▾' : '▸'} Position history
+            </button>
             <button type="button" className="btn-sm" onClick={() => setShowClearConfirm(true)}>
               Clear
             </button>
           </div>
+          {historyOpen && (
           <table className="trade-list">
             <thead>
               <tr>
@@ -513,6 +551,7 @@ export function PositionPanel({
               )}
             </tbody>
           </table>
+          )}
         </div>
       )}
 
