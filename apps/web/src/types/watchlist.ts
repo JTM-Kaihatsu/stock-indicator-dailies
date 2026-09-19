@@ -23,13 +23,17 @@ export interface PositionLot {
 }
 
 /** One row of the position ledger table: a lot plus the running totals
- * immediately after it, in trade order. realizedGain/Pct are null for a
- * buy row (a buy never itself realizes anything). */
+ * immediately after it, in trade order. realizedGain/Pct/costBasis are
+ * null for a buy row (a buy never itself realizes anything). */
 export interface LedgerRow {
   lot: PositionLot;
   totalHeldShares: number;
   realizedGain: number | null;
   realizedGainPct: number | null;
+  /** $ cost basis of the shares this sell consumed; lets the panel sum a
+   * correctly weighted realized % across every sell instead of averaging
+   * already-weighted per-row percentages. */
+  costBasis: number | null;
 }
 
 /** Only present when both a position and ATR settings (Indicator
@@ -47,6 +51,9 @@ export interface PositionRisk {
 export interface UnrealizedPnl {
   amount: number;
   pct: number;
+  /** $ cost basis of currently open lots; combines with LedgerRow.costBasis
+   * to compute a correctly weighted "Total Value" percentage. */
+  costBasis: number;
 }
 
 export interface WatchlistDashboardRow {

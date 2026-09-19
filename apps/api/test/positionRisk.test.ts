@@ -15,6 +15,7 @@ test('a single buy: held shares accumulate, nothing realized', () => {
   assert.equal(rows[0]!.totalHeldShares, 10);
   assert.equal(rows[0]!.realizedGain, null);
   assert.equal(rows[0]!.realizedGainPct, null);
+  assert.equal(rows[0]!.costBasis, null);
   assert.deepEqual(openLots, [{ tradeDate: '2026-01-01', shares: 10, price: 100 }]);
 });
 
@@ -27,6 +28,7 @@ test('a full sell at a higher price realizes a gain against its cost basis', () 
   assert.equal(sellRow.totalHeldShares, 0);
   assert.equal(sellRow.realizedGain, 500); // (150-100)*10
   assert.equal(sellRow.realizedGainPct, 50); // 500 / 1000 * 100
+  assert.equal(sellRow.costBasis, 1000); // 10 * 100
   assert.deepEqual(openLots, []);
 });
 
@@ -49,6 +51,7 @@ test('FIFO: a sell spanning two buy lots at different prices sums cost basis and
   // (cost 600) = 1600 cost basis; proceeds = 15 * 150 = 2250.
   const sellRow = rows[2]!;
   assert.equal(sellRow.realizedGain, 2250 - 1600);
+  assert.equal(sellRow.costBasis, 1600);
   assert.equal(sellRow.totalHeldShares, 5); // 20 bought - 15 sold
   // The remaining open lot is the back half of the second buy, at its own price.
   assert.deepEqual(openLots, [{ tradeDate: '2026-01-15', shares: 5, price: 120 }]);
@@ -97,6 +100,7 @@ test('computeUnrealizedPnl values every open lot at its own cost basis', () => {
   // cost basis = 1000 + 600 = 1600; pct = 350/1600*100
   assert.equal(result?.amount, 350);
   assert.equal(result?.pct, (350 / 1600) * 100);
+  assert.equal(result?.costBasis, 1600);
 });
 
 test('computeUnrealizedPnl is null when nothing is currently held', () => {
