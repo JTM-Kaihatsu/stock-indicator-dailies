@@ -60,12 +60,33 @@ export interface GeminiLike {
   };
 }
 
+/** Gemini's grounding chunks give a Google-hosted redirect link
+ * (`vertexaisearch.cloud.google.com/grounding-api-redirect/...`), not the
+ * source page's own URL; it resolves to the real page when followed, but
+ * isn't itself something a user would want to see or copy. Follows the
+ * redirect chain and returns the final destination URL, falling back to
+ * the original redirect link on any failure (timeout, a site that blocks
+ * HEAD, network hiccup) so a resolution failure never breaks the citation,
+ * just leaves it pointing at the (still-working) redirect. */
+async function resolveSourceUrl(url: string, resolveFetch: typeof fetch): Promise<string> {
+  try {
+    const res = await resolveFetch(url, { method: 'HEAD', redirect: 'follow', signal: AbortSignal.timeout(5000) });
+    return res.url || url;
+  } catch {
+    return url;
+  }
+}
+
 /** Turns Gemini's grounding metadata (which segments of its response text
- * were backed by which web sources) into our own ResearchQuote shape.
- * Drops a support with no text, no attributed chunks, or chunks with no
- * usable URI; best-effort, since a quote we can't fully resolve is useless
- * for display anyway. */
-function extractCitations(response: GeminiResponse): ResearchQuote[] {
+ * were backed by which web sources) into our own ResearchQuote shape, with
+ * every source's URL resolved to its real destination (see
+ * resolveSourceUrl). Drops a support with no text, no attributed chunks, or
+ * chunks with no usable URI; best-effort, since a quote we can't fully
+ * resolve is useless for display anyway. Resolves each distinct redirect
+ * URL only once (the same source is often cited by several quotes) and in
+ * parallel, so this adds at most one round trip's worth of latency, not
+ * one per citation. */
+async function extractCitations(response: GeminiResponse, resolveFetch: typeof fetch): Promise<ResearchQuote[]> {
   const metadata = response.candidates?.[0]?.groundingMetadata;
   const chunks = metadata?.groundingChunks ?? [];
   const supports = metadata?.groundingSupports ?? [];
@@ -81,6 +102,20 @@ function extractCitations(response: GeminiResponse): ResearchQuote[] {
     if (sources.length === 0) continue;
     citations.push({ quote, sources });
   }
+
+  const uniqueUrls = new Set<string>();
+  for (const citation of citations) {
+    for (const source of citation.sources) uniqueUrls.add(source.url);
+  }
+  const resolved = new Map<string, string>(
+    await Promise.all(
+      Array.from(uniqueUrls, async (url): Promise<[string, string]> => [url, await resolveSourceUrl(url, resolveFetch)]),
+    ),
+  );
+  for (const citation of citations) {
+    for (const source of citation.sources) source.url = resolved.get(source.url) ?? source.url;
+  }
+
   return citations;
 }
 
@@ -94,6 +129,10 @@ export interface ResearchOptions {
   maxOutputTokens?: number;
   timeoutMs?: number;
   client?: GeminiLike;
+  /** Defaults to the global `fetch`; injectable so tests can verify
+   * citation-URL resolution (see resolveSourceUrl) without making real
+   * network calls, same testability pattern as `client` above. */
+  resolveFetch?: typeof fetch;
 }
 
 /** scoreForRiskTolerance stays on Claude: a single forced tool call, no
@@ -296,7 +335,7 @@ export async function researchCompany(ticker: string, options: ResearchOptions =
     if (research.length === 0) {
       throw new Error('Gemini research call returned no usable text');
     }
-    return { research, citations: extractCitations(response) };
+    return { research, citations: await extractCitations(response, options.resolveFetch ?? fetch) };
   })();
 
   return withWallClock(work, timeoutMs);
