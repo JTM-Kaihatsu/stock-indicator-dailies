@@ -237,7 +237,7 @@ export function AiSuggestionPanel({
       </div>
       <div role="radiogroup" aria-label="Risk tolerance" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12 }}>
         {RISK_TOLERANCE_OPTIONS.map((opt) => (
-          <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }} title={opt.hint}>
+          <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'calc(13px * var(--type-scale))', cursor: 'pointer' }} title={opt.hint}>
             <input
               type="radio"
               name={`riskTolerance-${ticker}`}
@@ -299,7 +299,7 @@ export function AiSuggestionPanel({
                 borderRadius: 8,
                 padding: '8px 12px',
                 marginBottom: 12,
-                fontSize: 13,
+                fontSize: 'calc(13px * var(--type-scale))',
               }}
             >
               <b>{fitStyle.label}</b>
@@ -326,7 +326,7 @@ export function AiSuggestionPanel({
                 borderRadius: 8,
                 padding: '8px 12px',
                 marginTop: 12,
-                fontSize: 13,
+                fontSize: 'calc(13px * var(--type-scale))',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>

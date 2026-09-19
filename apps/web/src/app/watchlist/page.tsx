@@ -261,7 +261,7 @@ export default function ManageWatchlistPage() {
           <input
             type="text"
             className="ticker-input"
-            style={{ fontSize: 18, width: 140 }}
+            style={{ fontSize: 'calc(18px * var(--type-scale))', width: 140 }}
             placeholder="NVDA"
             value={newTicker}
             onChange={(e) => setNewTicker(e.target.value)}

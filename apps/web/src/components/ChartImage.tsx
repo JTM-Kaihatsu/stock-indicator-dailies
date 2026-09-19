@@ -4,7 +4,7 @@ export function ChartImage({ image, ticker }: { image: ChartImageType; ticker: s
   return (
     <section>
       <div className="section-label">Source chart</div>
-      <div style={{ color: 'var(--faint)', fontSize: 12, marginTop: 4, marginBottom: 12 }}>
+      <div style={{ color: 'var(--faint)', fontSize: 'calc(12px * var(--type-scale))', marginTop: 4, marginBottom: 12 }}>
         The charts displayed are in the following order: SMA (10-day), MACD (8, 17, 9), and Slow
         Stochastic (14, 5, 3).
       </div>
@@ -14,7 +14,7 @@ export function ChartImage({ image, ticker }: { image: ChartImageType; ticker: s
           alt={`${ticker} daily chart`}
           src={`data:${image.mediaType};base64,${image.base64}`}
         />
-        <figcaption style={{ color: 'var(--faint)', fontSize: 12, marginTop: 8 }}>
+        <figcaption style={{ color: 'var(--faint)', fontSize: 'calc(12px * var(--type-scale))', marginTop: 8 }}>
           Captured from TradingView, cropped to the chart region. Verify the reads against it.
         </figcaption>
       </figure>

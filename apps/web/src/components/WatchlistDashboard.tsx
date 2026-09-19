@@ -70,7 +70,7 @@ export function WatchlistDashboard({ accessToken }: { accessToken: string }) {
             <tbody>
               {rows.map((row) => (
                 <tr key={row.ticker}>
-                  <td className="tabular" style={{ fontWeight: 700, fontSize: 15 }}>
+                  <td className="tabular" style={{ fontWeight: 700, fontSize: 'calc(15px * var(--type-scale))' }}>
                     <Link href={`/watchlist/${row.ticker}`} style={{ color: 'inherit', textDecoration: 'none' }}>
                       {row.ticker}
                     </Link>
