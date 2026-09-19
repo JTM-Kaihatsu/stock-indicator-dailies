@@ -409,7 +409,7 @@ export function PositionPanel({
                 {unrealizedAmount >= 0 ? '+' : ''}
                 {usd(unrealizedAmount)} ({unrealizedPctDisplay})
               </div>
-              <div style={{ marginTop: 4, fontSize: 11, fontWeight: 400, color: 'var(--faint)' }}>
+              <div style={{ marginTop: 4, fontSize: 'calc(11px * var(--type-scale))', fontWeight: 400, color: 'var(--faint)' }}>
                 Current shares held: {heldShares}
               </div>
             </div>
@@ -433,7 +433,7 @@ export function PositionPanel({
               style={{
                 padding: '8px 12px',
                 borderRadius: 8,
-                fontSize: 13,
+                fontSize: 'calc(13px * var(--type-scale))',
                 background: positionRisk.triggered ? 'var(--sell-bg)' : 'var(--buy-bg)',
                 color: positionRisk.triggered ? 'var(--sell)' : 'var(--buy)',
                 border: `1px solid ${positionRisk.triggered ? 'var(--sell)' : 'var(--buy)'}`,
@@ -560,7 +560,7 @@ export function PositionPanel({
       {showClearConfirm && (
         <div className="modal-backdrop" onClick={() => !clearing && setShowClearConfirm(false)}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <div className="section-label" style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="section-label" style={{ fontSize: 'calc(16px * var(--type-scale))', display: 'flex', alignItems: 'center', gap: 8 }}>
               <TrashIcon /> Clear all positions?
             </div>
             <p>

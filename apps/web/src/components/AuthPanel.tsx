@@ -120,7 +120,7 @@ export function AuthPanel() {
                     <input
                       type="email"
                       className="ticker-input"
-                      style={{ fontSize: 14, fontWeight: 400, textTransform: 'none', width: '100%', padding: '8px 12px' }}
+                      style={{ fontSize: 'calc(14px * var(--type-scale))', fontWeight: 400, textTransform: 'none', width: '100%', padding: '8px 12px' }}
                       placeholder="you@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}

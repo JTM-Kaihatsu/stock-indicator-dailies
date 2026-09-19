@@ -81,8 +81,8 @@ export function ReportCard({
       <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
         <div>
           <div className="eyebrow">{report.companyName ?? ticker}</div>
-          <h1 style={{ fontFamily: 'var(--mono)', fontSize: 40, fontWeight: 600, letterSpacing: '-.01em', margin: '2px 0 0' }}>{ticker}</h1>
-          <div className="tabular" style={{ color: 'var(--muted)', fontSize: 13 }}>
+          <h1 style={{ fontFamily: 'var(--mono)', fontSize: 'calc(40px * var(--type-scale))', fontWeight: 600, letterSpacing: '-.01em', margin: '2px 0 0' }}>{ticker}</h1>
+          <div className="tabular" style={{ color: 'var(--muted)', fontSize: 'calc(13px * var(--type-scale))' }}>
             daily bars · as of {deterministic?.asOf ?? 'N/A'}
           </div>
           {onAddToWatchlist && (
@@ -104,11 +104,11 @@ export function ReportCard({
           )}
         </div>
         <div style={{ textAlign: 'right' }}>
-          <span style={{ display: 'block', textTransform: 'uppercase', letterSpacing: '.1em', fontSize: 10, color: 'var(--faint)', marginBottom: 6 }}>
+          <span style={{ display: 'block', textTransform: 'uppercase', letterSpacing: '.1em', fontSize: 'calc(10px * var(--type-scale))', color: 'var(--faint)', marginBottom: 6 }}>
             Overall
           </span>
           <SignalPill signal={overallSignal} />
-          <div style={{ marginTop: 10, display: 'flex', gap: 14, justifyContent: 'flex-end', fontSize: 12, color: 'var(--muted)' }}>
+          <div style={{ marginTop: 10, display: 'flex', gap: 14, justifyContent: 'flex-end', fontSize: 'calc(12px * var(--type-scale))', color: 'var(--muted)' }}>
             <span>
               Computed:{' '}
               {detSignal ? (
@@ -122,7 +122,7 @@ export function ReportCard({
             </span>
           </div>
           {overallOverride && overallOverrideReason && (
-            <div style={{ marginTop: 8, maxWidth: 260, fontSize: 12, color: 'var(--sell)', textAlign: 'right' }}>
+            <div style={{ marginTop: 8, maxWidth: 260, fontSize: 'calc(12px * var(--type-scale))', color: 'var(--sell)', textAlign: 'right' }}>
               {overallOverrideReason}
             </div>
           )}
@@ -166,7 +166,7 @@ export function ReportCard({
           <span className="badge">AI read · <b>claude-sonnet-5</b></span>
           <span className="badge">Chart · <b>TradingView</b></span>
         </div>
-        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--faint)' }}>
+        <div style={{ marginTop: 8, fontSize: 'calc(12px * var(--type-scale))', color: 'var(--faint)' }}>
           Pipeline: {(timings.totalMs / 1000).toFixed(1)}s
           (capture {(timings.captureMs / 1000).toFixed(1)}s
           · analyze {(timings.analyzeMs / 1000).toFixed(1)}s

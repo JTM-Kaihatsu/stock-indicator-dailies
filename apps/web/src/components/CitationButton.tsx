@@ -44,7 +44,7 @@ export function CitationButton({ citations }: { citations: FieldClaim[] }) {
         className="info-icon"
         style={{
           cursor: 'pointer', background: 'transparent', padding: 0,
-          fontFamily: 'var(--mono)', fontSize: 10, fontStyle: 'italic', lineHeight: 1,
+          fontFamily: 'var(--mono)', fontSize: 'calc(10px * var(--type-scale))', fontStyle: 'italic', lineHeight: 1,
         }}
       >
         i
@@ -81,7 +81,7 @@ export function CitationButton({ citations }: { citations: FieldClaim[] }) {
             </div>
             {citations.map((fc, i) => (
               <div key={i} style={{ marginBottom: i < citations.length - 1 ? 18 : 0 }}>
-                <div style={{ color: 'var(--text)', fontWeight: 700, fontSize: 13.5 }}>{fc.claim}</div>
+                <div style={{ color: 'var(--text)', fontWeight: 700, fontSize: 'calc(13.5px * var(--type-scale))' }}>{fc.claim}</div>
                 {fc.quotes.length > 0 && (
                   <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {fc.quotes.map((q, j) => (
@@ -89,7 +89,7 @@ export function CitationButton({ citations }: { citations: FieldClaim[] }) {
                         key={j}
                         style={{
                           borderLeft: '2px solid var(--border)', paddingLeft: 10,
-                          fontSize: 12.5,
+                          fontSize: 'calc(12.5px * var(--type-scale))',
                         }}
                       >
                         <div style={{ color: 'var(--muted)', fontStyle: 'italic' }}>&ldquo;{q.quote}&rdquo;</div>
