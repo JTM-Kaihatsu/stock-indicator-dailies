@@ -417,6 +417,13 @@ test('falls back to a hostname-derived siteName when the scrape fails entirely',
   assert.equal(result.citations[0]!.sources[0]!.siteName, 'Reuters');
 });
 
+test('hostname-derived siteName uses the brand label, not a leading subdomain like "global"', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch({ 'https://redirect/1': 'https://global.morningstar.com/en-gb/stocks/nvidia' });
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sources[0]!.siteName, 'Morningstar');
+});
+
 test('omits articleTitle when neither og:title nor a <title> tag is present', async () => {
   const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
   const { fetchFn } = fakeResolveFetch(

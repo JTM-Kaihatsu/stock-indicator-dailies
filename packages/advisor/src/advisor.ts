@@ -105,14 +105,18 @@ function extractArticleTitle(html: string): string | undefined {
 }
 
 /** Pure fallback (no network) for when a page doesn't set og:site_name, or
- * the scrape fails entirely: strips a leading www., takes the label before
- * the first remaining dot, and capitalizes it (e.g. reuters.com ->
- * Reuters). Used so every freshly-generated source always carries a
+ * the scrape fails entirely: strips a leading www., then takes the
+ * second-to-last label when there's more than one remaining (the
+ * registrable/brand name, e.g. "morningstar" out of
+ * "global.morningstar.com", not the "global" subdomain), or the only
+ * remaining label otherwise (e.g. "reuters" out of "reuters.com").
+ * Capitalized. Used so every freshly-generated source always carries a
  * displayable site name, independent of scrape success. */
 function prettifyHostname(url: string): string | undefined {
   try {
-    const host = new URL(url).hostname.replace(/^www\./, '');
-    const label = host.split('.')[0] || host;
+    const labels = new URL(url).hostname.split('.');
+    const relevant = labels[0] === 'www' ? labels.slice(1) : labels;
+    const label = (relevant.length > 2 ? relevant[relevant.length - 2] : relevant[0]) || relevant[0];
     return label ? label.charAt(0).toUpperCase() + label.slice(1) : undefined;
   } catch {
     return undefined;

@@ -6,12 +6,15 @@ import type { FieldClaim, ResearchQuote } from '@/types/advisor';
 /** Pure fallback (no network) for an older cached source that predates
  * server-side site-name scraping, mirroring the backend's
  * prettifyHostname (packages/advisor/src/advisor.ts): strips a leading
- * www., takes the label before the first remaining dot, capitalizes it. */
+ * www., then takes the second-to-last label when there's more than one
+ * remaining (e.g. "morningstar" out of "global.morningstar.com", not the
+ * "global" subdomain), or the only remaining label otherwise. */
 function prettifySiteName(url: string): string {
   try {
-    const host = new URL(url).hostname.replace(/^www\./, '');
-    const label = host.split('.')[0] || host;
-    return label.charAt(0).toUpperCase() + label.slice(1);
+    const labels = new URL(url).hostname.split('.');
+    const relevant = labels[0] === 'www' ? labels.slice(1) : labels;
+    const label = (relevant.length > 2 ? relevant[relevant.length - 2] : relevant[0]) || relevant[0];
+    return label ? label.charAt(0).toUpperCase() + label.slice(1) : url;
   } catch {
     return url;
   }
