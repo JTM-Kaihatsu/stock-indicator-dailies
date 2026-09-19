@@ -122,33 +122,77 @@ test('a SELL after the minimum holding period executes normally', () => {
   assert.equal(result.trades[1]!.type, 'SELL');
 });
 
-// --- ATR noise-reduction filter ---
+// --- ATR stop-loss: an independent trigger, not a filter on the raw signal ---
 
-test('a SELL is suppressed while the drop from the post-entry peak stays under the ATR multiple', () => {
-  // Small daily ranges -> small ATR. Price dips only slightly off the peak.
+test('a raw SELL signal executes normally even when barely off the peak (ATR no longer gates it)', () => {
+  // Small daily ranges -> small ATR. Price dips only slightly off the peak,
+  // well under the 5x ATR stop-loss threshold, but the raw signal itself
+  // says SELL, and that's no longer suppressed by the ATR option at all.
   const bars = [
     bar('d0', 99, { high: 100, low: 98 }),
     bar('d1', 100, { high: 101, low: 99 }), // BUY here
     bar('d2', 102, { high: 103, low: 101 }), // new peak
-    bar('d3', 101, { high: 102, low: 100 }), // SELL signal, but only $1 off the peak
+    bar('d3', 101, { high: 102, low: 100 }), // SELL signal, only $1 off the peak
   ];
   const signals: Signal[] = ['BUY', 'HOLD', 'SELL'];
   const result = applyStrategy('T', bars, signals, { atrMultiplier: 5, atrPeriod: 1 });
-  assert.equal(result.trades.length, 1, 'the shallow pullback is noise relative to a 5x ATR requirement');
+  assert.equal(result.trades.length, 2, 'the SELL signal executes on its own; ATR is not a gate on it');
+  assert.equal(result.trades[1]!.price, 101);
+  assert.equal(result.stillHolding, false);
+});
+
+test('the ATR stop-loss does not fire on a shallow pullback while the raw signal is HOLD', () => {
+  const bars = [
+    bar('d0', 99, { high: 100, low: 98 }),
+    bar('d1', 100, { high: 101, low: 99 }), // BUY here
+    bar('d2', 102, { high: 103, low: 101 }), // new peak
+    bar('d3', 101, { high: 102, low: 100 }), // HOLD, only $1 off the peak
+  ];
+  const signals: Signal[] = ['BUY', 'HOLD', 'HOLD'];
+  const result = applyStrategy('T', bars, signals, { atrMultiplier: 5, atrPeriod: 1 });
+  assert.equal(result.trades.length, 1, 'the shallow pullback stays under a 5x ATR stop, so nothing sells');
   assert.equal(result.stillHolding, true);
 });
 
-test('a SELL executes once the drop from peak clears the ATR multiple', () => {
+test('the ATR stop-loss fires on its own once the drop from peak clears the multiple, even on a HOLD bar', () => {
   const bars = [
     bar('d0', 99, { high: 100, low: 98 }),
     bar('d1', 100, { high: 101, low: 99 }), // BUY here, ATR ~= 1
     bar('d2', 102, { high: 103, low: 101 }), // new peak
     bar('d3', 80, { high: 83, low: 79 }), // sharp drop, well past 5x ATR
   ];
-  const signals: Signal[] = ['BUY', 'HOLD', 'SELL'];
+  const signals: Signal[] = ['BUY', 'HOLD', 'HOLD']; // raw signal never says SELL
   const result = applyStrategy('T', bars, signals, { atrMultiplier: 5, atrPeriod: 1 });
-  assert.equal(result.trades.length, 2);
+  assert.equal(result.trades.length, 2, 'the stop-loss forces a sell independent of the raw signal');
   assert.equal(result.trades[1]!.type, 'SELL');
+  assert.equal(result.trades[1]!.price, 80);
+  assert.equal(result.stillHolding, false);
+});
+
+test('the ATR stop-loss bypasses minHoldingDays', () => {
+  const bars = [
+    bar('d0', 99, { high: 100, low: 98 }),
+    bar('d1', 100, { high: 101, low: 99 }), // BUY here
+    bar('d2', 80, { high: 83, low: 79 }), // sharp drop 1 bar later, well past 5x ATR
+  ];
+  const signals: Signal[] = ['BUY', 'HOLD'];
+  const result = applyStrategy('T', bars, signals, { atrMultiplier: 5, atrPeriod: 1, minHoldingDays: 30 });
+  assert.equal(result.trades.length, 2, 'the stop-loss overrides the minimum holding period, matching the live override');
+  assert.equal(result.stillHolding, false);
+});
+
+test('the ATR stop-loss bypasses the ADX trend-strength gate', () => {
+  // Reuses the same steady-uptrend shape as the ADX-gate tests below, so
+  // ADX is genuinely warmed up (non-NaN, real trend strength) by the BUY
+  // bar and the gate has something real to allow through; a crash bar is
+  // appended after several more up-days to trigger the stop while holding.
+  const upBars = Array.from({ length: 40 }, (_, i) => bar(`d${i}`, 100 + i, { high: 100.5 + i, low: 99.5 + i }));
+  const bars = [...upBars, bar('d40', 60, { high: 63, low: 57 })]; // sharp drop, well past 5x ATR
+  const signals: Signal[] = Array.from({ length: 40 }, (_, i) => (i === 35 ? 'BUY' : 'HOLD')); // BUY at bars[36], well past ADX warmup
+  const result = applyStrategy('T', bars, signals, { atrMultiplier: 5, atrPeriod: 1, adxThreshold: 15 });
+  assert.equal(result.trades.length, 2, 'the stop-loss fires on the crash bar despite adxThreshold being active and the raw signal never saying SELL');
+  assert.equal(result.trades[1]!.type, 'SELL');
+  assert.equal(result.stillHolding, false);
 });
 
 // --- ADX trend-strength gate ---

@@ -37,7 +37,7 @@ export interface LedgerRow {
 }
 
 /** Only present when both a position and ATR settings (Indicator
- * Settings' "Enable ATR noise reduction") are set for this ticker. */
+ * Settings' "Enable ATR stop-loss") are set for this ticker. */
 export interface PositionRisk {
   currentPrice: number;
   peakSinceEntry: number;

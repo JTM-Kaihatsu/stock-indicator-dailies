@@ -258,7 +258,7 @@ export interface LotActionResult {
 
 /** A watchlisted ticker's real position, now a full buy/sell ledger: record
  * any number of lots over time, see FIFO-accounted realized gains per sale
- * plus running held shares, and (once ATR noise reduction is enabled in
+ * plus running held shares, and (once ATR stop-loss is enabled in
  * Indicator Settings) the live sell-point this ticker's Overall signal is
  * watched against for whatever's still held. */
 export function PositionPanel({
@@ -397,7 +397,7 @@ export function PositionPanel({
       {ledgerRows.length === 0 && (
         <div className="settings-group-hint" style={{ marginBottom: 12 }}>
           Record when you bought this stock, how many shares, and at what price to track unrealized gains/losses
-          and, once ATR noise reduction is enabled in Indicator Settings, a live sell-point alert.
+          and, once ATR stop-loss is enabled in Indicator Settings, a live sell-point alert.
         </div>
       )}
 
@@ -449,7 +449,7 @@ export function PositionPanel({
             </div>
           ) : (
             <div className="settings-group-hint">
-              Enable ATR noise reduction in Indicator Settings to also track a live sell point for this position.
+              Enable ATR stop-loss in Indicator Settings to also track a live sell point for this position.
             </div>
           )}
         </div>

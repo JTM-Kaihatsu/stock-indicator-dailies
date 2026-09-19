@@ -2,10 +2,10 @@ import type { Bar } from '@stock-indicator-dailies/indicators';
 
 /**
  * ATR and ADX; Wilder's original smoothing. Scoped to the backtest package
- * rather than `packages/indicators`: these are strategy-execution filters for
- * the simulator (noise reduction, trend-strength gating), not part of the
- * app's actual "Three Tools" (MACD/Stochastic/SMA) indicator set the live
- * report shows.
+ * rather than `packages/indicators`: these drive the simulator's own
+ * strategy-execution logic (ATR stop-loss, ADX trend-strength gating), not
+ * part of the app's actual "Three Tools" (MACD/Stochastic/SMA) indicator
+ * set the live report shows.
  */
 
 function trueRange(bars: readonly Bar[], i: number): number {

@@ -76,7 +76,7 @@ export interface WatchlistDashboardRow {
 
 /** Applies the live ATR sell-point override to one row's Overall signal, in
  * place of whatever resolveDualOverall computed: holding shares and
- * setting ATR noise-reduction in Indicator Settings is an explicit choice
+ * setting ATR stop-loss in Indicator Settings is an explicit choice
  * to have this ticker's stop level watched, so a breach takes priority
  * over the ordinary computed/AI disagreement-resolution logic. Only ever
  * forces SELL, never overrides a HOLD/BUY read that isn't actually
