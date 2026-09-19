@@ -77,11 +77,11 @@ async function resolveSourceUrl(url: string, resolveFetch: typeof fetch): Promis
   }
 }
 
-const THUMBNAIL_FETCH_TIMEOUT_MS = 5000;
+const SOURCE_METADATA_FETCH_TIMEOUT_MS = 5000;
 /** Enough to cover the <head> of essentially any real page; a scrape that
  * hasn't found a usable tag by this many bytes gives up rather than
  * reading an arbitrarily large body. */
-const THUMBNAIL_MAX_BYTES = 200 * 1024;
+const SOURCE_METADATA_MAX_BYTES = 200 * 1024;
 
 /** Finds a meta tag's `content` value by `attr` (property or name),
  * matching either attribute order since real-world markup varies
@@ -96,29 +96,59 @@ function extractMetaImage(html: string): string | undefined {
   return metaContent(html, 'property', 'og:image') ?? metaContent(html, 'name', 'twitter:image');
 }
 
-/** Best-effort og:image/twitter:image scrape of an already-resolved source
- * page, for the citation drawer's per-source thumbnail. Kept independent
- * of resolveSourceUrl (a separate GET, not folded into its HEAD) so a bug
- * here can never affect URL resolution, which every citation link already
- * depends on. Streams the body with a byte cap and bails out early once
- * `</head>` is seen, so one slow or huge page can't block the whole
- * citation-resolution step. Returns undefined on any failure (timeout,
- * non-2xx, non-HTML content-type, no usable meta tag, an unresolvable or
- * non-http(s) image URL); never throws, same graceful-fallback posture as
- * resolveSourceUrl, just "no thumbnail" instead of "original URL". */
-async function scrapeThumbnail(url: string, resolveFetch: typeof fetch): Promise<string | undefined> {
+function extractSiteName(html: string): string | undefined {
+  return metaContent(html, 'property', 'og:site_name');
+}
+
+function extractArticleTitle(html: string): string | undefined {
+  return metaContent(html, 'property', 'og:title') ?? (html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || undefined);
+}
+
+/** Pure fallback (no network) for when a page doesn't set og:site_name, or
+ * the scrape fails entirely: strips a leading www., takes the label before
+ * the first remaining dot, and capitalizes it (e.g. reuters.com ->
+ * Reuters). Used so every freshly-generated source always carries a
+ * displayable site name, independent of scrape success. */
+function prettifyHostname(url: string): string | undefined {
   try {
-    const res = await resolveFetch(url, { redirect: 'follow', signal: AbortSignal.timeout(THUMBNAIL_FETCH_TIMEOUT_MS) });
-    if (!res.ok) return undefined;
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    const label = host.split('.')[0] || host;
+    return label ? label.charAt(0).toUpperCase() + label.slice(1) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+interface ScrapedSourceMetadata {
+  thumbnailUrl?: string;
+  siteName?: string;
+  articleTitle?: string;
+}
+
+/** Best-effort og:image/twitter:image/og:site_name/og:title scrape of an
+ * already-resolved source page, for the citation drawer's per-source pill
+ * and its popout. Kept independent of resolveSourceUrl (a separate GET, not
+ * folded into its HEAD) so a bug here can never affect URL resolution,
+ * which every citation link already depends on. Streams the body with a
+ * byte cap and bails out early once `</head>` is seen, so one slow or huge
+ * page can't block the whole citation-resolution step. Returns an object
+ * with whichever fields it managed to extract (possibly none) on any
+ * failure (timeout, non-2xx, non-HTML content-type, no usable tags); never
+ * throws, same graceful-fallback posture as resolveSourceUrl, just "no
+ * metadata" instead of "original URL". */
+async function scrapeSourceMetadata(url: string, resolveFetch: typeof fetch): Promise<ScrapedSourceMetadata> {
+  try {
+    const res = await resolveFetch(url, { redirect: 'follow', signal: AbortSignal.timeout(SOURCE_METADATA_FETCH_TIMEOUT_MS) });
+    if (!res.ok) return {};
     const contentType = res.headers.get('content-type') ?? '';
-    if (!contentType.toLowerCase().includes('text/html')) return undefined;
-    if (!res.body) return undefined;
+    if (!contentType.toLowerCase().includes('text/html')) return {};
+    if (!res.body) return {};
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let html = '';
     try {
-      while (html.length < THUMBNAIL_MAX_BYTES) {
+      while (html.length < SOURCE_METADATA_MAX_BYTES) {
         const { done, value } = await reader.read();
         if (done) break;
         html += decoder.decode(value, { stream: true });
@@ -129,12 +159,14 @@ async function scrapeThumbnail(url: string, resolveFetch: typeof fetch): Promise
     }
 
     const image = extractMetaImage(html);
-    if (!image) return undefined;
-    const absolute = new URL(image, res.url || url);
-    if (absolute.protocol !== 'http:' && absolute.protocol !== 'https:') return undefined;
-    return absolute.toString();
+    let thumbnailUrl: string | undefined;
+    if (image) {
+      const absolute = new URL(image, res.url || url);
+      if (absolute.protocol === 'http:' || absolute.protocol === 'https:') thumbnailUrl = absolute.toString();
+    }
+    return { thumbnailUrl, siteName: extractSiteName(html), articleTitle: extractArticleTitle(html) };
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -171,13 +203,16 @@ async function extractCitations(response: GeminiResponse, resolveFetch: typeof f
   interface ResolvedSource {
     url: string;
     thumbnailUrl?: string;
+    siteName?: string;
+    articleTitle?: string;
   }
   const resolved = new Map<string, ResolvedSource>(
     await Promise.all(
       Array.from(uniqueUrls, async (url): Promise<[string, ResolvedSource]> => {
         const resolvedUrl = await resolveSourceUrl(url, resolveFetch);
-        const thumbnailUrl = await scrapeThumbnail(resolvedUrl, resolveFetch);
-        return [url, { url: resolvedUrl, thumbnailUrl }];
+        const meta = await scrapeSourceMetadata(resolvedUrl, resolveFetch);
+        const siteName = meta.siteName ?? prettifyHostname(resolvedUrl);
+        return [url, { url: resolvedUrl, thumbnailUrl: meta.thumbnailUrl, siteName, articleTitle: meta.articleTitle }];
       }),
     ),
   );
@@ -187,6 +222,8 @@ async function extractCitations(response: GeminiResponse, resolveFetch: typeof f
       if (!r) continue;
       source.url = r.url;
       if (r.thumbnailUrl) source.thumbnailUrl = r.thumbnailUrl;
+      if (r.siteName) source.siteName = r.siteName;
+      if (r.articleTitle) source.articleTitle = r.articleTitle;
     }
   }
 

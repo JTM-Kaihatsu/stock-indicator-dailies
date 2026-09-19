@@ -181,8 +181,8 @@ test('extracts citations from grounding metadata, with each source URL resolved 
     {
       quote: 'Google Cloud grew 34% YoY.',
       sources: [
-        { title: 'Reuters', url: 'https://reuters.com/tech/google-cloud-q3-2026' },
-        { title: 'Bloomberg', url: 'https://bloomberg.com/news/articles/google-cloud-growth' },
+        { title: 'Reuters', url: 'https://reuters.com/tech/google-cloud-q3-2026', siteName: 'Reuters' },
+        { title: 'Bloomberg', url: 'https://bloomberg.com/news/articles/google-cloud-growth', siteName: 'Bloomberg' },
       ],
     },
   ]);
@@ -362,6 +362,69 @@ test('omits thumbnailUrl when the og:image tag sits beyond the byte cap', async 
   );
   const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
   assert.equal('thumbnailUrl' in result.citations[0]!.sources[0]!, false);
+});
+
+// --- extractCitations: site name and article title scraping ---
+
+test('scrapes siteName from og:site_name', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    { 'https://reuters.com/article': { html: '<head><meta property="og:site_name" content="Reuters"></head>' } },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sources[0]!.siteName, 'Reuters');
+});
+
+test('scrapes articleTitle from og:title', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    { 'https://reuters.com/article': { html: '<head><meta property="og:title" content="Cloud growth accelerates"></head>' } },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sources[0]!.articleTitle, 'Cloud growth accelerates');
+});
+
+test('falls back to the <title> tag when og:title is absent', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    { 'https://reuters.com/article': { html: '<head><title>Cloud growth accelerates</title></head>' } },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sources[0]!.articleTitle, 'Cloud growth accelerates');
+});
+
+test('prefers og:title over the <title> tag when both are present', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    {
+      'https://reuters.com/article': {
+        html: '<head><title>Reuters.com</title><meta property="og:title" content="Cloud growth accelerates"></head>',
+      },
+    },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sources[0]!.articleTitle, 'Cloud growth accelerates');
+});
+
+test('falls back to a hostname-derived siteName when the scrape fails entirely', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch({ 'https://redirect/1': 'https://www.reuters.com/article' });
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sources[0]!.siteName, 'Reuters');
+});
+
+test('omits articleTitle when neither og:title nor a <title> tag is present', async () => {
+  const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
+  const { fetchFn } = fakeResolveFetch(
+    { 'https://redirect/1': 'https://reuters.com/article' },
+    { 'https://reuters.com/article': { html: '<head><meta property="og:site_name" content="Reuters"></head>' } },
+  );
+  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  assert.equal('articleTitle' in result.citations[0]!.sources[0]!, false);
 });
 
 test('researchCompany translates a 503 overloaded error into a friendly AdvisorUpstreamError', async () => {

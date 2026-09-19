@@ -364,6 +364,30 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.7); curs
 }
 .pos-tooltip-close:hover { color: var(--text); }
 
+/* --- Citation source pill + anchored popout (CitationButton.tsx) --- */
+.pill-source {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--mono); font-size: calc(11px * var(--type-scale));
+  color: var(--muted); background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 3px 10px; cursor: pointer;
+}
+.pill-source:hover, .pill-source:focus-visible { border-color: var(--accent); color: var(--accent); }
+
+.source-popout {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 20;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; width: max-content; max-width: min(340px, 80vw);
+  max-height: 320px; overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,.28);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.source-entry { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; text-decoration: none; }
+.source-entry-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.source-entry-site { font-size: calc(10.5px * var(--type-scale)); color: var(--faint); text-transform: uppercase; letter-spacing: .04em; }
+.source-entry-title { font-size: calc(13px * var(--type-scale)); color: var(--text); font-weight: 600; }
+.source-entry-url { font-size: calc(11px * var(--type-scale)); color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-entry-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); flex-shrink: 0; background: var(--surface); }
+
 /* --- Centered confirm modal (e.g. "Clear all positions?") --- */
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 300;

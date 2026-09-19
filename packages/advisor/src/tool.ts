@@ -19,12 +19,17 @@ export type RiskTolerance = 'averse' | 'neutral' | 'seeking';
  * invented by parsing prose, and not a synthesized claim; see FieldClaim
  * for that); `sources[].url` is already resolved to the source's real
  * destination by extractCitations (advisor.ts), not the raw Google
- * grounding-redirect link Gemini itself returns. `thumbnailUrl` is a
- * best-effort og:image/twitter:image scrape of that same page and is
- * commonly absent (scrape failure, or the page simply has neither tag). */
+ * grounding-redirect link Gemini itself returns. `title` is Gemini's own
+ * label for the source (often just its domain, e.g. "gurufocus.com").
+ * `thumbnailUrl`/`siteName`/`articleTitle` are a best-effort
+ * og:image|twitter:image / og:site_name / og:title|<title> scrape of that
+ * same page; `siteName` is nearly always present (falls back to a
+ * hostname-derived label with no network needed), `thumbnailUrl` and
+ * `articleTitle` are commonly absent (scrape failure, or the page simply
+ * has neither tag). */
 export interface ResearchQuote {
   quote: string;
-  sources: Array<{ title: string; url: string; thumbnailUrl?: string }>;
+  sources: Array<{ title: string; url: string; thumbnailUrl?: string; siteName?: string; articleTitle?: string }>;
 }
 
 /** Stage 1's output: a reusable research brief, gathered by Gemini via

@@ -28,12 +28,13 @@ export type EarningsLikelihood = 'low' | 'moderate' | 'high';
 /** One raw grounded excerpt from Gemini's research text and the source(s)
  * it was attributed to (not a synthesized claim; see FieldClaim for that).
  * `sources[].url` is already resolved to the source's real destination,
- * not a raw Google grounding-redirect link. `thumbnailUrl` is a
- * best-effort og:image/twitter:image scrape of that page and is commonly
- * absent (scrape failure, or the page has neither tag). */
+ * not a raw Google grounding-redirect link. `thumbnailUrl`/`siteName`/
+ * `articleTitle` are a best-effort scrape of that page; `siteName` is
+ * nearly always present, `thumbnailUrl`/`articleTitle` are commonly absent
+ * (scrape failure, or the page has neither tag). */
 export interface ResearchQuote {
   quote: string;
-  sources: Array<{ title: string; url: string; thumbnailUrl?: string }>;
+  sources: Array<{ title: string; url: string; thumbnailUrl?: string; siteName?: string; articleTitle?: string }>;
 }
 
 /** One synthesized claim the advisor made in support of one of its output
