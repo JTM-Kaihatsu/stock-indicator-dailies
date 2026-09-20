@@ -21,8 +21,9 @@ import { TickerInput } from '@/components/TickerInput';
 import { ReportCard } from '@/components/ReportCard';
 import { LoadingState } from '@/components/LoadingState';
 import { SettingsPanel } from '@/components/SettingsPanel';
-import { AiSuggestionPanel, type AcceptResult } from '@/components/AiSuggestionPanel';
+import { AiSuggestionPanel } from '@/components/AiSuggestionPanel';
 import { BacktestPanel, type BacktestPanelHandle } from '@/components/BacktestPanel';
+import type { BacktestResult } from '@/types/backtest';
 import { AuthPanel } from '@/components/AuthPanel';
 import { SignalHistoryPanel } from '@/components/SignalHistoryPanel';
 
@@ -48,9 +49,8 @@ export default function Home() {
     setReport((current) => (current ? recomputeReport(current, toLiveOptions(newSettings)) : current));
   }
 
-  async function runTesting(settings: IndicatorSettings): Promise<AcceptResult> {
-    if (!backtestRef.current) return { ok: false, reason: 'Historical Testing is not ready yet.' };
-    return backtestRef.current.runScenario(settings);
+  async function showSuggestionResult(settings: IndicatorSettings, result: BacktestResult) {
+    await backtestRef.current?.showSuggestionResult(settings, result);
   }
 
   async function handleSubmit(t: string) {
@@ -110,7 +110,7 @@ export default function Home() {
             ticker={report.ticker}
             settings={mergeSettings(liveSettings, DEFAULT_BACKTEST_ONLY_SETTINGS)}
             onApplyAsIndicatorSettings={applySettings}
-            onAccept={runTesting}
+            onSuggestionResult={showSuggestionResult}
           />
           <BacktestPanel ref={backtestRef} ticker={report.ticker} liveSettings={liveSettings} />
           <SignalHistoryPanel ticker={report.ticker} />

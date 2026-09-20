@@ -8,7 +8,6 @@ import { CitationButton } from '@/components/CitationButton';
 import {
   FIELD_LABELS,
   RISK_TOLERANCE_OPTIONS,
-  diffSettings,
   fromProposedSettings,
   riskToleranceLabel,
   type DiffableSettingsKey,
@@ -16,6 +15,7 @@ import {
   type LiveSettings,
 } from '@/lib/settings';
 import type { AdvisorProposal, EarningsLikelihood, FitVerdict } from '@/types/advisor';
+import type { BacktestResult } from '@/types/backtest';
 
 /** Cooldown after a failed request, so a user (or an outage) can't hammer
  * Claude with immediate retries. Longer when the failure looks like Claude
@@ -47,16 +47,11 @@ const EARNINGS_LIKELIHOOD_STYLES: Record<EarningsLikelihood, { label: string; bg
   high: { label: 'High likelihood of meeting expectations', bg: 'var(--buy-bg)', fg: 'var(--buy)' },
 };
 
-export interface AcceptResult {
-  ok: boolean;
-  reason?: string;
-}
-
 export function AiSuggestionPanel({
   ticker,
   settings,
   onApplyAsIndicatorSettings,
-  onAccept,
+  onSuggestionResult,
 }: {
   ticker: string;
   /** The report's current baseline: live Indicator Settings merged with the
@@ -67,9 +62,12 @@ export function AiSuggestionPanel({
    * Indicator Settings (same effect as the Indicator Settings panel's own
    * Apply button); preserves whichever risk tolerance is already set there. */
   onApplyAsIndicatorSettings: (settings: LiveSettings) => void;
-  /** Runs the proposal's full settings (including backtest-only fields) as
-   * a Historical Testing scenario. */
-  onAccept: (settings: IndicatorSettings) => Promise<AcceptResult>;
+  /** Shows the proposal's own backtest validation (computed server side
+   * when the suggestion was generated, see advisor.ts's
+   * scoreForRiskTolerance) in Historical Testing's scenario slot. Called
+   * automatically whenever a proposal carrying one arrives, never from a
+   * button; there's nothing left to run, only to display. */
+  onSuggestionResult: (settings: IndicatorSettings, result: BacktestResult) => void;
 }) {
   // Defaults to the last tolerance the user picked here for this ticker
   // (remembered across visits, even a closed-and-reopened tab; see
@@ -86,8 +84,6 @@ export function AiSuggestionPanel({
   const [errorIsOutage, setErrorIsOutage] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
-  const [accepting, setAccepting] = useState(false);
-  const [acceptError, setAcceptError] = useState<string | null>(null);
 
   // A different ticker means a different remembered preference to default
   // the selector back to (not carrying forward whatever was picked for the
@@ -130,12 +126,24 @@ export function AiSuggestionPanel({
     return () => clearInterval(id);
   }, [cooldownUntil]);
 
+  // Whenever a proposal carrying its own backtest validation arrives (from
+  // either the cached-peek effect above or a fresh request() below), show
+  // it in Historical Testing's scenario slot automatically; getting a
+  // suggestion already ran the test as part of generating it, so there's
+  // no separate "Run Testing" action left to take. A suggestion cached
+  // before this field existed simply has backtestResult: null, so this
+  // no-ops for it rather than falling back to a fresh network run.
+  useEffect(() => {
+    if (!proposal?.backtestResult) return;
+    onSuggestionResult({ ...fromProposedSettings(proposal.settings), riskTolerance }, proposal.backtestResult);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposal]);
+
   async function request() {
     setLoading(true);
     setError(null);
     setErrorIsOutage(false);
     setProposal(null);
-    setAcceptError(null);
     try {
       setProposal(await requestAiSuggestion(ticker, riskTolerance));
     } catch (err) {
@@ -145,25 +153,6 @@ export function AiSuggestionPanel({
       setCooldownUntil(Date.now() + (outage ? OUTAGE_COOLDOWN_MS : DEFAULT_COOLDOWN_MS));
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function accept() {
-    if (!proposal) return;
-    // Fills the fields and auto-runs in one click; the user already saw
-    // the proposed diff, so a second manual "Run" click would just be
-    // redundant confirmation. Rationale and diff stay visible, nothing
-    // collapses, whether this succeeds or not. Tags the scenario with the
-    // risk tolerance it was actually generated for, so Historical Testing's
-    // own read-only provenance line (see SettingsFields) is correct right
-    // after accepting, and so "Apply to stock watchlist settings" persists
-    // the right tag too.
-    setAccepting(true);
-    setAcceptError(null);
-    const result = await onAccept({ ...fromProposedSettings(proposal.settings), riskTolerance });
-    setAccepting(false);
-    if (!result.ok) {
-      setAcceptError(result.reason ?? 'Could not run Historical Testing with these settings.');
     }
   }
 
@@ -191,7 +180,6 @@ export function AiSuggestionPanel({
   }
 
   const proposedSettings = proposal ? fromProposedSettings(proposal.settings) : null;
-  const changedFields = proposedSettings ? diffSettings(settings, proposedSettings) : [];
   const currentRiskTolerance = settings.riskTolerance ?? 'neutral';
   const riskToleranceDiffers = currentRiskTolerance !== riskTolerance;
   const liveFieldsMatch =
@@ -252,15 +240,18 @@ export function AiSuggestionPanel({
       </div>
 
       <button type="button" className="analyze-btn" onClick={request} disabled={loading || onCooldown}>
-        {loading
-          ? proposal
-            ? 'Refreshing…'
-            : `Researching ${ticker}…`
-          : onCooldown
-            ? `Retry in ${cooldownRemaining}s`
-            : proposal
-              ? 'Refresh AI Suggestion'
-              : 'Get AI Suggestion'}
+        {loading ? (
+          proposal ? 'Refreshing…' : `Researching ${ticker}…`
+        ) : onCooldown ? (
+          `Retry in ${cooldownRemaining}s`
+        ) : (
+          <>
+            {proposal ? 'Refresh AI Suggestion' : 'Get AI Suggestion'}
+            <span style={{ display: 'block', fontSize: 'calc(10px * var(--type-scale))', fontWeight: 400, opacity: 0.8, marginTop: 2 }}>
+              (And Run Historical Testing on Suggested Values)
+            </span>
+          </>
+        )}
       </button>
 
       {proposal && (
@@ -379,21 +370,7 @@ export function AiSuggestionPanel({
                 Apply AI Suggestions as the Indicator Settings
               </button>
             )}
-            {changedFields.length > 0 ? (
-              <button type="button" className="analyze-btn" onClick={accept} disabled={accepting}>
-                {accepting ? 'Running…' : 'Run Testing on AI Suggestions'}
-              </button>
-            ) : (
-              <span className="badge settings-badge-active">✓ Currently applied</span>
-            )}
           </div>
-          {acceptError && (
-            <div className="error-card" style={{ marginTop: 12 }}>
-              <h3>Couldn&apos;t apply this suggestion</h3>
-              <p>{acceptError}</p>
-              <p style={{ marginTop: 6 }}>The rationale and proposed settings above are still valid; you can try again.</p>
-            </div>
-          )}
         </div>
       )}
     </section>

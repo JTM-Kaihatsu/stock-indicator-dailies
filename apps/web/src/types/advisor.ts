@@ -3,6 +3,8 @@
  * types/api.ts's DailyReport); not worth adding the Anthropic SDK to the
  * web bundle's dependency graph for two small types.
  */
+import type { BacktestResult } from './backtest.ts';
+
 export interface ProposedSettings {
   buyConsensus: number;
   sellConsensus: number;
@@ -74,6 +76,13 @@ export interface AdvisorProposal {
    * an appended note rather than a full regeneration. null if none is
    * pending (never refreshed, or the last refresh was a full one). */
   quickUpdateNote: string | null;
+  /** How the settings above actually performed against this ticker's real
+   * 2-year price history, from the same run_backtest validation the
+   * advisor used to check its own work server-side. Powers Historical
+   * Testing's scenario slot automatically, no separate "Run Testing"
+   * click needed. null for a suggestion cached before this field existed,
+   * or when that final validation run itself failed. */
+  backtestResult: BacktestResult | null;
 }
 
 export type AdvisorJobResult =

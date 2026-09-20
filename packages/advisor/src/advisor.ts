@@ -1,9 +1,15 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
+import { runBacktest, type BacktestOptions, type BacktestResult } from '@stock-indicator-dailies/eval-backtest';
+import type { Bar } from '@stock-indicator-dailies/indicators';
 
 import {
   PROPOSE_SETTINGS_TOOL,
+  RANGES,
+  RUN_BACKTEST_TOOL,
   validateRiskScoredProposal,
+  type BacktestCandidate,
+  type ProposedSettings,
   type ResearchProposal,
   type ResearchQuote,
   type RiskScoredProposal,
@@ -250,9 +256,10 @@ export interface ResearchOptions {
   resolveFetch?: typeof fetch;
 }
 
-/** scoreForRiskTolerance stays on Claude: a single forced tool call, no
- * search, synthesizing whatever researchCompany (now Gemini-backed)
- * gathered into structured settings + rationale + fit + earnings outlook. */
+/** scoreForRiskTolerance stays on Claude: a short backtest-validating tool
+ * loop, no search, synthesizing whatever researchCompany (now Gemini-
+ * backed) gathered into structured settings + rationale + fit + earnings
+ * outlook. */
 export interface ScoreOptions {
   /** Defaults to `process.env.VLM_API_KEY`; same key already used for the
    * chart-reading VLM calls, since both are Claude API usage. */
@@ -508,7 +515,93 @@ export async function checkForMaterialUpdates(
   return withWallClock(work, timeoutMs);
 }
 
-const SCORE_SYSTEM_PROMPT = `You are tuning a technical-analysis trading tool's indicator settings for one
+/** Mirrors DEFAULT_SETTINGS in apps/web/src/lib/settings.ts (buyConsensus/
+ * sellConsensus/recencyDays match packages/shared/src/signal.ts's own
+ * defaults; persistenceBars/minHoldingDays match evals/backtest/src/
+ * simulate.ts's off-by-default values); hardcoded here the same documented
+ * way RANGES/the tool schemas already mirror bounds across layers, since
+ * packages/advisor can't depend on the web app's settings module. Used as
+ * scoreForRiskTolerance's fixed reference point ("beat this or explain why
+ * not"), computed once per call and given to the model in the prompt, not
+ * something it can tune itself. */
+const DEFAULT_BACKTEST_SETTINGS: BacktestOptions = {
+  buyConsensus: 2,
+  sellConsensus: 3,
+  recencyDays: 3,
+  persistenceBars: 1,
+  minHoldingDays: 0,
+};
+
+/** Caps how many candidate backtests the model can run per
+ * scoreForRiskTolerance call before it's forced to finalize with
+ * propose_settings; bounds latency/cost (each extra candidate costs one
+ * more Claude turn, though the backtest itself is a free local
+ * computation, no LLM involved) while still giving real room to iterate. */
+const MAX_BACKTEST_CALLS = 3;
+
+/** Wider than DEFAULT_TIMEOUT_MS: up to MAX_BACKTEST_CALLS + 1 sequential
+ * Claude turns can now happen in one call instead of 1. Already a
+ * background job (see scoreForRiskTolerance's own doc comment), not a
+ * request-path call, so the extra headroom is affordable. */
+const SCORE_DEFAULT_TIMEOUT_MS = 120_000;
+
+/** Clamps a run_backtest tool call's raw input into a valid BacktestOptions
+ * against the same RANGES propose_settings validates against (see
+ * tool.ts). Defensive, not authoritative like validateRiskScoredProposal's
+ * throwing checks: this is an internal tool-loop input, so a slightly out-
+ * of-range or malformed field from the model should degrade to a clamped
+ * or defaulted value and let the loop continue, not abort the whole
+ * generation over one bad candidate. ATR/ADX are only enabled when the
+ * model actually supplied a finite number for the multiplier/threshold
+ * (matching how the real settings form treats "unset" vs. "set to a
+ * value"), not merely because it echoed a period. */
+function clampCandidate(input: unknown): BacktestOptions {
+  const obj = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
+  const num = (key: keyof ProposedSettings, fallback: number): number => {
+    const [min, max] = RANGES[key];
+    const value = obj[key];
+    return typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+  };
+  const options: BacktestOptions = {
+    buyConsensus: num('buyConsensus', 2),
+    sellConsensus: num('sellConsensus', 3),
+    recencyDays: num('recencyDays', 3),
+    persistenceBars: num('persistenceBars', 1),
+    minHoldingDays: num('minHoldingDays', 0),
+  };
+  if (typeof obj.atrMultiplier === 'number' && Number.isFinite(obj.atrMultiplier)) {
+    options.atrMultiplier = num('atrMultiplier', 2);
+    options.atrPeriod = num('atrPeriod', 14);
+  }
+  if (typeof obj.adxThreshold === 'number' && Number.isFinite(obj.adxThreshold)) {
+    options.adxThreshold = num('adxThreshold', 20);
+    options.adxPeriod = num('adxPeriod', 14);
+  }
+  return options;
+}
+
+interface BacktestSummary {
+  strategyReturnPct: number;
+  buyAndHoldReturnPct: number;
+  tradeCount: number;
+  stillHolding: boolean;
+}
+
+/** The compact result handed back to the model as a run_backtest tool
+ * result: rounded to 1 decimal and without the trade list, since the model
+ * only needs enough to decide "keep this or try again," not a full ledger,
+ * and every extra field is tokens spent on every remaining turn. */
+function summarizeBacktest(result: BacktestResult): BacktestSummary {
+  return {
+    strategyReturnPct: Math.round(result.strategyReturnPct * 10) / 10,
+    buyAndHoldReturnPct: Math.round(result.buyAndHoldReturnPct * 10) / 10,
+    tradeCount: result.trades.length,
+    stillHolding: result.stillHolding,
+  };
+}
+
+function buildScoreSystemPrompt(defaultReturnPct: number, buyAndHoldReturnPct: number): string {
+  return `You are tuning a technical-analysis trading tool's indicator settings for one
 stock, for an investor with a specific, stated risk tolerance. You are given a research brief gathered
 separately in an earlier step (itself built as a chain of reasoning: company/industry/political climate and
 recent changes, then what would merit success and the consensus sentiment, then the likelihood of success and
@@ -516,16 +609,41 @@ the rough upside/downside, then the obstacles in the way and what's changed), an
 quotes from that research with their sources; no search tool is available here, so work only from what you're
 given.
 
+You also have access to run_backtest, which replays a candidate settings combination against this ticker's
+actual daily price history over the last 2 years and reports strategyReturnPct, buyAndHoldReturnPct,
+tradeCount, and stillHolding. For reference, over this exact window: the tool's plain default policy
+(buyConsensus 2, sellConsensus 3, a 3-day recency window, no persistence/minimum-holding/ATR/ADX filters)
+returned ${defaultReturnPct}%, and simply buying and holding the whole period returned ${buyAndHoldReturnPct}%.
+You must call run_backtest and review its result at least once before finalizing settings with
+propose_settings (you may call it up to ${MAX_BACKTEST_CALLS} times total). If a candidate loses money,
+produces very few or zero trades, or badly lags the two reference numbers above, that is a sign the settings
+are miscalibrated for THIS ticker's actual price history; revise them and check again rather than finalizing
+on a losing or non-functional candidate. It is fine, and expected, for your final settings to reasonably
+underperform buy-and-hold on a stock the research itself shows is genuinely difficult to time, but they
+should not trail the plain default policy above for no good reason.
+
 Investor risk tolerance definitions:
-- risk-averse: prefers certainty and will choose the lower-risk option. Favor settings that require strong
-  confirmation before acting and cut losses quickly.
+- risk-averse: prefers certainty and will choose the lower-risk option. Protect against losses primarily with
+  a TIGHTER ATR multiplier (a closer stop, exits a losing move sooner), with reasonable but not maximal
+  confirmation elsewhere. Do not stack buyConsensus=3 with a high persistenceBars (4+) AND a high
+  adxThreshold (25+) all at once: verified on real tickers, that combination can jointly prevent the strategy
+  from ever entering a position at all over 2 years of real history, which is not "safe," it is non-
+  functional. If a candidate produces zero or very few trades, loosen one of those three dials and check
+  again.
 - risk-neutral: ignores the element of danger and operates only by mathematical payoff. Use moderate, balanced
-  settings.
+  settings across all 9 levers, validated the same way as the other two stances.
 - risk-seeking: intends fast bets and is comfortable with larger swings for a chance at bigger, quicker gains.
-  Favor settings that react quickly and tolerate deeper drawdowns before exiting.
+  Express this primarily through a WIDER ATR multiplier (a farther stop, survives more day-to-day noise
+  without exiting a real move early) and a SHORTER minHoldingDays, not by dropping buyConsensus/sellConsensus/
+  persistenceBars toward their floor. This tool's indicators are a lagging 3-way vote (SMA/MACD/Slow-
+  Stochastic), not a tick-level momentum trigger, so loosening confirmation does not make it "catch momentum
+  faster"; it mainly means acting on more noise. Verified on real tickers: on a volatile, strongly trending
+  stock, minimal consensus/persistence tends to produce frequent small whipsaw trades that erode returns even
+  while the stock trends strongly in one direction. Check with run_backtest rather than assuming low
+  consensus helps.
 
 Using the research and whichever one of these is stated in the request, you must:
-1. Propose specific settings tuned for that risk tolerance.
+1. Propose specific settings tuned for that risk tolerance, checked with run_backtest as described above.
 2. Judge the "fit": whether the STOCK ITSELF, per the research, actually suits that risk tolerance. This is the
    final step of the research's own chain of reasoning (climate → success criteria → likelihood/upside/downside
    → obstacles → overall risk level), independent of how you tuned the settings. Tuning settings defensively
@@ -555,6 +673,7 @@ Using the research and whichever one of these is stated in the request, you must
 You MUST end by calling propose_settings exactly once, as your final action, with a rationale, the settings,
 the fit verdict + its reason, the earnings outlook fields, and the claims fields. Do not give your answer as
 plain text.`;
+}
 
 const RISK_TOLERANCE_LABELS: Record<RiskTolerance, string> = {
   averse: 'risk-averse',
@@ -578,46 +697,113 @@ function formatCitationsList(citations: readonly ResearchQuote[]): string {
 /** Scores an already-researched company against one investor risk
  * tolerance: proposes tuned settings, judges whether the stock itself
  * suits that stance, and extracts an earnings outlook. Stage 2 of 2 (see
- * researchCompany); a single forced tool call, no search; meant to be
- * cheap and fast enough to re-run per risk tolerance without
- * re-researching. */
+ * researchCompany); no search. Unlike stage 1, this now IS a short
+ * agentic loop, not a single forced call: the model must validate its own
+ * candidate settings against `bars` via the run_backtest tool at least
+ * once (and up to MAX_BACKTEST_CALLS times) before finalizing with
+ * propose_settings, so a settings combination that would have lost money
+ * or never traded at all gets caught before it's ever shown to a user,
+ * not after (see this file's investigation-driven prompt additions in
+ * buildScoreSystemPrompt). `bars` is fetched once by the caller (the same
+ * 2-year daily history Historical Testing itself uses) and passed in
+ * rather than fetched here, so a caller scoring the same ticker across
+ * multiple risk tolerances only pays for one fetch. */
 export async function scoreForRiskTolerance(
   ticker: string,
   research: ResearchProposal,
   riskTolerance: RiskTolerance,
+  bars: readonly Bar[],
   options: ScoreOptions = {},
 ): Promise<RiskScoredProposal> {
   const model = options.model ?? DEFAULT_MODEL;
   const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? SCORE_DEFAULT_TIMEOUT_MS;
   const client = buildClaudeClient(options);
 
   const work = (async () => {
-    const response = await createClaudeMessage(client, {
-      model,
-      max_tokens: maxTokens,
-      system: [{ type: 'text', text: SCORE_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-      tools: [PROPOSE_SETTINGS_TOOL],
-      tool_choice: { type: 'tool', name: 'propose_settings' },
-      messages: [
-        {
-          role: 'user',
-          content:
-            `Research on ${ticker}:\n${research.research}\n\n` +
-            `Numbered source citations for the research above:\n${formatCitationsList(research.citations)}\n\n` +
-            `Investor risk tolerance: ${RISK_TOLERANCE_LABELS[riskTolerance]}\n\n` +
-            'Propose settings and judge fit.',
-        },
-      ],
-    });
+    const reference = runBacktest(ticker, bars, DEFAULT_BACKTEST_SETTINGS);
+    const systemPrompt = buildScoreSystemPrompt(
+      Math.round(reference.strategyReturnPct * 10) / 10,
+      Math.round(reference.buyAndHoldReturnPct * 10) / 10,
+    );
 
-    const proposal = findToolUse(response.content, 'propose_settings');
-    if (!proposal) {
-      // tool_choice forces the model to call this tool; reaching here would
-      // mean the API itself misbehaved, not a model choice to skip it.
-      throw new Error('propose_settings was not called despite a forced tool_choice');
+    const messages: Array<{ role: 'user' | 'assistant'; content: unknown }> = [
+      {
+        role: 'user',
+        content:
+          `Research on ${ticker}:\n${research.research}\n\n` +
+          `Numbered source citations for the research above:\n${formatCitationsList(research.citations)}\n\n` +
+          `Investor risk tolerance: ${RISK_TOLERANCE_LABELS[riskTolerance]}\n\n` +
+          'Propose settings and judge fit. Remember to validate with run_backtest before finalizing.',
+      },
+    ];
+
+    let backtestCallsUsed = 0;
+    let proposal: { id: string; input: unknown } | undefined;
+
+    while (!proposal) {
+      const atCap = backtestCallsUsed >= MAX_BACKTEST_CALLS;
+      const mustBacktestFirst = backtestCallsUsed === 0;
+      const response = await createClaudeMessage(client, {
+        model,
+        max_tokens: maxTokens,
+        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+        tools: atCap ? [PROPOSE_SETTINGS_TOOL] : [PROPOSE_SETTINGS_TOOL, RUN_BACKTEST_TOOL],
+        tool_choice: atCap
+          ? { type: 'tool', name: 'propose_settings' }
+          : mustBacktestFirst
+            ? { type: 'tool', name: 'run_backtest' }
+            : { type: 'auto' },
+        messages,
+      });
+
+      // propose_settings is only ever honored once at least one real
+      // backtest validation has happened; on the first turn tool_choice is
+      // forced to run_backtest specifically so this shouldn't come up, but
+      // checking it here too means a proposal offered before any
+      // validation is defense-in-depth, not something this function trusts
+      // the API to have enforced on its own.
+      if (!mustBacktestFirst) {
+        const finalCall = findToolUse(response.content, 'propose_settings');
+        if (finalCall) {
+          proposal = finalCall;
+          break;
+        }
+      }
+
+      const backtestCall = findToolUse(response.content, 'run_backtest');
+      if (!backtestCall) {
+        // Neither tool was forced here (tool_choice: 'auto'), so this would
+        // mean the model responded with plain text instead of a tool call;
+        // reaching this with a forced tool_choice would mean the API
+        // itself misbehaved.
+        throw new Error('scoreForRiskTolerance: model response contained neither run_backtest nor propose_settings');
+      }
+
+      backtestCallsUsed++;
+      const candidateResult = runBacktest(ticker, bars, clampCandidate(backtestCall.input));
+      messages.push({ role: 'assistant', content: response.content });
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: backtestCall.id,
+            content: JSON.stringify(summarizeBacktest(candidateResult)),
+          },
+        ],
+      });
     }
-    return validateRiskScoredProposal(proposal.input, research.citations);
+
+    let finalBacktestResult: BacktestResult | null;
+    try {
+      const settingsInput = (proposal.input as { settings?: unknown }).settings;
+      finalBacktestResult = runBacktest(ticker, bars, clampCandidate(settingsInput));
+    } catch {
+      finalBacktestResult = null;
+    }
+
+    return validateRiskScoredProposal(proposal.input, research.citations, finalBacktestResult);
   })();
 
   return withWallClock(work, timeoutMs);
