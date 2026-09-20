@@ -18,7 +18,8 @@ import type { WatchlistDashboardRow } from '@/types/watchlist';
 
 const TICKER_PATTERN = /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/;
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
-const usd = (n: number) => `$${n.toFixed(2)}`;
+const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const int = (n: number) => n.toLocaleString('en-US');
 
 function resolvedSettings(row: WatchlistDashboardRow): LiveSettings {
   return { ...DEFAULT_LIVE_SETTINGS, ...(row.settings ?? {}) };
@@ -194,41 +195,45 @@ export default function ManageWatchlistPage() {
             Every ticker with shares currently held, sell points first. A breached sell point also forces that
             ticker&apos;s Overall signal to SELL. Manage individual buys/sells on each ticker&apos;s own page.
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {rows
-              .filter((r) => r.heldShares > 0)
-              .sort((a, b) => Number(b.positionRisk?.triggered ?? false) - Number(a.positionRisk?.triggered ?? false))
-              .map((row) => (
-                <Link
-                  key={row.ticker}
-                  href={`/watchlist/${row.ticker}`}
-                  style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-                    padding: '8px 12px', borderRadius: 8, textDecoration: 'none', color: 'inherit',
-                    background: row.positionRisk?.triggered ? 'var(--sell-bg)' : 'transparent',
-                    border: `1px solid ${row.positionRisk?.triggered ? 'var(--sell)' : 'var(--border)'}`,
-                  }}
-                >
-                  <span style={{ fontWeight: 700, fontFamily: 'var(--mono)' }}>{row.ticker}</span>
-                  <span className="fact">
-                    {row.heldShares} sh held{row.sinceDate ? ` since ${row.sinceDate}` : ''}
-                  </span>
-                  {row.unrealizedPnl && (
-                    <span className="fact" style={{ color: row.unrealizedPnl.amount >= 0 ? 'var(--buy)' : 'var(--sell)' }}>
-                      {row.unrealizedPnl.amount >= 0 ? '+' : ''}
-                      {usd(row.unrealizedPnl.amount)} ({pct(row.unrealizedPnl.pct)})
-                    </span>
-                  )}
-                  {row.positionRisk ? (
-                    <span className="fact" style={{ color: row.positionRisk.triggered ? 'var(--sell)' : 'var(--muted)' }}>
-                      {row.positionRisk.triggered ? 'Sell point breached' : `Sell point ${usd(row.positionRisk.stopLevel)}`}
-                    </span>
-                  ) : (
-                    <span className="fact">Enable ATR to track a sell point</span>
-                  )}
-                </Link>
-              ))}
-          </div>
+          <table className="trade-list">
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Shares Held</th>
+                <th>Unrealized Gain/Loss</th>
+                <th>Sell Point</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows
+                .filter((r) => r.heldShares > 0)
+                .sort((a, b) => Number(b.positionRisk?.triggered ?? false) - Number(a.positionRisk?.triggered ?? false))
+                .map((row) => (
+                  <tr key={row.ticker} style={{ background: row.positionRisk?.triggered ? 'var(--sell-bg)' : 'transparent' }}>
+                    <td className="tabular" style={{ fontWeight: 700 }}>
+                      <Link href={`/watchlist/${row.ticker}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                        {row.ticker}
+                      </Link>
+                    </td>
+                    <td className="fact">
+                      {int(row.heldShares)} sh{row.sinceDate ? ` since ${row.sinceDate}` : ''}
+                    </td>
+                    <td className="fact" style={{ color: row.unrealizedPnl ? (row.unrealizedPnl.amount >= 0 ? 'var(--buy)' : 'var(--sell)') : undefined }}>
+                      {row.unrealizedPnl
+                        ? `${row.unrealizedPnl.amount >= 0 ? '+' : ''}${usd(row.unrealizedPnl.amount)} (${pct(row.unrealizedPnl.pct)})`
+                        : 'N/A'}
+                    </td>
+                    <td className="fact" style={{ color: row.positionRisk?.triggered ? 'var(--sell)' : 'var(--muted)' }}>
+                      {row.positionRisk
+                        ? row.positionRisk.triggered
+                          ? 'Sell point breached'
+                          : `Sell point ${usd(row.positionRisk.stopLevel)}`
+                        : 'Enable ATR to track a sell point'}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         </div>
       )}
 
