@@ -21,8 +21,16 @@ export class AdvisorRequestError extends Error {
  * so there's no inline-result shortcut left. `riskTolerance` defaults to
  * 'neutral' server-side when omitted; always pass it explicitly here so a
  * ticker's own saved preference (or a per-request override) is what
- * actually gets scored. */
-export async function requestAiSuggestion(ticker: string, riskTolerance: RiskTolerance): Promise<AdvisorProposal> {
+ * actually gets scored. `onStage`, when given, is called with each real
+ * progress checkpoint the job reports while it's still running (research,
+ * then each backtest-validation simulation, then finalizing; see
+ * scoreForRiskTolerance's onStage option) so the UI can show live status
+ * instead of a single static "please wait". */
+export async function requestAiSuggestion(
+  ticker: string,
+  riskTolerance: RiskTolerance,
+  onStage?: (stage: string) => void,
+): Promise<AdvisorProposal> {
   const startRes = await fetch(apiUrl('/api/advisor/start'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -33,10 +41,14 @@ export async function requestAiSuggestion(ticker: string, riskTolerance: RiskTol
 
   let jobResult: AdvisorJobResult;
   try {
-    jobResult = await pollUntilDone<AdvisorJobResult>(async () => {
-      const statusRes = await fetch(apiUrl(`/api/advisor/jobs/${start.jobId}`));
-      return (await statusRes.json()) as AdvisorJobStatusResponse;
-    });
+    jobResult = await pollUntilDone<AdvisorJobResult>(
+      async () => {
+        const statusRes = await fetch(apiUrl(`/api/advisor/jobs/${start.jobId}`));
+        return (await statusRes.json()) as AdvisorJobStatusResponse;
+      },
+      {},
+      onStage,
+    );
   } catch (err) {
     // A client-side poll timeout isn't itself evidence of a Claude outage;
     // the research may just be slow. Shorter cooldown, no status-page hint.

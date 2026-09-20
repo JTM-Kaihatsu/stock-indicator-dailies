@@ -285,7 +285,7 @@ export const BacktestPanel = forwardRef<BacktestPanelHandle, {
 
           {baseline && (
             <>
-              <div className="backtest-stats">
+              <div className="backtest-stats backtest-stats--returns">
                 <div className="backtest-stat">
                   <div className="backtest-stat-label" style={{ display: 'inline-flex', alignItems: 'center' }}>
                     Baseline Strategy Return

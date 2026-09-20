@@ -79,6 +79,11 @@ export function AiSuggestionPanel({
     loadLastRiskTolerance(ticker) ?? settings.riskTolerance ?? 'neutral',
   );
   const [loading, setLoading] = useState(false);
+  // Live progress checkpoint reported by the running job (research, then
+  // each backtest-validation simulation, then finalizing; see
+  // requestAiSuggestion's onStage). Null until the first one arrives, in
+  // which case the loading button label below is shown instead.
+  const [stage, setStage] = useState<string | null>(null);
   const [proposal, setProposal] = useState<AdvisorProposal | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorIsOutage, setErrorIsOutage] = useState(false);
@@ -144,8 +149,9 @@ export function AiSuggestionPanel({
     setError(null);
     setErrorIsOutage(false);
     setProposal(null);
+    setStage(null);
     try {
-      setProposal(await requestAiSuggestion(ticker, riskTolerance));
+      setProposal(await requestAiSuggestion(ticker, riskTolerance, setStage));
     } catch (err) {
       const outage = err instanceof AdvisorRequestError && err.outage;
       setError(err instanceof Error ? err.message : 'Network error');
@@ -276,6 +282,19 @@ export function AiSuggestionPanel({
               {' '}before retrying.
             </p>
           )}
+        </div>
+      )}
+
+      {/* Occupies the same slot the rationale box below fills once the
+       * proposal actually arrives, so the live checkpoint text reads as
+       * "this is what will become your suggestion", not a separate,
+       * disconnected loading indicator. Falls back to the same default the
+       * button label above shows until the job's first real checkpoint
+       * comes in over the poll. */}
+      {loading && !error && (
+        <div className="advisor-rationale" style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="stage-spinner" aria-hidden="true" />
+          <span>{stage ?? `Researching ${ticker}…`}</span>
         </div>
       )}
 

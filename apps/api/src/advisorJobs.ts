@@ -59,9 +59,14 @@ function isPastEarningsDate(nextEarningsDate: string | null, now: Date): boolean
   return now.getTime() > new Date(`${nextEarningsDate}T23:59:59Z`).getTime();
 }
 
-async function fullRegeneration(ticker: string, riskTolerance: RiskTolerance): Promise<AdvisorJobResult> {
+async function fullRegeneration(
+  ticker: string,
+  riskTolerance: RiskTolerance,
+  reportStage: (stage: string) => void,
+): Promise<AdvisorJobResult> {
   let research = await getCachedResearch(ticker);
   if (!research) {
+    reportStage(`Researching ${ticker}'s business, industry, and recent news…`);
     research = await researchCompany(ticker);
     await cacheResearch(ticker, research);
   }
@@ -73,7 +78,7 @@ async function fullRegeneration(ticker: string, riskTolerance: RiskTolerance): P
   // is really one fetch per call for now, not yet shared across the three.
   const { bars } = await yahooDataSource.fetchDailyBars(ticker, '2y');
 
-  const result = await scoreForRiskTolerance(ticker, research, riskTolerance, bars);
+  const result = await scoreForRiskTolerance(ticker, research, riskTolerance, bars, { onStage: reportStage });
   const retrievedAt = new Date().toISOString();
   await cacheSuggestion(ticker, riskTolerance, result);
   return { ok: true, result: { ...result, retrievedAt, quickUpdateNote: null } };
@@ -97,11 +102,12 @@ async function fullRegeneration(ticker: string, riskTolerance: RiskTolerance): P
  * drift on a model's own sense of the date. */
 export function startAdvisorJob(ticker: string, riskTolerance: RiskTolerance): string {
   return store.start(
-    async () => {
+    async (reportStage) => {
       const now = new Date();
       const cached = await getCachedSuggestion(ticker, riskTolerance);
 
       if (cached && isFresh(cached.retrievedAt) && !isPastEarningsDate(cached.result.nextEarningsDate, now)) {
+        reportStage(`Checking for material news on ${ticker} since the last update…`);
         const check = await checkForMaterialUpdates(ticker, cached.retrievedAt.slice(0, 10), now.toISOString().slice(0, 10));
         if (!check.hasUpdates) {
           const note =
@@ -114,7 +120,7 @@ export function startAdvisorJob(ticker: string, riskTolerance: RiskTolerance): s
         // actually gets incorporated, rather than just noted.
       }
 
-      return fullRegeneration(ticker, riskTolerance);
+      return fullRegeneration(ticker, riskTolerance, reportStage);
     },
     (err) => ({
       ok: false,

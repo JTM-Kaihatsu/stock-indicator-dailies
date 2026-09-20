@@ -271,6 +271,20 @@ export interface ScoreOptions {
    * test client, which has no retry behavior of its own. */
   maxRetries?: number;
   client?: AnthropicLike;
+  /** Fired with a short human-readable status ("Running 1st historical
+   * simulation...") each time the backtest-validation loop below advances,
+   * so a caller polling a background job (see apps/api/src/jobStore.ts)
+   * can surface real progress instead of a single static "please wait".
+   * Purely observational: never awaited, never affects the loop itself. */
+  onStage?: (stage: string) => void;
+}
+
+/** Ordinal labels for the loop's own backtest calls (1-indexed,
+ * MAX_BACKTEST_CALLS is small so a lookup beats a general ordinal-suffix
+ * algorithm); an out-of-range index falls back to a plain "Nth". */
+const BACKTEST_CALL_ORDINALS = ['1st', '2nd', '3rd'];
+function backtestCallOrdinal(n: number): string {
+  return BACKTEST_CALL_ORDINALS[n - 1] ?? `${n}th`;
 }
 
 export class AdvisorWallClockTimeoutError extends Error {
@@ -719,8 +733,10 @@ export async function scoreForRiskTolerance(
   const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
   const timeoutMs = options.timeoutMs ?? SCORE_DEFAULT_TIMEOUT_MS;
   const client = buildClaudeClient(options);
+  const onStage = options.onStage;
 
   const work = (async () => {
+    onStage?.(`Consolidating research and price history for ${ticker}…`);
     const reference = runBacktest(ticker, bars, DEFAULT_BACKTEST_SETTINGS);
     const systemPrompt = buildScoreSystemPrompt(
       Math.round(reference.strategyReturnPct * 10) / 10,
@@ -781,6 +797,7 @@ export async function scoreForRiskTolerance(
       }
 
       backtestCallsUsed++;
+      onStage?.(`Running ${backtestCallOrdinal(backtestCallsUsed)} historical simulation to test candidate parameters…`);
       const candidateResult = runBacktest(ticker, bars, clampCandidate(backtestCall.input));
       messages.push({ role: 'assistant', content: response.content });
       messages.push({
@@ -795,6 +812,7 @@ export async function scoreForRiskTolerance(
       });
     }
 
+    onStage?.(`Finalizing the suggestion for ${ticker}…`);
     let finalBacktestResult: BacktestResult | null;
     try {
       const settingsInput = (proposal.input as { settings?: unknown }).settings;
