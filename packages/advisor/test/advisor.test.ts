@@ -44,6 +44,31 @@ function syntheticBars(n = 60): Bar[] {
   });
 }
 
+/** Unlike syntheticBars' smooth monotonic drift (which the 3-indicator vote
+ * system rarely crosses on at all, so most settings combos there produce 0
+ * trades), this oscillates around an uptrend so real crossovers actually
+ * fire; the substituteBetterCandidate tests below need settings combos that
+ * organically differ in real backtested performance, not just scripted
+ * BacktestSummary text. */
+function oscillatingBars(n = 120): Bar[] {
+  return Array.from({ length: n }, (_, i) => {
+    const close = 100 + i * 0.6 + 12 * Math.sin(i / 6);
+    const date = new Date(2023, 0, 1 + i).toISOString().slice(0, 10);
+    return { date, open: close - 0.3, high: close + 1.5, low: close - 1.5, close };
+  });
+}
+
+/** Same oscillation as oscillatingBars, but trending down overall, so a
+ * strategy that stays long through the whole window loses money while more
+ * selective settings can still catch some of the interim swings. */
+function downtrendBars(n = 120): Bar[] {
+  return Array.from({ length: n }, (_, i) => {
+    const close = 160 - i * 0.6 + 12 * Math.sin(i / 6);
+    const date = new Date(2023, 0, 1 + i).toISOString().slice(0, 10);
+    return { date, open: close - 0.3, high: close + 1.5, low: close - 1.5, close };
+  });
+}
+
 function mkResearch(research: string, citations: ResearchProposal['citations'] = []): ResearchProposal {
   return { research, citations };
 }
@@ -619,6 +644,57 @@ test('attaches a backtestResult reflecting the settings actually proposed, not a
   assert.equal(typeof result.backtestResult!.strategyReturnPct, 'number');
   assert.equal(typeof result.backtestResult!.buyAndHoldReturnPct, 'number');
   assert.ok(Array.isArray(result.backtestResult!.trades));
+});
+
+test('substitutes an earlier candidate\'s settings when it performed meaningfully better', async () => {
+  // On oscillatingBars, a loose (bc1/sc1) candidate genuinely outperforms
+  // the model's own final (default bc2/sc3) proposal by a wide, real
+  // margin -- the model saw this exact result in its own conversation
+  // (the run_backtest tool_result) but "chose" to finalize on the worse
+  // settings anyway, which is exactly the gap this guard exists for.
+  const bars = oscillatingBars();
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock({ buyConsensus: 1, sellConsensus: 1 })] },
+    { content: [proposeSettingsBlock({ settings: VALID_SETTINGS })] },
+  ]);
+  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client });
+  assert.equal(result.settings.buyConsensus, 1, 'substituted in the better-performing candidate, not the final proposal');
+  assert.equal(result.settings.sellConsensus, 1);
+  assert.ok(result.backtestResult, 'the substituted candidate\'s own real result is attached');
+  assert.ok(result.backtestResult!.trades.length > 0, 'the substituted candidate is functional');
+  assert.ok(result.backtestResult!.strategyReturnPct > 50, 'reflects the candidate\'s real (much better) return, not the proposal\'s');
+  assert.match(result.rationale, /\[Automatic adjustment]/, 'the swap is disclosed in the displayed rationale');
+});
+
+test('does not substitute when an earlier candidate is only marginally better', async () => {
+  // Both combos trade and perform well on oscillatingBars; the gap between
+  // them (real numbers, not scripted) is under MEANINGFUL_IMPROVEMENT_PCT,
+  // so the model's own final choice should stand rather than being swapped
+  // out over noise.
+  const bars = oscillatingBars();
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock({ buyConsensus: 1, sellConsensus: 1 })] },
+    { content: [proposeSettingsBlock({ settings: { ...VALID_SETTINGS, buyConsensus: 1, sellConsensus: 1, persistenceBars: 3 } })] },
+  ]);
+  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client });
+  assert.equal(result.settings.persistenceBars, 3, 'kept the model\'s own final proposal; the gap was not meaningful');
+  assert.doesNotMatch(result.rationale, /\[Automatic adjustment]/);
+});
+
+test('never substitutes a zero-trade earlier candidate, even when its return nominally looks better', async () => {
+  // On downtrendBars, an over-restrictive earlier candidate never trades at
+  // all (0%), which numerically "beats" the final proposal's real loss --
+  // but a 0% from never entering a position is the paralysis failure mode
+  // this loop exists to catch, not a genuine result to prefer.
+  const bars = downtrendBars();
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock({ persistenceBars: 8 })] },
+    { content: [proposeSettingsBlock({ settings: VALID_SETTINGS })] },
+  ]);
+  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client });
+  assert.equal(result.settings.persistenceBars, 1, 'kept the model\'s own final proposal; the candidate never traded');
+  assert.ok(result.backtestResult!.strategyReturnPct < 0, 'the kept proposal is a real, if unfortunate, loss');
+  assert.doesNotMatch(result.rationale, /\[Automatic adjustment]/);
 });
 
 test('backtestResult is null when the final validation run itself fails', async () => {

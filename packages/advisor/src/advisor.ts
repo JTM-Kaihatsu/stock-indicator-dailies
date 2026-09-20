@@ -601,6 +601,94 @@ interface BacktestSummary {
   stillHolding: boolean;
 }
 
+/** One candidate the loop actually tried via run_backtest, kept around (not
+ * just the compact summary sent back to the model) so a later candidate
+ * can be substituted in wholesale, settings and result together, without
+ * re-running the backtest. */
+interface LoopCandidate {
+  options: BacktestOptions;
+  result: BacktestResult;
+}
+
+/** Minimum improvement in strategyReturnPct (percentage points) an earlier
+ * candidate must show over the model's own final proposal before
+ * substituteBetterCandidate below will swap it in; guards against
+ * substituting over noise between two roughly-equivalent runs. Real gaps
+ * this is meant to catch, per this file's investigation notes, have run
+ * from tens to (in the zero-trade paralysis case) 1000+ points, so this is
+ * a conservative floor, not a hair-trigger. */
+const MEANINGFUL_IMPROVEMENT_PCT = 10;
+
+/** Reshapes an already-clamped BacktestOptions (as actually run against
+ * `bars`) into the same ProposedSettings shape propose_settings' own
+ * `settings` field uses, so a run_backtest candidate can stand in for the
+ * model's final proposal directly. Falls back to the same defaults
+ * clampCandidate itself uses for an omitted field. */
+function candidateAsProposedSettings(options: BacktestOptions): ProposedSettings {
+  return {
+    buyConsensus: options.buyConsensus ?? 2,
+    sellConsensus: options.sellConsensus ?? 3,
+    recencyDays: options.recencyDays ?? 3,
+    persistenceBars: options.persistenceBars ?? 1,
+    minHoldingDays: options.minHoldingDays ?? 0,
+    atrMultiplier: options.atrMultiplier ?? null,
+    atrPeriod: options.atrPeriod ?? 14,
+    adxThreshold: options.adxThreshold ?? null,
+    adxPeriod: options.adxPeriod ?? 14,
+  };
+}
+
+const formatReturnPct = (n: number): string => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
+
+/** Deterministic safety net, not a second opinion from the model: every
+ * earlier run_backtest result is already in the conversation by the time
+ * the model calls propose_settings, but nothing forces it to actually
+ * prefer its own best-performing attempt over a worse later one. This
+ * only ever looks at candidates from THIS SAME call -- same ticker, same
+ * stated risk tolerance, same system prompt as the final proposal itself
+ * -- so it can't cross into a different risk tolerance's settings; a
+ * candidate here was generated under exactly the same risk-tolerance
+ * framing the final proposal was, not a lesser-trusted one (see this
+ * file's system prompt for the risk-tolerance heuristics every candidate
+ * is already tuned against). A candidate with zero trades is excluded
+ * regardless of its raw return, since sitting in cash the whole window is
+ * the paralysis failure mode this loop exists to catch, not a genuine
+ * result to prefer. Swaps in silently on the numbers but not on the
+ * rationale text: appends a plain note explaining the swap so the
+ * displayed rationale never describes settings other than the ones
+ * actually shown. */
+function substituteBetterCandidate(
+  input: unknown,
+  finalResult: BacktestResult | null,
+  candidates: readonly LoopCandidate[],
+): { input: unknown; backtestResult: BacktestResult | null } {
+  const usable = candidates.filter((c) => c.result.trades.length > 0);
+  if (usable.length === 0) return { input, backtestResult: finalResult };
+
+  const best = usable.reduce((a, b) => (b.result.strategyReturnPct > a.result.strategyReturnPct ? b : a));
+  const meaningfullyBetter =
+    finalResult === null || best.result.strategyReturnPct >= finalResult.strategyReturnPct + MEANINGFUL_IMPROVEMENT_PCT;
+  if (!meaningfullyBetter) return { input, backtestResult: finalResult };
+
+  const obj = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
+  const originalRationale = typeof obj.rationale === 'string' ? obj.rationale : '';
+  const previousDescription =
+    finalResult === null ? 'the finalized settings, whose own validation run failed' : formatReturnPct(finalResult.strategyReturnPct);
+  const note =
+    `[Automatic adjustment] An earlier settings combination tested during this analysis performed meaningfully ` +
+    `better in backtesting (${formatReturnPct(best.result.strategyReturnPct)} vs. ${previousDescription}) and has ` +
+    'been used instead of the settings above.';
+
+  return {
+    input: {
+      ...obj,
+      settings: candidateAsProposedSettings(best.options),
+      rationale: originalRationale.length > 0 ? `${originalRationale}\n\n${note}` : note,
+    },
+    backtestResult: best.result,
+  };
+}
+
 /** The compact result handed back to the model as a run_backtest tool
  * result: rounded to 1 decimal and without the trade list, since the model
  * only needs enough to decide "keep this or try again," not a full ledger,
@@ -756,6 +844,7 @@ export async function scoreForRiskTolerance(
 
     let backtestCallsUsed = 0;
     let proposal: { id: string; input: unknown } | undefined;
+    const candidates: LoopCandidate[] = [];
 
     while (!proposal) {
       const atCap = backtestCallsUsed >= MAX_BACKTEST_CALLS;
@@ -798,7 +887,9 @@ export async function scoreForRiskTolerance(
 
       backtestCallsUsed++;
       onStage?.(`Running ${backtestCallOrdinal(backtestCallsUsed)} historical simulation to test candidate parameters…`);
-      const candidateResult = runBacktest(ticker, bars, clampCandidate(backtestCall.input));
+      const clampedOptions = clampCandidate(backtestCall.input);
+      const candidateResult = runBacktest(ticker, bars, clampedOptions);
+      candidates.push({ options: clampedOptions, result: candidateResult });
       messages.push({ role: 'assistant', content: response.content });
       messages.push({
         role: 'user',
@@ -821,7 +912,8 @@ export async function scoreForRiskTolerance(
       finalBacktestResult = null;
     }
 
-    return validateRiskScoredProposal(proposal.input, research.citations, finalBacktestResult);
+    const finalized = substituteBetterCandidate(proposal.input, finalBacktestResult, candidates);
+    return validateRiskScoredProposal(finalized.input, research.citations, finalized.backtestResult);
   })();
 
   return withWallClock(work, timeoutMs);
