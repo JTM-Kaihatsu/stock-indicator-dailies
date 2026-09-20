@@ -1,5 +1,16 @@
+/** This package's `test` script runs with node:test's --test-force-exit:
+ * the scoreForRiskTolerance loop tests below make several sequential
+ * client.messages.create() calls per test, and node:test's own reporter
+ * leaves dangling handles that keep the process alive well past every
+ * test completing (verified: all tests here pass in ~1s; without
+ * --test-force-exit the process simply never exits on its own). Confirmed
+ * this isn't a leak in scoreForRiskTolerance itself: a standalone script
+ * calling it directly, outside node:test, exits cleanly with zero active
+ * handles. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+
+import type { Bar } from '@stock-indicator-dailies/indicators';
 
 import {
   AdvisorUpstreamError,
@@ -16,6 +27,22 @@ const VALID_SETTINGS = {
   buyConsensus: 2, sellConsensus: 3, recencyDays: 3, persistenceBars: 1,
   minHoldingDays: 0, atrPeriod: 14, adxPeriod: 14,
 };
+
+/** Enough bars (with real daily-range spread) for runBacktest's own
+ * computeReadings/ATR/ADX warmup to run without throwing; scoreForRiskTolerance
+ * runs a reference backtest before ever calling Claude, so every test using
+ * it needs a bars fixture regardless of whether that test cares about the
+ * backtest's actual numbers. A mild uptrend, not hand-tuned to produce any
+ * particular signal; tests that care about specific backtest output use
+ * runBacktestBlock's own scripted result instead of relying on what this
+ * fixture would really produce. */
+function syntheticBars(n = 60): Bar[] {
+  return Array.from({ length: n }, (_, i) => {
+    const close = 100 + i * 0.5;
+    const date = new Date(2024, 0, 1 + i).toISOString().slice(0, 10);
+    return { date, open: close - 0.2, high: close + 1, low: close - 1, close };
+  });
+}
 
 function mkResearch(research: string, citations: ResearchProposal['citations'] = []): ResearchProposal {
   return { research, citations };
@@ -41,6 +68,17 @@ function proposeSettingsBlock(overrides: Record<string, unknown> = {}) {
       earningsLikelihoodReasonClaims: [],
       ...overrides,
     },
+  };
+}
+
+/** A scripted run_backtest tool call, for the turn(s) that must happen
+ * before scoreForRiskTolerance will ever honor propose_settings. */
+function runBacktestBlock(overrides: Record<string, unknown> = {}, id = 'tu_1') {
+  return {
+    type: 'tool_use',
+    id,
+    name: 'run_backtest',
+    input: { ...VALID_SETTINGS, ...overrides },
   };
 }
 
@@ -512,29 +550,102 @@ test('checkForMaterialUpdates passes the ticker, since-date, and today into the 
   assert.match(body.contents, /2026-09-10/);
 });
 
-// --- scoreForRiskTolerance: a single forced Claude call, no search loop ---
+// --- scoreForRiskTolerance: a backtest-validating tool loop ---
 
-test('returns the validated proposal from a single forced call', async () => {
-  const { client, bodies } = scriptedClaudeClient([{ content: [proposeSettingsBlock()] }]);
-  const result = await scoreForRiskTolerance('NVDA', mkResearch('Some research findings.'), 'averse', { client });
+test('validates with run_backtest before propose_settings is honored, then returns the proposal', async () => {
+  const bars = syntheticBars();
+  const { client, bodies } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
+    { content: [proposeSettingsBlock()] },
+  ]);
+  const result = await scoreForRiskTolerance('NVDA', mkResearch('Some research findings.'), 'averse', bars, { client });
   assert.equal(result.rationale, 'Because the sector is trending.');
   assert.deepEqual(result.settings, VALID_SETTINGS);
   assert.equal(result.fit, 'within-bounds');
   assert.equal(result.nextEarningsDate, '2026-10-22');
   assert.equal(result.earningsOutlook, 'Analysts expect revenue growth of 15% year over year.');
   assert.equal(result.earningsLikelihood, 'moderate');
-  assert.equal(bodies.length, 1, 'no search loop; exactly one call');
-  const body = bodies[0] as { tools: Array<{ name: string }>; tool_choice: { type: string; name?: string } };
-  assert.ok(!body.tools.some((t) => t.name === 'web_search'), 'no web_search tool offered in the scoring step');
-  assert.deepEqual(body.tool_choice, { type: 'tool', name: 'propose_settings' });
+  assert.equal(bodies.length, 2, 'one run_backtest turn, then one propose_settings turn');
+
+  const firstBody = bodies[0] as { tools: Array<{ name: string }>; tool_choice: { type: string; name?: string } };
+  assert.deepEqual(firstBody.tool_choice, { type: 'tool', name: 'run_backtest' }, 'first turn forces validation, not a free choice');
+  assert.ok(!firstBody.tools.some((t) => t.name === 'web_search'), 'no web_search tool offered in the scoring step');
+
+  const secondBody = bodies[1] as { tool_choice: { type: string } };
+  assert.deepEqual(secondBody.tool_choice, { type: 'auto' }, 'model chooses to finalize once it has a backtest result');
+});
+
+test('ignores a propose_settings block appearing alongside run_backtest on the first (forced) turn', async () => {
+  // Defense-in-depth: even if a response on the forced-run_backtest turn
+  // also happened to carry a propose_settings block, it must not be
+  // accepted as final before any real validation has happened.
+  const bars = syntheticBars();
+  const { client, bodies } = scriptedClaudeClient([
+    { content: [runBacktestBlock(), proposeSettingsBlock()] },
+    { content: [proposeSettingsBlock()] },
+  ]);
+  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client });
+  assert.equal(result.rationale, 'Because the sector is trending.');
+  assert.equal(bodies.length, 2, 'the premature proposal on turn 1 was ignored; run_backtest was processed instead');
+});
+
+test('forces propose_settings once the backtest-call cap is reached', async () => {
+  // The model keeps calling run_backtest past the cap; the loop must still
+  // terminate by forcing propose_settings on the next turn rather than
+  // looping forever.
+  const bars = syntheticBars();
+  const { client, bodies } = scriptedClaudeClient([
+    { content: [runBacktestBlock({}, 'tu_a')] },
+    { content: [runBacktestBlock({}, 'tu_b')] },
+    { content: [runBacktestBlock({}, 'tu_c')] },
+    { content: [proposeSettingsBlock()] },
+  ]);
+  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client });
+  assert.equal(result.rationale, 'Because the sector is trending.');
+  assert.equal(bodies.length, 4, '3 backtest calls (the cap) + 1 forced finalize');
+  const lastBody = bodies[3] as { tools: Array<{ name: string }>; tool_choice: { type: string; name?: string } };
+  assert.deepEqual(lastBody.tool_choice, { type: 'tool', name: 'propose_settings' });
+  assert.equal(lastBody.tools.length, 1, 'run_backtest is no longer offered once the cap is reached');
+});
+
+test('attaches a backtestResult reflecting the settings actually proposed, not an earlier candidate', async () => {
+  const bars = syntheticBars();
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock({ buyConsensus: 1, sellConsensus: 1 })] },
+    { content: [proposeSettingsBlock({ settings: { ...VALID_SETTINGS, buyConsensus: 3, sellConsensus: 1 } })] },
+  ]);
+  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client });
+  assert.ok(result.backtestResult, 'a final validation backtest should be attached');
+  assert.equal(typeof result.backtestResult!.strategyReturnPct, 'number');
+  assert.equal(typeof result.backtestResult!.buyAndHoldReturnPct, 'number');
+  assert.ok(Array.isArray(result.backtestResult!.trades));
+});
+
+test('backtestResult is null when the final validation run itself fails', async () => {
+  // Fewer than 2 bars makes runBacktest throw; the proposal is still
+  // returned, just without an attached backtestResult.
+  const oneBar = syntheticBars(1);
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
+    { content: [proposeSettingsBlock()] },
+  ]);
+  await assert.rejects(
+    () => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', oneBar, { client }),
+    /need at least 2 bars/,
+    'the reference backtest itself needs 2+ bars, so this fails before Claude is even called',
+  );
 });
 
 test('passes the ticker, research, citations, and risk tolerance label into the user message', async () => {
-  const { client, bodies } = scriptedClaudeClient([{ content: [proposeSettingsBlock()] }]);
+  const bars = syntheticBars();
+  const { client, bodies } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
+    { content: [proposeSettingsBlock()] },
+  ]);
   const research = mkResearch('Findings about Apple.', [
     { quote: 'Apple beat EPS estimates.', sources: [{ title: 'Reuters', url: 'https://x' }] },
   ]);
-  await scoreForRiskTolerance('AAPL', research, 'seeking', { client });
+  await scoreForRiskTolerance('AAPL', research, 'seeking', bars, { client });
   const body = bodies[0] as { messages: Array<{ content: string }> };
   const userContent = body.messages[0]!.content;
   assert.match(userContent, /AAPL/);
@@ -544,11 +655,13 @@ test('passes the ticker, research, citations, and risk tolerance label into the 
 });
 
 test('resolves claims and citation indices into fieldCitations', async () => {
+  const bars = syntheticBars();
   const research = mkResearch('Findings.', [
     { quote: 'Quote A.', sources: [{ title: 'Reuters', url: 'https://a' }] },
     { quote: 'Quote B.', sources: [{ title: 'Bloomberg', url: 'https://b' }] },
   ]);
   const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
     {
       content: [
         proposeSettingsBlock({
@@ -559,7 +672,7 @@ test('resolves claims and citation indices into fieldCitations', async () => {
       ],
     },
   ]);
-  const result = await scoreForRiskTolerance('NVDA', research, 'neutral', { client });
+  const result = await scoreForRiskTolerance('NVDA', research, 'neutral', bars, { client });
   assert.deepEqual(result.fieldCitations.rationale, [{ claim: 'Claim A.', quotes: [research.citations[0]] }]);
   assert.deepEqual(result.fieldCitations.fitReason, [{ claim: 'Claim B.', quotes: [research.citations[1]] }]);
   assert.deepEqual(result.fieldCitations.earningsOutlook, [{ claim: 'Claim C.', quotes: research.citations }]);
@@ -567,69 +680,101 @@ test('resolves claims and citation indices into fieldCitations', async () => {
 });
 
 test('drops out-of-range or malformed citation indices within a claim rather than throwing', async () => {
+  const bars = syntheticBars();
   const research = mkResearch('Findings.', [
     { quote: 'Quote A.', sources: [{ title: 'Reuters', url: 'https://a' }] },
   ]);
   const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
     { content: [proposeSettingsBlock({ rationaleClaims: [{ claim: 'Claim A.', citationIndices: [0, 5, -1, 'x'] }] })] },
   ]);
-  const result = await scoreForRiskTolerance('NVDA', research, 'neutral', { client });
+  const result = await scoreForRiskTolerance('NVDA', research, 'neutral', bars, { client });
   assert.deepEqual(result.fieldCitations.rationale, [{ claim: 'Claim A.', quotes: [research.citations[0]] }]);
 });
 
 test('keeps a claim with zero resolvable quotes rather than dropping it', async () => {
+  const bars = syntheticBars();
   const research = mkResearch('Findings.', [
     { quote: 'Quote A.', sources: [{ title: 'Reuters', url: 'https://a' }] },
   ]);
   const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
     { content: [proposeSettingsBlock({ rationaleClaims: [{ claim: 'Pure synthesis, nothing directly citable.', citationIndices: [] }] })] },
   ]);
-  const result = await scoreForRiskTolerance('NVDA', research, 'neutral', { client });
+  const result = await scoreForRiskTolerance('NVDA', research, 'neutral', bars, { client });
   assert.deepEqual(result.fieldCitations.rationale, [{ claim: 'Pure synthesis, nothing directly citable.', quotes: [] }]);
 });
 
 test('drops a malformed claim entry (missing/non-string claim) rather than throwing', async () => {
+  const bars = syntheticBars();
   const research = mkResearch('Findings.', []);
   const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
     { content: [proposeSettingsBlock({ rationaleClaims: [{ citationIndices: [] }, { claim: '', citationIndices: [] }] })] },
   ]);
-  const result = await scoreForRiskTolerance('NVDA', research, 'neutral', { client });
+  const result = await scoreForRiskTolerance('NVDA', research, 'neutral', bars, { client });
   assert.deepEqual(result.fieldCitations.rationale, []);
 });
 
 test('rejects a proposal with an out-of-range field', async () => {
-  const { client } = scriptedClaudeClient([{ content: [proposeSettingsBlock({ settings: { ...VALID_SETTINGS, buyConsensus: 99 } })] }]);
-  await assert.rejects(() => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', { client }), /outside the allowed range/);
+  const bars = syntheticBars();
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
+    { content: [proposeSettingsBlock({ settings: { ...VALID_SETTINGS, buyConsensus: 99 } })] },
+  ]);
+  await assert.rejects(() => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client }), /outside the allowed range/);
 });
 
 test('rejects a proposal with an invalid fit value', async () => {
-  const { client } = scriptedClaudeClient([{ content: [proposeSettingsBlock({ fit: 'sure-why-not' })] }]);
-  await assert.rejects(() => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', { client }), /must be one of/);
+  const bars = syntheticBars();
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
+    { content: [proposeSettingsBlock({ fit: 'sure-why-not' })] },
+  ]);
+  await assert.rejects(() => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client }), /must be one of/);
 });
 
 test('rejects a proposal missing fitReason', async () => {
-  const { client } = scriptedClaudeClient([{ content: [proposeSettingsBlock({ fitReason: '' })] }]);
-  await assert.rejects(() => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', { client }), /fitReason/);
+  const bars = syntheticBars();
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
+    { content: [proposeSettingsBlock({ fitReason: '' })] },
+  ]);
+  await assert.rejects(() => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client }), /fitReason/);
 });
 
 test('rejects a proposal with an invalid earningsLikelihood value', async () => {
-  const { client } = scriptedClaudeClient([{ content: [proposeSettingsBlock({ earningsLikelihood: 'super-high' })] }]);
-  await assert.rejects(() => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', { client }), /earningsLikelihood/);
+  const bars = syntheticBars();
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
+    { content: [proposeSettingsBlock({ earningsLikelihood: 'super-high' })] },
+  ]);
+  await assert.rejects(() => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client }), /earningsLikelihood/);
 });
 
 test('rejects a proposal missing earningsOutlook', async () => {
-  const { client } = scriptedClaudeClient([{ content: [proposeSettingsBlock({ earningsOutlook: '' })] }]);
-  await assert.rejects(() => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', { client }), /earningsOutlook/);
+  const bars = syntheticBars();
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
+    { content: [proposeSettingsBlock({ earningsOutlook: '' })] },
+  ]);
+  await assert.rejects(() => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client }), /earningsOutlook/);
 });
 
 test('accepts and normalizes a null nextEarningsDate', async () => {
-  const { client } = scriptedClaudeClient([{ content: [proposeSettingsBlock({ nextEarningsDate: null })] }]);
-  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', { client });
+  const bars = syntheticBars();
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
+    { content: [proposeSettingsBlock({ nextEarningsDate: null })] },
+  ]);
+  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client });
   assert.equal(result.nextEarningsDate, null);
 });
 
 test('strips stray trailing pseudo-XML scaffolding from rationale, fitReason, and earnings fields', async () => {
+  const bars = syntheticBars();
   const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
     { content: [proposeSettingsBlock({
       rationale: 'Because the sector is trending.</rationale>\n',
       fitReason: 'A real reason.</fitReason>\n</invoke>\n',
@@ -637,7 +782,7 @@ test('strips stray trailing pseudo-XML scaffolding from rationale, fitReason, an
       earningsLikelihoodReason: 'Beat history supports this.</earningsLikelihoodReason>\n</invoke>\n',
     })] },
   ]);
-  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', { client });
+  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client });
   assert.equal(result.rationale, 'Because the sector is trending.');
   assert.equal(result.fitReason, 'A real reason.');
   assert.equal(result.earningsOutlook, 'Analysts expect growth.');
@@ -645,6 +790,7 @@ test('strips stray trailing pseudo-XML scaffolding from rationale, fitReason, an
 });
 
 test('scoreForRiskTolerance translates a 529 overloaded error into a friendly AdvisorUpstreamError', async () => {
+  const bars = syntheticBars();
   const client: AnthropicLike = {
     messages: {
       async create() {
@@ -655,7 +801,7 @@ test('scoreForRiskTolerance translates a 529 overloaded error into a friendly Ad
     },
   };
   await assert.rejects(
-    () => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', { client }),
+    () => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client }),
     (err: unknown) => {
       assert.ok(err instanceof AdvisorUpstreamError);
       assert.equal(err.status, 529);
@@ -665,16 +811,17 @@ test('scoreForRiskTolerance translates a 529 overloaded error into a friendly Ad
 });
 
 test('scoreForRiskTolerance throws AdvisorWallClockTimeoutError when the call runs past timeoutMs', async () => {
+  const bars = syntheticBars();
   const client: AnthropicLike = {
     messages: {
       async create() {
         await new Promise((resolve) => setTimeout(resolve, 50));
-        return { content: [proposeSettingsBlock()] };
+        return { content: [runBacktestBlock()] };
       },
     },
   };
   await assert.rejects(
-    () => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', { client, timeoutMs: 10 }),
+    () => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client, timeoutMs: 10 }),
     AdvisorWallClockTimeoutError,
   );
 });

@@ -14,18 +14,17 @@ import {
 import type { BacktestResult } from '@/types/backtest';
 import { TradeList } from './TradeList';
 import { BacktestOnlySettingsFields, InfoIcon, LiveSettingsFields } from './SettingsFields';
-import type { AcceptResult } from './AiSuggestionPanel';
 
 type RunOutcome = { ok: true; result: BacktestResult } | { ok: false; reason: string };
 
 const pct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
 /** Imperative handle so a sibling AiSuggestionPanel (rendered above this
- * panel, not inside it; see the two page components) can trigger a
- * Historical Testing scenario run from its "Run Testing on AI Suggestions"
- * button without this panel needing to own or render that button itself. */
+ * panel, not inside it; see the two page components) can populate the
+ * scenario slot the moment a suggestion arrives, without this panel
+ * needing to own or render anything from the AI Suggestion panel itself. */
 export interface BacktestPanelHandle {
-  runScenario(settings: IndicatorSettings): Promise<AcceptResult>;
+  showSuggestionResult(settings: IndicatorSettings, result: BacktestResult): Promise<void>;
 }
 
 export const BacktestPanel = forwardRef<BacktestPanelHandle, {
@@ -213,38 +212,35 @@ export const BacktestPanel = forwardRef<BacktestPanelHandle, {
     setLoading(false);
   }
 
-  /** Triggered by "Accept AI Suggestion". A failure here is reported by the
-   * AI Suggestion panel itself, not the generic banner above: everything
-   * already on screen (overall read, baseline) stays exactly as it was, and
-   * the failure is scoped to "this specific suggestion couldn't be tested,"
-   * not "Historical Testing is broken." */
-  async function acceptAiSuggestion(proposed: IndicatorSettings): Promise<AcceptResult> {
-    const { policy: nextPolicy, backtestOnly: nextBacktestOnly } = splitSettings(proposed);
+  /** Populates the scenario slot directly from a backtest result the
+   * advisor already computed server side, instead of running a fresh
+   * network backtest: getting an AI suggestion now validates its own
+   * settings as part of generating them (see advisor.ts's
+   * scoreForRiskTolerance), so there's nothing left to run here, only to
+   * show. Still establishes the baseline first if it isn't up yet (the AI
+   * generation call normally takes far longer than the baseline's own
+   * local fetch, but that's not guaranteed), so the two percentages being
+   * compared are always available together. Nothing here can fail the way
+   * a network call could, so unlike the old accept flow this has nothing
+   * to report back to the AI Suggestion panel; a baseline failure is
+   * already surfaced by this panel's own generic error banner. */
+  async function showSuggestionResult(settings: IndicatorSettings, result: BacktestResult): Promise<void> {
+    const { policy: nextPolicy, backtestOnly: nextBacktestOnly } = splitSettings(settings);
     setPolicy(nextPolicy);
     setBacktestOnly(nextBacktestOnly);
     setApplyError(null);
 
-    // The AI proposal always lands in the "Custom settings" slot, never
-    // "Strategy return". That pellet means the settings active when the
-    // report was generated, so if there is no baseline yet (e.g. the
-    // auto-run above is still in flight or failed), establish it first.
     if (!baseline) {
       const baselineOutcome = await establishBaseline();
-      if (!baselineOutcome.ok) return { ok: false, reason: baselineOutcome.reason };
+      if (!baselineOutcome.ok) return;
     }
 
-    setLoading(true);
-    const settings = mergeSettings(nextPolicy, nextBacktestOnly);
-    const outcome = await runFor(settings);
-    setLoading(false);
-    if (!outcome.ok) return { ok: false, reason: outcome.reason };
-    setScenario(outcome.result);
+    setScenario(result);
     setScenarioSettings(settings);
     onScenarioPersist?.(settings);
-    return { ok: true };
   }
 
-  useImperativeHandle(ref, () => ({ runScenario: acceptAiSuggestion }));
+  useImperativeHandle(ref, () => ({ showSuggestionResult }));
 
   return (
     <section className="backtest-panel">

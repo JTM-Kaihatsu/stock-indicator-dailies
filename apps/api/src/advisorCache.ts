@@ -1,4 +1,5 @@
 import type { FieldCitations, FieldClaim, ResearchProposal, ResearchQuote, RiskScoredProposal, RiskTolerance } from '@stock-indicator-dailies/advisor';
+import type { BacktestResult } from '@stock-indicator-dailies/eval-backtest';
 
 import { getSupabaseClient as getClient } from './supabaseClient.ts';
 
@@ -102,6 +103,7 @@ interface SuggestionCacheRow {
   earnings_likelihood_reason: string;
   quick_update_note: string | null;
   field_citations: Partial<FieldCitations>;
+  backtest_result: BacktestResult | null;
 }
 
 const EMPTY_FIELD_CITATIONS: FieldCitations = {
@@ -119,6 +121,7 @@ function toProposal(row: SuggestionCacheRow): RiskScoredProposal {
     earningsLikelihood: row.earnings_likelihood as RiskScoredProposal['earningsLikelihood'],
     earningsLikelihoodReason: row.earnings_likelihood_reason,
     fieldCitations: sanitizeFieldCitations(row.field_citations),
+    backtestResult: row.backtest_result ?? null,
   };
 }
 
@@ -164,7 +167,7 @@ export async function getCachedSuggestion(ticker: string, riskTolerance: RiskTol
       .select(
         'ticker, risk_tolerance, retrieved_at, rationale, settings, fit, fit_reason, ' +
           'next_earnings_date, earnings_outlook, earnings_likelihood, earnings_likelihood_reason, ' +
-          'quick_update_note, field_citations',
+          'quick_update_note, field_citations, backtest_result',
       )
       .eq('ticker', ticker)
       .eq('risk_tolerance', riskTolerance)
@@ -200,6 +203,7 @@ export async function cacheSuggestion(ticker: string, riskTolerance: RiskToleran
       earnings_likelihood_reason: result.earningsLikelihoodReason,
       quick_update_note: null,
       field_citations: result.fieldCitations,
+      backtest_result: result.backtestResult,
     });
   } catch {
     // Best-effort.

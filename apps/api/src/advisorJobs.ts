@@ -7,6 +7,7 @@ import {
   type RiskScoredProposal,
   type RiskTolerance,
 } from '@stock-indicator-dailies/advisor';
+import { yahooDataSource } from '@stock-indicator-dailies/indicators';
 import { isOutageError } from '@stock-indicator-dailies/shared';
 
 import { appendQuickUpdateNote, cacheResearch, cacheSuggestion, getCachedResearch, getCachedSuggestion, isFresh } from './advisorCache.ts';
@@ -65,7 +66,14 @@ async function fullRegeneration(ticker: string, riskTolerance: RiskTolerance): P
     await cacheResearch(ticker, research);
   }
 
-  const result = await scoreForRiskTolerance(ticker, research, riskTolerance);
+  // Same 2-year daily history Historical Testing itself uses; fetched once
+  // here (not inside scoreForRiskTolerance) so scoring the same ticker
+  // across multiple risk tolerances doesn't refetch it each time -- though
+  // each risk tolerance currently is its own fullRegeneration call, so this
+  // is really one fetch per call for now, not yet shared across the three.
+  const { bars } = await yahooDataSource.fetchDailyBars(ticker, '2y');
+
+  const result = await scoreForRiskTolerance(ticker, research, riskTolerance, bars);
   const retrievedAt = new Date().toISOString();
   await cacheSuggestion(ticker, riskTolerance, result);
   return { ok: true, result: { ...result, retrievedAt, quickUpdateNote: null } };

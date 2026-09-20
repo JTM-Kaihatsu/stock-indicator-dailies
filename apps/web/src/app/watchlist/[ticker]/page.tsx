@@ -29,8 +29,9 @@ import { stageLabel } from '@/lib/errorMessages';
 import { ReportCard } from '@/components/ReportCard';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { PositionPanel, type LotActionResult } from '@/components/PositionPanel';
-import { AiSuggestionPanel, type AcceptResult } from '@/components/AiSuggestionPanel';
+import { AiSuggestionPanel } from '@/components/AiSuggestionPanel';
 import type { LedgerRow, PositionRisk, UnrealizedPnl } from '@/types/watchlist';
+import type { BacktestResult } from '@/types/backtest';
 import { BacktestPanel, type BacktestPanelHandle } from '@/components/BacktestPanel';
 import { SignalHistoryPanel } from '@/components/SignalHistoryPanel';
 import type { DailyReport } from '@/types/api';
@@ -381,9 +382,8 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
     return fetchDayRange(session.access_token, ticker, date);
   }
 
-  async function runTesting(settings: IndicatorSettings): Promise<AcceptResult> {
-    if (!backtestRef.current) return { ok: false, reason: 'Historical Testing is not ready yet.' };
-    return backtestRef.current.runScenario(settings);
+  async function showSuggestionResult(settings: IndicatorSettings, result: BacktestResult) {
+    await backtestRef.current?.showSuggestionResult(settings, result);
   }
 
   if (authLoading) return null;
@@ -463,7 +463,7 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
             ticker={ticker}
             settings={mergeSettings(status.settings, DEFAULT_BACKTEST_ONLY_SETTINGS)}
             onApplyAsIndicatorSettings={applySettings}
-            onAccept={runTesting}
+            onSuggestionResult={showSuggestionResult}
           />
 
           <BacktestPanel
