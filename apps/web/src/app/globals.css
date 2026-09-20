@@ -213,6 +213,13 @@ body {
   animation: spin .8s linear infinite; margin: 0 auto;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* Inline variant of .spinner, for a status line rather than a full-page
+   loading state (see AiSuggestionPanel's live progress checkpoint). */
+.stage-spinner {
+  width: 14px; height: 14px; flex-shrink: 0; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
 
 /* --- Error display --- */
 .error-card {
@@ -238,6 +245,15 @@ body {
   border-radius: 10px; padding: 14px 16px;
 }
 .backtest-stat-label { font-size: calc(11px * var(--type-scale)); text-transform: uppercase; letter-spacing: .08em; color: var(--faint); }
+/* Scoped to the return-comparison row specifically (see BacktestPanel.tsx):
+   "Baseline Strategy Return" wraps to 2 lines there (its info icon eats
+   into the available width) while its siblings stay on 1, so their values
+   below would otherwise start at different heights. Reserves room for 2
+   lines on every label in this row so the value always starts at the same
+   height regardless of which labels wrap. Left off the base
+   .backtest-stat-label since PositionPanel's own stat row never wraps and
+   doesn't need the extra reserved space. */
+.backtest-stats--returns .backtest-stat-label { line-height: 1.3; min-height: calc(11px * var(--type-scale) * 1.3 * 2); }
 .backtest-stat-value { font-family: var(--mono); font-size: calc(22px * var(--type-scale)); font-weight: 700; margin-top: 4px; }
 .backtest-stat-value.backtest-stat-empty { color: var(--faint); font-weight: 400; }
 .backtest-stat-value.pos { color: var(--buy); }

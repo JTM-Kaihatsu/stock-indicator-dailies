@@ -104,6 +104,6 @@ export type StartAdvisorResponse =
   | { ok: false; reason: string };
 
 export type AdvisorJobStatusResponse =
-  | { status: 'pending' }
+  | { status: 'pending'; stage?: string }
   | { status: 'done'; result: AdvisorJobResult }
   | { status: 'not-found' };
