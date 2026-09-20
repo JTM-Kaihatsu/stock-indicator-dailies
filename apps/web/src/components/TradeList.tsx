@@ -1,6 +1,6 @@
 import type { BacktestResult } from '@/types/backtest';
 
-const money = (n: number) => `$${n.toFixed(2)}`;
+const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function TradeList({ result }: { result: BacktestResult }) {
   const { trades, stillHolding, finalValue } = result;
