@@ -4,6 +4,7 @@ import {
   checkForMaterialUpdates,
   researchCompany,
   scoreForRiskTolerance,
+  type ResearchProposal,
   type RiskScoredProposal,
   type RiskTolerance,
 } from '@stock-indicator-dailies/advisor';
@@ -64,10 +65,17 @@ async function fullRegeneration(
   riskTolerance: RiskTolerance,
   reportStage: (stage: string) => void,
 ): Promise<AdvisorJobResult> {
-  let research = await getCachedResearch(ticker);
-  if (!research) {
+  const cachedResearch = await getCachedResearch(ticker);
+  let research: ResearchProposal;
+  if (cachedResearch && isFresh(cachedResearch.retrievedAt)) {
+    research = cachedResearch.proposal;
+  } else {
     reportStage(`Researching ${ticker}'s business, industry, and recent news…`);
-    research = await researchCompany(ticker);
+    // Even a stale cachedResearch row (past the freshness window, so not
+    // reusable outright above) is handed in as a known starting point --
+    // researchCompany's own prompt tells it to check/update this, not
+    // treat it as a limit on what to search for.
+    research = await researchCompany(ticker, cachedResearch?.proposal.research ?? null);
     await cacheResearch(ticker, research);
   }
 
@@ -108,7 +116,13 @@ export function startAdvisorJob(ticker: string, riskTolerance: RiskTolerance): s
 
       if (cached && isFresh(cached.retrievedAt) && !isPastEarningsDate(cached.result.nextEarningsDate, now)) {
         reportStage(`Checking for material news on ${ticker} since the last update…`);
-        const check = await checkForMaterialUpdates(ticker, cached.retrievedAt.slice(0, 10), now.toISOString().slice(0, 10));
+        const priorResearch = await getCachedResearch(ticker);
+        const check = await checkForMaterialUpdates(
+          ticker,
+          cached.retrievedAt.slice(0, 10),
+          now.toISOString().slice(0, 10),
+          priorResearch?.proposal.research ?? null,
+        );
         if (!check.hasUpdates) {
           const note =
             `Quick update attempt as of ${now.toISOString().slice(0, 10)}: No significant news updates were found ` +
