@@ -16,6 +16,7 @@
     "@google/genai": "^2.23.0",
     "@stock-indicator-dailies/eval-backtest": "*",
     "@stock-indicator-dailies/indicators": "*",
-    "@stock-indicator-dailies/shared": "*"
+    "@stock-indicator-dailies/shared": "*",
+    "date-fns": "^4.1.0"
   }
 }
