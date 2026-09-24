@@ -4,11 +4,11 @@ import type { BacktestResult } from '@stock-indicator-dailies/eval-backtest';
 import { getSupabaseClient as getClient } from './supabaseClient.ts';
 
 /** A cached row is fresh for this long from `retrieved_at`; older is a
- * miss. A week for both stages, same reasoning as before: a company's
- * research profile (and a suggestion derived from it) doesn't go stale
- * hour-to-hour the way a chart does; the point of caching this at all is
- * mainly to avoid repeated slow, web-search-backed calls during testing
- * and demos. */
+ * miss. A week for research (still just "how long is a writeup worth
+ * reusing without re-researching"). For a suggestion, this is now only a
+ * fallback trigger for a full regeneration when no earnings date is known
+ * at all (see advisorJobs.ts) -- the normal case is earnings-date-driven,
+ * not a fixed calendar window. */
 const CACHE_WINDOW_HOURS = 24 * 7;
 
 /** Exported so advisorJobs.ts's refresh flow can apply the same freshness
@@ -18,6 +18,23 @@ const CACHE_WINDOW_HOURS = 24 * 7;
  * decide whether it's cheap-refreshable or needs a full regeneration). */
 export function isFresh(retrievedAt: string): boolean {
   return Date.now() - new Date(retrievedAt).getTime() <= CACHE_WINDOW_HOURS * 60 * 60 * 1000;
+}
+
+/** Much shorter than CACHE_WINDOW_HOURS: this gates how often the cheap
+ * material-update check itself is even attempted, not whether a full
+ * regeneration is warranted (that's earnings-date-driven now; see
+ * advisorJobs.ts). A day, not a week, since the check is cheap and meant
+ * to stay responsive to sudden news, not to ration an expensive call. */
+const CHEAP_CHECK_WINDOW_HOURS = 24;
+
+/** Whether a quick material-update check has already been attempted
+ * recently enough (successful or not) that running another one isn't
+ * worth it yet. `null` (never checked, including every row from before
+ * this column existed) counts as NOT recent, so a check is always
+ * attempted at least once. */
+export function checkedRecently(lastCheckedAt: string | null): boolean {
+  if (!lastCheckedAt) return false;
+  return Date.now() - new Date(lastCheckedAt).getTime() <= CHEAP_CHECK_WINDOW_HOURS * 60 * 60 * 1000;
 }
 
 interface ResearchCacheRow {
@@ -119,6 +136,7 @@ interface SuggestionCacheRow {
   quick_update_note: string | null;
   field_citations: Partial<FieldCitations>;
   backtest_result: BacktestResult | null;
+  last_checked_at: string | null;
 }
 
 const EMPTY_FIELD_CITATIONS: FieldCitations = {
@@ -164,6 +182,12 @@ export interface CachedSuggestion {
    * refresh that found nothing significant; null if none is pending (either
    * never refreshed, or the last refresh was a full regeneration). */
   quickUpdateNote: string | null;
+  /** When a material-update check (successful or not) was last attempted
+   * for this row, independent of retrievedAt (which only moves on a full
+   * regeneration); null if never checked, including any row from before
+   * this column existed. Use the exported `checkedRecently` to decide
+   * whether another cheap check is worth attempting yet. */
+  lastCheckedAt: string | null;
 }
 
 /** Look up a cached suggestion for this exact (ticker, risk tolerance)
@@ -182,13 +206,18 @@ export async function getCachedSuggestion(ticker: string, riskTolerance: RiskTol
       .select(
         'ticker, risk_tolerance, retrieved_at, rationale, settings, fit, fit_reason, ' +
           'next_earnings_date, earnings_outlook, earnings_likelihood, earnings_likelihood_reason, ' +
-          'quick_update_note, field_citations, backtest_result',
+          'quick_update_note, field_citations, backtest_result, last_checked_at',
       )
       .eq('ticker', ticker)
       .eq('risk_tolerance', riskTolerance)
       .maybeSingle<SuggestionCacheRow>();
     if (error || !data) return null;
-    return { result: toProposal(data), retrievedAt: data.retrieved_at, quickUpdateNote: data.quick_update_note };
+    return {
+      result: toProposal(data),
+      retrievedAt: data.retrieved_at,
+      quickUpdateNote: data.quick_update_note,
+      lastCheckedAt: data.last_checked_at,
+    };
   } catch {
     return null;
   }
@@ -198,16 +227,19 @@ export async function getCachedSuggestion(ticker: string, riskTolerance: RiskTol
  * prior row for this exact (ticker, risk tolerance) pair (including
  * clearing any pending quick-update note; other risk tolerances' cached
  * suggestions for the same ticker are untouched). Best-effort, same
- * posture as cacheResearch. */
+ * posture as cacheResearch. Sets last_checked_at alongside retrieved_at: a
+ * full regeneration is, among other things, as current a check as
+ * possible. */
 export async function cacheSuggestion(ticker: string, riskTolerance: RiskTolerance, result: RiskScoredProposal): Promise<void> {
   const db = getClient();
   if (!db) return;
 
   try {
+    const now = new Date().toISOString();
     await db.from('advisor_suggestion_cache').upsert({
       ticker,
       risk_tolerance: riskTolerance,
-      retrieved_at: new Date().toISOString(),
+      retrieved_at: now,
       rationale: result.rationale,
       settings: result.settings,
       fit: result.fit,
@@ -219,28 +251,37 @@ export async function cacheSuggestion(ticker: string, riskTolerance: RiskToleran
       quick_update_note: null,
       field_citations: result.fieldCitations,
       backtest_result: result.backtestResult,
+      last_checked_at: now,
     });
   } catch {
     // Best-effort.
   }
 }
 
-/** Attaches a quick-update note to an existing suggestion row, without
- * touching anything else (in particular, not retrieved_at: this was a
- * cheap check, not a real regeneration, so the "last updated" the UI shows
- * should still reflect the last full regeneration). A no-op if the row
- * doesn't exist, which shouldn't happen in practice (the refresh flow only
- * calls this after already reading the row it's appending to). */
-export async function appendQuickUpdateNote(ticker: string, riskTolerance: RiskTolerance, note: string): Promise<void> {
+/** Records the outcome of a material-update check against an existing
+ * suggestion row: the note, and (best-effort) a corrected earnings date,
+ * without touching anything else -- in particular, not retrieved_at: this
+ * was a cheap check, not a real regeneration, so "last updated" should
+ * still reflect the last full regeneration. Always bumps last_checked_at
+ * so the cheap-check cadence (see checkedRecently) is tracked from this
+ * attempt, whether or not it found anything. `nextEarningsDate` is only
+ * written when non-null: an absent/UNKNOWN result from one check shouldn't
+ * clobber a genuinely known date from before. A no-op if the row doesn't
+ * exist, which shouldn't happen in practice (the refresh flow only calls
+ * this after already reading the row it's updating). */
+export async function recordQuickCheck(
+  ticker: string,
+  riskTolerance: RiskTolerance,
+  note: string,
+  nextEarningsDate: string | null,
+): Promise<void> {
   const db = getClient();
   if (!db) return;
 
   try {
-    await db
-      .from('advisor_suggestion_cache')
-      .update({ quick_update_note: note })
-      .eq('ticker', ticker)
-      .eq('risk_tolerance', riskTolerance);
+    const patch: Record<string, unknown> = { quick_update_note: note, last_checked_at: new Date().toISOString() };
+    if (nextEarningsDate !== null) patch.next_earnings_date = nextEarningsDate;
+    await db.from('advisor_suggestion_cache').update(patch).eq('ticker', ticker).eq('risk_tolerance', riskTolerance);
   } catch {
     // Best-effort.
   }

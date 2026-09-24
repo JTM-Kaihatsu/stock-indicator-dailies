@@ -560,46 +560,71 @@ test('researchCompany throws AdvisorWallClockTimeoutError when the call runs pas
 
 // --- checkForMaterialUpdates: the cheap refresh check ---
 
-test('parses a NO response as no updates', async () => {
+const NO_CONTEXT = { sinceDate: '2026-09-01', now: '2026-09-10', priorNextEarningsDate: null, priorResearch: null };
+
+test('parses a NO response as no updates, with no earnings date given', async () => {
   const { client } = scriptedGeminiClient('NO');
-  const result = await checkForMaterialUpdates('NVDA', '2026-09-01', '2026-09-10', null, { client });
+  const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, { client });
   assert.equal(result.hasUpdates, false);
   assert.equal(result.summary, null);
+  assert.equal(result.nextEarningsDate, null);
 });
 
-test('parses a YES response with a summary', async () => {
-  const { client } = scriptedGeminiClient('YES\nThe company announced a major new product line.');
-  const result = await checkForMaterialUpdates('NVDA', '2026-09-01', '2026-09-10', null, { client });
+test('parses a YES response with an earnings date and a summary', async () => {
+  const { client } = scriptedGeminiClient('YES\n2026-10-22\nThe company announced a major new product line.');
+  const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, { client });
   assert.equal(result.hasUpdates, true);
+  assert.equal(result.nextEarningsDate, '2026-10-22');
   assert.equal(result.summary, 'The company announced a major new product line.');
 });
 
-test('treats an empty or malformed response as no updates', async () => {
+test('treats a literal UNKNOWN earnings-date line as no known date', async () => {
+  const { client } = scriptedGeminiClient('NO\nUNKNOWN');
+  const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, { client });
+  assert.equal(result.nextEarningsDate, null);
+});
+
+test('treats an empty or malformed response as no updates and no known date', async () => {
   const { client } = scriptedGeminiClient(undefined);
-  const result = await checkForMaterialUpdates('NVDA', '2026-09-01', '2026-09-10', null, { client });
+  const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, { client });
   assert.equal(result.hasUpdates, false);
   assert.equal(result.summary, null);
+  assert.equal(result.nextEarningsDate, null);
 });
 
 test('checkForMaterialUpdates passes the ticker, since-date, and today into the prompt', async () => {
   const { client, params } = scriptedGeminiClient('NO');
-  await checkForMaterialUpdates('AAPL', '2026-08-15', '2026-09-10', null, { client });
+  await checkForMaterialUpdates('AAPL', { ...NO_CONTEXT, sinceDate: '2026-08-15' }, { client });
   const body = params[0] as { contents: string };
   assert.match(body.contents, /AAPL/);
   assert.match(body.contents, /2026-08-15/);
   assert.match(body.contents, /2026-09-10/);
 });
 
+test('reports the currently tracked earnings date as "not known" when none is given', async () => {
+  const { client, params } = scriptedGeminiClient('NO');
+  await checkForMaterialUpdates('AAPL', NO_CONTEXT, { client });
+  const body = params[0] as { contents: string };
+  assert.match(body.contents, /Currently tracked next earnings date: not known\./);
+});
+
+test('passes a given prior earnings date into contents as a starting point to confirm or correct', async () => {
+  const { client, params } = scriptedGeminiClient('NO');
+  await checkForMaterialUpdates('AAPL', { ...NO_CONTEXT, priorNextEarningsDate: '2026-10-22' }, { client });
+  const body = params[0] as { contents: string };
+  assert.match(body.contents, /Currently tracked next earnings date: 2026-10-22\./);
+});
+
 test('omits any prior-research reference from contents when none is given', async () => {
   const { client, params } = scriptedGeminiClient('NO');
-  await checkForMaterialUpdates('AAPL', '2026-08-15', '2026-09-10', null, { client });
+  await checkForMaterialUpdates('AAPL', NO_CONTEXT, { client });
   const body = params[0] as { contents: string };
   assert.doesNotMatch(body.contents, /Existing research summary/);
 });
 
 test('passes a given prior research summary into contents as a labeled reference', async () => {
   const { client, params } = scriptedGeminiClient('NO');
-  await checkForMaterialUpdates('AAPL', '2026-08-15', '2026-09-10', 'Apple faces DOJ antitrust scrutiny.', { client });
+  await checkForMaterialUpdates('AAPL', { ...NO_CONTEXT, priorResearch: 'Apple faces DOJ antitrust scrutiny.' }, { client });
   const body = params[0] as { contents: string };
   assert.match(body.contents, /Existing research summary to check against/);
   assert.match(body.contents, /Apple faces DOJ antitrust scrutiny\./);
