@@ -11,7 +11,7 @@ import {
 import { yahooDataSource } from '@stock-indicator-dailies/indicators';
 import { isOutageError } from '@stock-indicator-dailies/shared';
 
-import { appendQuickUpdateNote, cacheResearch, cacheSuggestion, getCachedResearch, getCachedSuggestion, isFresh } from './advisorCache.ts';
+import { cacheResearch, cacheSuggestion, checkedRecently, getCachedResearch, getCachedSuggestion, isFresh, recordQuickCheck } from './advisorCache.ts';
 import { createJobStore } from './jobStore.ts';
 
 /** RiskScoredProposal plus cache metadata the frontend needs to display
@@ -93,17 +93,26 @@ async function fullRegeneration(
 }
 
 /** Runs the two advisor stages for `ticker` + `riskTolerance`. If a
- * suggestion is already cached for this exact pair, tries a cheap refresh
- * before paying for a full re-research + re-score:
+ * suggestion is already cached for this exact pair, decides between three
+ * outcomes rather than regenerating on a fixed calendar schedule:
  *
- * - Within the cache's normal freshness window (a week), and the next
- *   earnings date (if any) hasn't passed yet: run a single, cheap
- *   material-updates check. If nothing significant turns up, just append a
- *   dated note to the existing suggestion instead of regenerating it.
- * - Otherwise (no cache, past the freshness window, the earnings date has
- *   passed, or the quick check itself found something significant): do a
- *   full regeneration, same as before, reusing cached research when that's
- *   still fresh regardless of the suggestion cache's own state.
+ * - The known next earnings date has passed: a company's fundamentals and
+ *   estimates are genuinely stale the moment it reports, regardless of how
+ *   recently the suggestion was otherwise generated -- full regeneration.
+ * - No earnings date is known at all (research never found one): there's
+ *   no event to key off of, so this falls back to the old fixed freshness
+ *   window (a week) as the only signal available -- full regeneration once
+ *   that's elapsed, same as before this became earnings-driven.
+ * - Otherwise: a single, cheap material-updates check, but only if one
+ *   hasn't already been attempted within the last day (see checkedRecently
+ *   -- much shorter than the old weekly window, since this check is cheap
+ *   and meant to stay responsive to sudden news, not to ration an
+ *   expensive call). If it finds something significant, fall through to a
+ *   full regeneration so it actually gets incorporated. If not, record the
+ *   attempt (and any earnings-date correction it found) without touching
+ *   retrieved_at, so "last updated" still reflects the last real
+ *   regeneration. If a check was already attempted recently, just return
+ *   what's cached, with no new API calls at all.
  *
  * "Now" is always this server's real clock (`new Date()`), never something
  * inferred by a model, so the earnings-date and freshness comparisons can't
@@ -114,24 +123,43 @@ export function startAdvisorJob(ticker: string, riskTolerance: RiskTolerance): s
       const now = new Date();
       const cached = await getCachedSuggestion(ticker, riskTolerance);
 
-      if (cached && isFresh(cached.retrievedAt) && !isPastEarningsDate(cached.result.nextEarningsDate, now)) {
-        reportStage(`Checking for material news on ${ticker} since the last update…`);
-        const priorResearch = await getCachedResearch(ticker);
-        const check = await checkForMaterialUpdates(
-          ticker,
-          cached.retrievedAt.slice(0, 10),
-          now.toISOString().slice(0, 10),
-          priorResearch?.proposal.research ?? null,
-        );
-        if (!check.hasUpdates) {
-          const note =
-            `Quick update attempt as of ${now.toISOString().slice(0, 10)}: No significant news updates were found ` +
-            'across company, industry, or related political news.';
-          await appendQuickUpdateNote(ticker, riskTolerance, note);
-          return { ok: true, result: { ...cached.result, retrievedAt: cached.retrievedAt, quickUpdateNote: note } };
+      if (cached) {
+        const knownEarningsDate = cached.result.nextEarningsDate;
+        const earningsDatePassed = isPastEarningsDate(knownEarningsDate, now);
+        const staleWithNoEarningsDate = knownEarningsDate === null && !isFresh(cached.retrievedAt);
+
+        if (!earningsDatePassed && !staleWithNoEarningsDate) {
+          if (checkedRecently(cached.lastCheckedAt)) {
+            // Checked recently enough; nothing new to do.
+            return { ok: true, result: { ...cached.result, retrievedAt: cached.retrievedAt, quickUpdateNote: cached.quickUpdateNote } };
+          }
+
+          reportStage(`Checking for material news on ${ticker} since the last update…`);
+          const priorResearch = await getCachedResearch(ticker);
+          const check = await checkForMaterialUpdates(ticker, {
+            sinceDate: cached.retrievedAt.slice(0, 10),
+            now: now.toISOString().slice(0, 10),
+            priorNextEarningsDate: knownEarningsDate,
+            priorResearch: priorResearch?.proposal.research ?? null,
+          });
+          if (!check.hasUpdates) {
+            const note =
+              `Quick update attempt as of ${now.toISOString().slice(0, 10)}: No significant news updates were found ` +
+              'across company, industry, or related political news.';
+            await recordQuickCheck(ticker, riskTolerance, note, check.nextEarningsDate);
+            return {
+              ok: true,
+              result: {
+                ...cached.result,
+                nextEarningsDate: check.nextEarningsDate ?? cached.result.nextEarningsDate,
+                retrievedAt: cached.retrievedAt,
+                quickUpdateNote: note,
+              },
+            };
+          }
+          // Material news found; fall through to a full regeneration so it
+          // actually gets incorporated, rather than just noted.
         }
-        // Material news found; fall through to a full regeneration so it
-        // actually gets incorporated, rather than just noted.
       }
 
       return fullRegeneration(ticker, riskTolerance, reportStage);

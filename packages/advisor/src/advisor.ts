@@ -511,38 +511,69 @@ current. Use Google Search to check for major company-specific news, significant
 related political or regulatory news since that date. Only report something if it is significant enough that it
 would change an investment research brief; ignore routine, minor, or already-expected news.
 
+Also confirm the company's next scheduled earnings report date: the exact date if officially confirmed, or your
+best current estimate if not (resolve an estimated range to its earlier end). If the user message gives a
+currently-tracked earnings date, treat it as a starting point to confirm or correct, not to accept blindly --
+search turning up a now-confirmed exact date replacing an old estimate, or a postponement, counts as confirming
+or correcting it, not as new information you should second-guess.
+
 If the user message includes the existing research summary this check is being run against, use it to see what
 was already known and specifically check whether any of it is now outdated, confirmed, or contradicted. Do not
 limit your search to just what it covers -- independently check for any other significant news since the given
 date the same way you would with no reference summary at all.
 
 Respond in exactly this format, nothing else:
-Line 1: YES or NO
-Line 2 (only if YES): a 1-2 sentence summary of what changed.`;
+Line 1: YES or NO (whether anything materially significant has happened)
+Line 2: the confirmed or estimated next earnings date, ISO 8601 (e.g. "2026-10-22"), or the single word UNKNOWN
+if you genuinely find no timing indication at all.
+Remaining lines (only if line 1 is YES): a 1-2 sentence summary of what changed.`;
 
 export interface MaterialUpdateCheck {
   hasUpdates: boolean;
   summary: string | null;
+  /** The next earnings date this check confirmed or found, refined from
+   * whatever was passed in as context.priorNextEarningsDate; null only
+   * when the check genuinely found no timing indication at all. Callers
+   * should use this to keep a cached suggestion's earnings date current
+   * even when hasUpdates is false and no full regeneration happens (see
+   * apps/api/src/advisorJobs.ts). */
+  nextEarningsDate: string | null;
+}
+
+/** Everything checkForMaterialUpdates needs to know about the existing,
+ * cached state it's checking against, grouped together since it's grown
+ * past a couple of loose positional strings. */
+export interface MaterialUpdateCheckContext {
+  /** ISO date (YYYY-MM-DD) the existing research/suggestion was last
+   * confirmed current as of. */
+  sinceDate: string;
+  /** ISO date (YYYY-MM-DD), today, per the real server clock (never the
+   * model's own sense of the date, so this can't drift from what the
+   * cache's own freshness/earnings-date checks are using). */
+  now: string;
+  /** The earnings date currently on file for this ticker, if any
+   * (confirmed or estimated); passed as a starting point to confirm or
+   * correct, not re-derived from nothing every time. */
+  priorNextEarningsDate: string | null;
+  /** The existing research summary to check against, if any (see
+   * researchCompany's own doc comment for the same "starting point, not a
+   * boundary" framing); giving the model the actual prior findings, not
+   * just a date, lets it check whether something specific it already
+   * flagged has since changed, on top of scanning broadly for anything
+   * new. */
+  priorResearch: string | null;
 }
 
 /** A cheap alternative to a full re-research: checks whether anything
- * material has happened for `ticker` since `sinceDate` (company, industry,
- * or political/regulatory news), for the "refresh" flow in
- * apps/api/src/advisorJobs.ts. `sinceDate` and `now` are both caller-
- * supplied (real server clock, not the model's own sense of the date) so
- * this can't drift from what the cache's own freshness check is using.
- *
- * `priorResearch` is the existing research summary this check is being run
- * against, if any (see researchCompany's own doc comment for the same
- * "starting point, not a boundary" framing); giving the model the actual
- * prior findings, not just a date, lets it check whether something
- * specific it already flagged has since changed, on top of scanning
- * broadly for anything new. */
+ * material has happened for `ticker` since `context.sinceDate` (company,
+ * industry, or political/regulatory news), and separately confirms the
+ * next earnings date, for the "refresh" flow in apps/api/src/advisorJobs.ts
+ * -- which no longer forces a full regeneration on a fixed calendar
+ * schedule, so this check (not a timer) is what keeps a long-lived cached
+ * suggestion's earnings date from drifting stale between full regens. */
 export async function checkForMaterialUpdates(
   ticker: string,
-  sinceDate: string,
-  now: string,
-  priorResearch: string | null = null,
+  context: MaterialUpdateCheckContext,
   options: ResearchOptions = {},
 ): Promise<MaterialUpdateCheck> {
   const model = options.model ?? DEFAULT_GEMINI_MODEL;
@@ -554,8 +585,9 @@ export async function checkForMaterialUpdates(
     const response = await createGeminiContent(client, {
       model,
       contents:
-        `Ticker: ${ticker}. Today's date is ${now}. Check for material news since ${sinceDate}.` +
-        formatPriorResearch('Existing research summary to check against (most recently known state)', priorResearch),
+        `Ticker: ${ticker}. Today's date is ${context.now}. Check for material news since ${context.sinceDate}.\n\n` +
+        `Currently tracked next earnings date: ${context.priorNextEarningsDate ?? 'not known'}.` +
+        formatPriorResearch('Existing research summary to check against (most recently known state)', context.priorResearch),
       config: {
         systemInstruction: MATERIAL_UPDATE_CHECK_PROMPT,
         tools: [{ googleSearch: {} }],
@@ -563,10 +595,13 @@ export async function checkForMaterialUpdates(
       },
     });
     const text = (response.text ?? '').trim();
-    const firstLine = (text.split('\n')[0] ?? '').trim().toUpperCase();
+    const lines = text.split('\n');
+    const firstLine = (lines[0] ?? '').trim().toUpperCase();
     const hasUpdates = firstLine.startsWith('YES');
-    const summary = hasUpdates ? text.split('\n').slice(1).join('\n').trim() || null : null;
-    return { hasUpdates, summary };
+    const earningsLine = (lines[1] ?? '').trim();
+    const nextEarningsDate = earningsLine.length > 0 && earningsLine.toUpperCase() !== 'UNKNOWN' ? earningsLine : null;
+    const summary = hasUpdates ? lines.slice(2).join('\n').trim() || null : null;
+    return { hasUpdates, summary, nextEarningsDate };
   })();
 
   return withWallClock(work, timeoutMs);
