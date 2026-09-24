@@ -442,7 +442,21 @@ Base your findings on what you find via search, not general knowledge alone. Wri
 that reads as the running synthesis described above (climate, then success criteria, then likelihood and
 upside/downside, then obstacles), as prose (6-14 sentences). Respond with only that summary; no preamble, no
 headers, no numbered list matching the 4 questions verbatim; write it as connected prose that a reader could
-follow question-to-question without needing the numbers.`;
+follow question-to-question without needing the numbers.
+
+If the user message includes a previous research summary for this company as reference, treat it only as a
+known starting point: check whether what it describes is still accurate, has since been confirmed, or has
+changed, and fold in whatever is still relevant. Do not limit your search to just the topics it covers --
+independently search for current company, industry, and political/regulatory news the same way you would with
+no prior reference at all, since something significant may have emerged that it never mentioned.`;
+
+/** Formats a previous research summary for inclusion in a Gemini call's
+ * `contents`, or '' when there isn't one -- shared by researchCompany and
+ * checkForMaterialUpdates so both hand it to the model the same way. */
+function formatPriorResearch(label: string, priorResearch: string | null): string {
+  if (!priorResearch) return '';
+  return `\n\n${label}:\n"""\n${priorResearch}\n"""`;
+}
 
 /** Researches `ticker`'s company via Gemini + Grounding with Google Search
  * and returns a reusable research brief. Stage 1 of 2 (see
@@ -450,8 +464,20 @@ follow question-to-question without needing the numbers.`;
  * search-backed part is cacheable per ticker regardless of which risk
  * tolerance ends up being scored against it. Gemini's grounding tool
  * decides its own search queries within this one call, the same way
- * Claude's hosted web_search tool did when this stage used to run there. */
-export async function researchCompany(ticker: string, options: ResearchOptions = {}): Promise<ResearchProposal> {
+ * Claude's hosted web_search tool did when this stage used to run there.
+ *
+ * `priorResearch` is the previous cached summary for this ticker, if any
+ * (even a stale one, past the cache's own freshness window; see
+ * apps/api/src/advisorJobs.ts), passed as a starting point so the model
+ * knows what was already established rather than researching from
+ * nothing every time. The prompt explicitly tells it not to limit its
+ * search to just what this covers -- it's a reference to check and
+ * update, not a boundary on what gets looked at. */
+export async function researchCompany(
+  ticker: string,
+  priorResearch: string | null = null,
+  options: ResearchOptions = {},
+): Promise<ResearchProposal> {
   const model = options.model ?? DEFAULT_GEMINI_MODEL;
   const maxOutputTokens = options.maxOutputTokens ?? DEFAULT_MAX_TOKENS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -460,7 +486,9 @@ export async function researchCompany(ticker: string, options: ResearchOptions =
   const work = (async () => {
     const response = await createGeminiContent(client, {
       model,
-      contents: `Research ${ticker} and write the findings summary.`,
+      contents:
+        `Research ${ticker} and write the findings summary.` +
+        formatPriorResearch(`Previous research summary for ${ticker}, for reference only (may be outdated)`, priorResearch),
       config: {
         systemInstruction: GEMINI_RESEARCH_PROMPT,
         tools: [{ googleSearch: {} }],
@@ -483,6 +511,11 @@ current. Use Google Search to check for major company-specific news, significant
 related political or regulatory news since that date. Only report something if it is significant enough that it
 would change an investment research brief; ignore routine, minor, or already-expected news.
 
+If the user message includes the existing research summary this check is being run against, use it to see what
+was already known and specifically check whether any of it is now outdated, confirmed, or contradicted. Do not
+limit your search to just what it covers -- independently check for any other significant news since the given
+date the same way you would with no reference summary at all.
+
 Respond in exactly this format, nothing else:
 Line 1: YES or NO
 Line 2 (only if YES): a 1-2 sentence summary of what changed.`;
@@ -497,11 +530,19 @@ export interface MaterialUpdateCheck {
  * or political/regulatory news), for the "refresh" flow in
  * apps/api/src/advisorJobs.ts. `sinceDate` and `now` are both caller-
  * supplied (real server clock, not the model's own sense of the date) so
- * this can't drift from what the cache's own freshness check is using. */
+ * this can't drift from what the cache's own freshness check is using.
+ *
+ * `priorResearch` is the existing research summary this check is being run
+ * against, if any (see researchCompany's own doc comment for the same
+ * "starting point, not a boundary" framing); giving the model the actual
+ * prior findings, not just a date, lets it check whether something
+ * specific it already flagged has since changed, on top of scanning
+ * broadly for anything new. */
 export async function checkForMaterialUpdates(
   ticker: string,
   sinceDate: string,
   now: string,
+  priorResearch: string | null = null,
   options: ResearchOptions = {},
 ): Promise<MaterialUpdateCheck> {
   const model = options.model ?? DEFAULT_GEMINI_MODEL;
@@ -512,7 +553,9 @@ export async function checkForMaterialUpdates(
   const work = (async () => {
     const response = await createGeminiContent(client, {
       model,
-      contents: `Ticker: ${ticker}. Today's date is ${now}. Check for material news since ${sinceDate}.`,
+      contents:
+        `Ticker: ${ticker}. Today's date is ${now}. Check for material news since ${sinceDate}.` +
+        formatPriorResearch('Existing research summary to check against (most recently known state)', priorResearch),
       config: {
         systemInstruction: MATERIAL_UPDATE_CHECK_PROMPT,
         tools: [{ googleSearch: {} }],

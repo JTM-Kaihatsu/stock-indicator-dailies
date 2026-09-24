@@ -192,31 +192,46 @@ function fakeResolveFetch(
 
 test('returns the trimmed text from a successful Gemini call', async () => {
   const { client } = scriptedGeminiClient('  The company operates in a fast-growing, cyclical sector.  ');
-  const result = await researchCompany('NVDA', { client });
+  const result = await researchCompany('NVDA', null, { client });
   assert.equal(result.research, 'The company operates in a fast-growing, cyclical sector.');
 });
 
 test('requests the googleSearch grounding tool and names the ticker', async () => {
   const { client, params } = scriptedGeminiClient('Findings.');
-  await researchCompany('NVDA', { client });
+  await researchCompany('NVDA', null, { client });
   const body = params[0] as { contents: string; config: { tools: Array<{ googleSearch?: unknown }> } };
   assert.match(body.contents, /NVDA/);
   assert.ok(body.config.tools.some((t) => 'googleSearch' in t), 'googleSearch tool should be offered');
 });
 
+test('omits any prior-research reference from contents when none is given', async () => {
+  const { client, params } = scriptedGeminiClient('Findings.');
+  await researchCompany('NVDA', null, { client });
+  const body = params[0] as { contents: string };
+  assert.doesNotMatch(body.contents, /Previous research summary/);
+});
+
+test('passes a given prior research summary into contents as a labeled reference', async () => {
+  const { client, params } = scriptedGeminiClient('Findings.');
+  await researchCompany('NVDA', 'NVIDIA leads the AI accelerator market.', { client });
+  const body = params[0] as { contents: string };
+  assert.match(body.contents, /Previous research summary for NVDA/);
+  assert.match(body.contents, /NVIDIA leads the AI accelerator market\./);
+});
+
 test('throws when Gemini returns no usable text', async () => {
   const { client } = scriptedGeminiClient(undefined);
-  await assert.rejects(() => researchCompany('NVDA', { client }), /no usable text/);
+  await assert.rejects(() => researchCompany('NVDA', null, { client }), /no usable text/);
 });
 
 test('throws when Gemini returns only whitespace', async () => {
   const { client } = scriptedGeminiClient('   ');
-  await assert.rejects(() => researchCompany('NVDA', { client }), /no usable text/);
+  await assert.rejects(() => researchCompany('NVDA', null, { client }), /no usable text/);
 });
 
 test('returns no citations when the response carries no grounding metadata', async () => {
   const { client } = scriptedGeminiClient('Findings with no grounding.');
-  const result = await researchCompany('NVDA', { client });
+  const result = await researchCompany('NVDA', null, { client });
   assert.deepEqual(result.citations, []);
 });
 
@@ -239,7 +254,7 @@ test('extracts citations from grounding metadata, with each source URL resolved 
     'https://redirect/1': 'https://reuters.com/tech/google-cloud-q3-2026',
     'https://redirect/2': 'https://bloomberg.com/news/articles/google-cloud-growth',
   });
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.deepEqual(result.citations, [
     {
       quote: 'Google Cloud grew 34% YoY.',
@@ -262,7 +277,7 @@ test('falls back to the original redirect URL when resolution fails', async () =
   ];
   const { client } = scriptedGeminiClient('Findings.', candidates);
   const { fetchFn } = fakeResolveFetch({ 'https://redirect/1': 'THROW' });
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations[0]!.sources[0]!.url, 'https://redirect/1');
 });
 
@@ -280,7 +295,7 @@ test('resolves a distinct URL only once even when cited by multiple quotes', asy
   ];
   const { client } = scriptedGeminiClient('Findings.', candidates);
   const { fetchFn, calls } = fakeResolveFetch({ 'https://redirect/1': 'https://reuters.com/article' });
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.deepEqual(calls, ['https://redirect/1', 'https://reuters.com/article']);
   assert.equal(result.citations[0]!.sources[0]!.url, 'https://reuters.com/article');
   assert.equal(result.citations[1]!.sources[0]!.url, 'https://reuters.com/article');
@@ -301,7 +316,7 @@ test('drops a grounding support with no text or no resolvable sources', async ()
   ];
   const { client } = scriptedGeminiClient('Findings.', candidates);
   const { fetchFn } = fakeResolveFetch();
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations.length, 1);
   assert.equal(result.citations[0]!.quote, 'Sourced claim.');
 });
@@ -325,7 +340,7 @@ test('scrapes an og:image thumbnail from the resolved page', async () => {
     { 'https://redirect/1': 'https://reuters.com/article' },
     { 'https://reuters.com/article': { html: '<head><meta property="og:image" content="https://cdn.reuters.com/thumb.jpg"></head>' } },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations[0]!.sources[0]!.thumbnailUrl, 'https://cdn.reuters.com/thumb.jpg');
 });
 
@@ -335,7 +350,7 @@ test('falls back to twitter:image when og:image is absent', async () => {
     { 'https://redirect/1': 'https://reuters.com/article' },
     { 'https://reuters.com/article': { html: '<head><meta name="twitter:image" content="https://cdn.reuters.com/tw.jpg"></head>' } },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations[0]!.sources[0]!.thumbnailUrl, 'https://cdn.reuters.com/tw.jpg');
 });
 
@@ -351,7 +366,7 @@ test('prefers og:image over twitter:image when both are present', async () => {
       },
     },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations[0]!.sources[0]!.thumbnailUrl, 'https://cdn.reuters.com/og.jpg');
 });
 
@@ -361,7 +376,7 @@ test('resolves a relative og:image URL against the resolved page URL', async () 
     { 'https://redirect/1': 'https://reuters.com/article' },
     { 'https://reuters.com/article': { html: '<head><meta property="og:image" content="/img/thumb.jpg"></head>' } },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations[0]!.sources[0]!.thumbnailUrl, 'https://reuters.com/img/thumb.jpg');
 });
 
@@ -371,7 +386,7 @@ test('omits thumbnailUrl when the page has no og:image or twitter:image tag', as
     { 'https://redirect/1': 'https://reuters.com/article' },
     { 'https://reuters.com/article': { html: '<head><title>No image here</title></head>' } },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal('thumbnailUrl' in result.citations[0]!.sources[0]!, false);
 });
 
@@ -381,7 +396,7 @@ test('omits thumbnailUrl when the thumbnail GET fails, without affecting URL res
     { 'https://redirect/1': 'https://reuters.com/article' },
     { 'https://reuters.com/article': { throws: true } },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations[0]!.sources[0]!.url, 'https://reuters.com/article');
   assert.equal('thumbnailUrl' in result.citations[0]!.sources[0]!, false);
 });
@@ -397,7 +412,7 @@ test('omits thumbnailUrl for a non-200 response even if the body contains a usab
       },
     },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal('thumbnailUrl' in result.citations[0]!.sources[0]!, false);
 });
 
@@ -412,7 +427,7 @@ test('omits thumbnailUrl for a non-HTML content-type', async () => {
       },
     },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal('thumbnailUrl' in result.citations[0]!.sources[0]!, false);
 });
 
@@ -423,7 +438,7 @@ test('omits thumbnailUrl when the og:image tag sits beyond the byte cap', async 
     { 'https://redirect/1': 'https://reuters.com/article' },
     { 'https://reuters.com/article': { html: `<head>${filler}<meta property="og:image" content="https://cdn.reuters.com/thumb.jpg"></head>` } },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal('thumbnailUrl' in result.citations[0]!.sources[0]!, false);
 });
 
@@ -435,7 +450,7 @@ test('scrapes siteName from og:site_name', async () => {
     { 'https://redirect/1': 'https://reuters.com/article' },
     { 'https://reuters.com/article': { html: '<head><meta property="og:site_name" content="Reuters"></head>' } },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations[0]!.sources[0]!.siteName, 'Reuters');
 });
 
@@ -445,7 +460,7 @@ test('scrapes articleTitle from og:title', async () => {
     { 'https://redirect/1': 'https://reuters.com/article' },
     { 'https://reuters.com/article': { html: '<head><meta property="og:title" content="Cloud growth accelerates"></head>' } },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations[0]!.sources[0]!.articleTitle, 'Cloud growth accelerates');
 });
 
@@ -455,7 +470,7 @@ test('falls back to the <title> tag when og:title is absent', async () => {
     { 'https://redirect/1': 'https://reuters.com/article' },
     { 'https://reuters.com/article': { html: '<head><title>Cloud growth accelerates</title></head>' } },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations[0]!.sources[0]!.articleTitle, 'Cloud growth accelerates');
 });
 
@@ -469,21 +484,21 @@ test('prefers og:title over the <title> tag when both are present', async () => 
       },
     },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations[0]!.sources[0]!.articleTitle, 'Cloud growth accelerates');
 });
 
 test('falls back to a hostname-derived siteName when the scrape fails entirely', async () => {
   const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
   const { fetchFn } = fakeResolveFetch({ 'https://redirect/1': 'https://www.reuters.com/article' });
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations[0]!.sources[0]!.siteName, 'Reuters');
 });
 
 test('hostname-derived siteName uses the brand label, not a leading subdomain like "global"', async () => {
   const { client } = scriptedGeminiClient('Findings.', singleSourceCandidates());
   const { fetchFn } = fakeResolveFetch({ 'https://redirect/1': 'https://global.morningstar.com/en-gb/stocks/nvidia' });
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal(result.citations[0]!.sources[0]!.siteName, 'Morningstar');
 });
 
@@ -493,7 +508,7 @@ test('omits articleTitle when neither og:title nor a <title> tag is present', as
     { 'https://redirect/1': 'https://reuters.com/article' },
     { 'https://reuters.com/article': { html: '<head><meta property="og:site_name" content="Reuters"></head>' } },
   );
-  const result = await researchCompany('GOOG', { client, resolveFetch: fetchFn });
+  const result = await researchCompany('GOOG', null, { client, resolveFetch: fetchFn });
   assert.equal('articleTitle' in result.citations[0]!.sources[0]!, false);
 });
 
@@ -508,7 +523,7 @@ test('researchCompany translates a 503 overloaded error into a friendly AdvisorU
     },
   };
   await assert.rejects(
-    () => researchCompany('NVDA', { client }),
+    () => researchCompany('NVDA', null, { client }),
     (err: unknown) => {
       assert.ok(err instanceof AdvisorUpstreamError);
       assert.equal(err.status, 503);
@@ -528,7 +543,7 @@ test('researchCompany passes through a non-retryable error unchanged', async () 
       },
     },
   };
-  await assert.rejects(() => researchCompany('NVDA', { client }), /invalid API key/);
+  await assert.rejects(() => researchCompany('NVDA', null, { client }), /invalid API key/);
 });
 
 test('researchCompany throws AdvisorWallClockTimeoutError when the call runs past timeoutMs', async () => {
@@ -540,39 +555,54 @@ test('researchCompany throws AdvisorWallClockTimeoutError when the call runs pas
       },
     },
   };
-  await assert.rejects(() => researchCompany('NVDA', { client, timeoutMs: 10 }), AdvisorWallClockTimeoutError);
+  await assert.rejects(() => researchCompany('NVDA', null, { client, timeoutMs: 10 }), AdvisorWallClockTimeoutError);
 });
 
 // --- checkForMaterialUpdates: the cheap refresh check ---
 
 test('parses a NO response as no updates', async () => {
   const { client } = scriptedGeminiClient('NO');
-  const result = await checkForMaterialUpdates('NVDA', '2026-09-01', '2026-09-10', { client });
+  const result = await checkForMaterialUpdates('NVDA', '2026-09-01', '2026-09-10', null, { client });
   assert.equal(result.hasUpdates, false);
   assert.equal(result.summary, null);
 });
 
 test('parses a YES response with a summary', async () => {
   const { client } = scriptedGeminiClient('YES\nThe company announced a major new product line.');
-  const result = await checkForMaterialUpdates('NVDA', '2026-09-01', '2026-09-10', { client });
+  const result = await checkForMaterialUpdates('NVDA', '2026-09-01', '2026-09-10', null, { client });
   assert.equal(result.hasUpdates, true);
   assert.equal(result.summary, 'The company announced a major new product line.');
 });
 
 test('treats an empty or malformed response as no updates', async () => {
   const { client } = scriptedGeminiClient(undefined);
-  const result = await checkForMaterialUpdates('NVDA', '2026-09-01', '2026-09-10', { client });
+  const result = await checkForMaterialUpdates('NVDA', '2026-09-01', '2026-09-10', null, { client });
   assert.equal(result.hasUpdates, false);
   assert.equal(result.summary, null);
 });
 
 test('checkForMaterialUpdates passes the ticker, since-date, and today into the prompt', async () => {
   const { client, params } = scriptedGeminiClient('NO');
-  await checkForMaterialUpdates('AAPL', '2026-08-15', '2026-09-10', { client });
+  await checkForMaterialUpdates('AAPL', '2026-08-15', '2026-09-10', null, { client });
   const body = params[0] as { contents: string };
   assert.match(body.contents, /AAPL/);
   assert.match(body.contents, /2026-08-15/);
   assert.match(body.contents, /2026-09-10/);
+});
+
+test('omits any prior-research reference from contents when none is given', async () => {
+  const { client, params } = scriptedGeminiClient('NO');
+  await checkForMaterialUpdates('AAPL', '2026-08-15', '2026-09-10', null, { client });
+  const body = params[0] as { contents: string };
+  assert.doesNotMatch(body.contents, /Existing research summary/);
+});
+
+test('passes a given prior research summary into contents as a labeled reference', async () => {
+  const { client, params } = scriptedGeminiClient('NO');
+  await checkForMaterialUpdates('AAPL', '2026-08-15', '2026-09-10', 'Apple faces DOJ antitrust scrutiny.', { client });
+  const body = params[0] as { contents: string };
+  assert.match(body.contents, /Existing research summary to check against/);
+  assert.match(body.contents, /Apple faces DOJ antitrust scrutiny\./);
 });
 
 // --- scoreForRiskTolerance: a backtest-validating tool loop ---

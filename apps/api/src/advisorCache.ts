@@ -48,11 +48,23 @@ function isFieldClaim(v: unknown): v is FieldClaim {
   );
 }
 
+export interface CachedResearch {
+  proposal: ResearchProposal;
+  retrievedAt: string;
+}
+
 /** Look up cached research for `ticker`, regardless of which risk
  * tolerance ends up being scored against it (research doesn't vary by
- * who's asking). `null` on a miss, an expired row, or when Supabase isn't
- * configured or the lookup fails; all treated the same by the caller. */
-export async function getCachedResearch(ticker: string): Promise<ResearchProposal | null> {
+ * who's asking), and regardless of freshness: unlike before, a stale row
+ * is NOT hidden behind `null` here, same reasoning as getCachedSuggestion
+ * below. A caller that wants to reuse it outright still needs to check
+ * `isFresh(retrievedAt)` itself; a caller doing a fresh regeneration can
+ * use even a stale row's `proposal.research` as prior-context for
+ * researchCompany/checkForMaterialUpdates (see advisorJobs.ts), since
+ * "what we knew last time, possibly outdated" is still a useful starting
+ * point for those. `null` only on a genuine miss, or when Supabase isn't
+ * configured or the lookup fails. */
+export async function getCachedResearch(ticker: string): Promise<CachedResearch | null> {
   const db = getClient();
   if (!db) return null;
 
@@ -62,8 +74,11 @@ export async function getCachedResearch(ticker: string): Promise<ResearchProposa
       .select('ticker, retrieved_at, research, citations')
       .eq('ticker', ticker)
       .maybeSingle<ResearchCacheRow>();
-    if (error || !data || !isFresh(data.retrieved_at)) return null;
-    return { research: data.research, citations: (data.citations ?? []).filter(isResearchQuote) };
+    if (error || !data) return null;
+    return {
+      proposal: { research: data.research, citations: (data.citations ?? []).filter(isResearchQuote) },
+      retrievedAt: data.retrieved_at,
+    };
   } catch {
     return null;
   }
