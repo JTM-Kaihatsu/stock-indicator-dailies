@@ -145,6 +145,12 @@ export const PROPOSE_SETTINGS_TOOL = {
           "EARLIER end of that range. null only if the research gives no indication of timing at all; don't " +
           'invent a date with no basis in the research.',
       },
+      nextEarningsDateSource: {
+        type: ['string', 'null'] as const,
+        description:
+          'The domain of the source the research drew nextEarningsDate from (e.g. "investor.apple.com"), if ' +
+          "attributable to one. null if nextEarningsDate is null, or you can't attribute it to a specific source.",
+      },
       earningsOutlook: {
         type: 'string' as const,
         description:
@@ -228,7 +234,7 @@ export const PROPOSE_SETTINGS_TOOL = {
     },
     required: [
       'rationale', 'settings', 'fit', 'fitReason',
-      'nextEarningsDate', 'earningsOutlook', 'earningsLikelihood', 'earningsLikelihoodReason',
+      'nextEarningsDate', 'nextEarningsDateSource', 'earningsOutlook', 'earningsLikelihood', 'earningsLikelihoodReason',
       'rationaleClaims', 'fitReasonClaims', 'earningsOutlookClaims', 'earningsLikelihoodReasonClaims',
     ],
   },

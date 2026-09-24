@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
+import { isValid, parseISO } from 'date-fns';
 import { runBacktest, type BacktestOptions, type BacktestResult } from '@stock-indicator-dailies/eval-backtest';
 import type { Bar } from '@stock-indicator-dailies/indicators';
 
@@ -254,6 +255,12 @@ export interface ResearchOptions {
    * citation-URL resolution (see resolveSourceUrl) without making real
    * network calls, same testability pattern as `client` above. */
   resolveFetch?: typeof fetch;
+  /** Only used by checkForMaterialUpdates's earnings-date validation (see
+   * validateEarningsDate): options for the Claude call that fallback-parses
+   * a date the strict typecheck rejected. Kept separate from this
+   * interface's own Gemini-shaped fields (apiKey/model/client above all
+   * mean something different for Claude) rather than overloading them. */
+  earningsDateClaudeOptions?: ScoreOptions;
 }
 
 /** scoreForRiskTolerance stays on Claude: a short backtest-validating tool
@@ -277,6 +284,12 @@ export interface ScoreOptions {
    * can surface real progress instead of a single static "please wait".
    * Purely observational: never awaited, never affects the loop itself. */
   onStage?: (stage: string) => void;
+  /** Only used by scoreForRiskTolerance's earnings-date validation (see
+   * validateEarningsDate): options for the Gemini call that re-searches for
+   * a stale date, excluding whatever source domain produced it. Kept
+   * separate from this interface's own Claude-shaped fields for the same
+   * reason ResearchOptions.earningsDateClaudeOptions is separate from its. */
+  earningsDateGeminiOptions?: ResearchOptions;
 }
 
 /** Ordinal labels for the loop's own backtest calls (1-indexed,
@@ -526,17 +539,20 @@ Respond in exactly this format, nothing else:
 Line 1: YES or NO (whether anything materially significant has happened)
 Line 2: the confirmed or estimated next earnings date, ISO 8601 (e.g. "2026-10-22"), or the single word UNKNOWN
 if you genuinely find no timing indication at all.
+Line 3: the domain of the source you drew that date from (e.g. "investor.apple.com"), or the single word NONE if
+line 2 is UNKNOWN or you can't attribute it to a specific source.
 Remaining lines (only if line 1 is YES): a 1-2 sentence summary of what changed.`;
 
 export interface MaterialUpdateCheck {
   hasUpdates: boolean;
   summary: string | null;
   /** The next earnings date this check confirmed or found, refined from
-   * whatever was passed in as context.priorNextEarningsDate; null only
-   * when the check genuinely found no timing indication at all. Callers
-   * should use this to keep a cached suggestion's earnings date current
-   * even when hasUpdates is false and no full regeneration happens (see
-   * apps/api/src/advisorJobs.ts). */
+   * whatever was passed in as context.priorNextEarningsDate, and validated
+   * (see validateEarningsDate: rejects a stale or unparseable date rather
+   * than passing one straight through); null only when the check genuinely
+   * found no usable date at all. Callers should use this to keep a cached
+   * suggestion's earnings date current even when hasUpdates is false and no
+   * full regeneration happens (see apps/api/src/advisorJobs.ts). */
   nextEarningsDate: string | null;
 }
 
@@ -599,12 +615,176 @@ export async function checkForMaterialUpdates(
     const firstLine = (lines[0] ?? '').trim().toUpperCase();
     const hasUpdates = firstLine.startsWith('YES');
     const earningsLine = (lines[1] ?? '').trim();
-    const nextEarningsDate = earningsLine.length > 0 && earningsLine.toUpperCase() !== 'UNKNOWN' ? earningsLine : null;
-    const summary = hasUpdates ? lines.slice(2).join('\n').trim() || null : null;
+    const domainLine = (lines[2] ?? '').trim();
+    const rawEarningsDate = earningsLine.length > 0 && earningsLine.toUpperCase() !== 'UNKNOWN' ? earningsLine : null;
+    const rawSourceDomain = domainLine.length > 0 && domainLine.toUpperCase() !== 'NONE' ? domainLine : null;
+    const summary = hasUpdates ? lines.slice(3).join('\n').trim() || null : null;
+    const nextEarningsDate = await validateEarningsDate(
+      ticker,
+      { date: rawEarningsDate, sourceDomain: rawSourceDomain },
+      new Date(context.now),
+      options.earningsDateClaudeOptions ?? {},
+      options,
+    );
     return { hasUpdates, summary, nextEarningsDate };
   })();
 
   return withWallClock(work, timeoutMs);
+}
+
+// --- Earnings-date validation, shared by checkForMaterialUpdates above and
+// scoreForRiskTolerance below: neither trusts a raw model-reported date
+// straight through. ---
+
+const ISO_DATE_SHAPE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Strict ISO-8601 calendar-date check via date-fns (not the bare `Date`
+ * constructor's own lenient, inconsistent-across-engines parsing): the
+ * shape regex first (rejects a partial date like "2026-10" that parseISO
+ * would otherwise happily accept as the 1st of the month), then parseISO +
+ * isValid to reject a shape-valid but impossible calendar date like
+ * "2026-02-30". This is "a known library" doing the typecheck, not
+ * hand-rolled date-math. */
+function isStrictIsoDate(raw: string): boolean {
+  return ISO_DATE_SHAPE_RE.test(raw.trim()) && isValid(parseISO(raw.trim()));
+}
+
+/** Mirrors apps/api/src/advisorJobs.ts's isPastEarningsDate exactly (through
+ * the end of the calendar day in UTC, not the instant it starts); duplicated
+ * here since packages/advisor can't depend on apps/api, and this is the only
+ * other place that needs the same "is this earnings date stale" check. */
+function isPastEarningsDay(isoDate: string, now: Date): boolean {
+  return now.getTime() > new Date(`${isoDate}T23:59:59Z`).getTime();
+}
+
+function extractClaudeText(content: Array<{ type: string; [key: string]: unknown }>): string {
+  return content
+    .filter((block): block is { type: 'text'; text: string } => block.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text)
+    .join('')
+    .trim();
+}
+
+/** Cheap Claude call (no tools, no search, tiny output) that tries to
+ * salvage a date a strict typecheck rejected -- e.g. "late October 2026" or
+ * "Q4 2026" -- into a clean ISO date, resolving an estimated range to its
+ * earlier end. null if Claude itself can't extract anything specific
+ * enough; this function never throws that as an error, since an
+ * unparseable date degrading to "missing" is expected, normal behavior
+ * here, not a failure. */
+async function fallbackParseEarningsDate(raw: string, options: ScoreOptions): Promise<string | null> {
+  const client = buildClaudeClient(options);
+  const response = await createClaudeMessage(client, {
+    model: options.model ?? DEFAULT_MODEL,
+    max_tokens: 32,
+    system:
+      'Extract a single earnings-report date from the given text and respond with ONLY that date in ISO 8601 ' +
+      '(YYYY-MM-DD) format, resolving an estimated range to its earlier end. If the text does not contain a ' +
+      'specific enough date to extract one, respond with exactly UNKNOWN and nothing else.',
+    messages: [{ role: 'user', content: raw }],
+  });
+  const text = extractClaudeText(response.content);
+  return text.length > 0 && text.toUpperCase() !== 'UNKNOWN' ? text : null;
+}
+
+interface EarningsDateSearchResult {
+  date: string | null;
+  sourceDomain: string | null;
+}
+
+/** The "second search" step: re-searches for `ticker`'s next earnings date,
+ * explicitly excluding whatever domain produced a stale date the first
+ * time, since that domain is presumably serving outdated information for
+ * this specific fact. A fresh, single-purpose Gemini call, not a recursive
+ * call back into researchCompany/checkForMaterialUpdates. `excludeDomain`
+ * is null when the original source couldn't be attributed to a domain at
+ * all; still worth one plain search in that case, just without an
+ * exclusion clause. */
+async function searchEarningsDateExcludingDomain(
+  ticker: string,
+  excludeDomain: string | null,
+  options: ResearchOptions,
+): Promise<EarningsDateSearchResult> {
+  const model = options.model ?? DEFAULT_GEMINI_MODEL;
+  const client = buildGeminiClient(options);
+  const exclusion = excludeDomain
+    ? ` Do not use ${excludeDomain} as a source for this date -- it previously reported one that turned out to be ` +
+      "stale, so treat it as unreliable for this specific fact even if it's otherwise a legitimate site."
+    : '';
+  const response = await createGeminiContent(client, {
+    model,
+    contents: `Find ${ticker}'s next scheduled earnings report date.${exclusion}`,
+    config: {
+      systemInstruction:
+        'Use Google Search. Respond in exactly this format, nothing else:\n' +
+        'Line 1: the earnings date, ISO 8601 (e.g. "2026-10-22"), resolving an estimated range to its earlier ' +
+        `end, or the single word UNKNOWN if you can't find one${excludeDomain ? ' from any other source' : ''}.\n` +
+        'Line 2: the domain of the source you found it from, or the single word NONE if line 1 is UNKNOWN.',
+      tools: [{ googleSearch: {} }],
+      maxOutputTokens: 128,
+    },
+  });
+  const lines = (response.text ?? '').trim().split('\n');
+  const dateLine = (lines[0] ?? '').trim();
+  const domainLine = (lines[1] ?? '').trim();
+  return {
+    date: dateLine.length > 0 && dateLine.toUpperCase() !== 'UNKNOWN' ? dateLine : null,
+    sourceDomain: domainLine.length > 0 && domainLine.toUpperCase() !== 'NONE' ? domainLine : null,
+  };
+}
+
+interface EarningsDateCandidate {
+  date: string | null;
+  sourceDomain: string | null;
+}
+
+/** Deterministic validation for an earnings date extracted by either
+ * checkForMaterialUpdates above or scoreForRiskTolerance below: never
+ * trusts a raw model-reported date straight through. Two independent
+ * failure modes, handled differently:
+ *
+ * - STALE (a real, parseable date that's already in the past): the source
+ *   that reported it is presumably out of date, so this re-searches once,
+ *   excluding that source's domain, and validates whatever comes back the
+ *   same way (typecheck + staleness), without a further LLM fallback or a
+ *   third search. Still stale, or still unparseable -> report missing.
+ * - UNPARSEABLE (fails a strict ISO-8601 typecheck): tries once to salvage
+ *   it with a cheap Claude parse (e.g. "late October 2026" -> a clean
+ *   date). If that also fails the typecheck, there's no reliable date (or
+ *   attributable source domain) to build a targeted second search around,
+ *   so this reports missing directly rather than searching blind. If the
+ *   Claude-parsed date passes the typecheck but is itself stale, that DOES
+ *   get the one re-search-excluding-domain attempt above.
+ *
+ * `null` in, `null` out: a candidate with no date at all (the model itself
+ * reported none) skips all of this and is simply missing already. Callers
+ * should store whatever comes back here directly, including null -- the
+ * earnings-date field must stay nullable end to end (persisted as
+ * next_earnings_date, surfaced on the frontend as "not found in research"
+ * when null) rather than ever falling back to a guessed or partial value. */
+async function validateEarningsDate(
+  ticker: string,
+  candidate: EarningsDateCandidate,
+  now: Date,
+  claudeOptions: ScoreOptions,
+  geminiOptions: ResearchOptions,
+): Promise<string | null> {
+  if (!candidate.date) return null;
+
+  let workingDate = candidate.date;
+  const workingDomain = candidate.sourceDomain;
+
+  if (!isStrictIsoDate(workingDate)) {
+    const salvaged = await fallbackParseEarningsDate(workingDate, claudeOptions);
+    if (!salvaged || !isStrictIsoDate(salvaged)) return null;
+    workingDate = salvaged;
+  }
+
+  if (!isPastEarningsDay(workingDate, now)) return workingDate;
+
+  const second = await searchEarningsDateExcludingDomain(ticker, workingDomain, geminiOptions);
+  if (!second.date || !isStrictIsoDate(second.date) || isPastEarningsDay(second.date, now)) return null;
+  return second.date;
 }
 
 /** Mirrors DEFAULT_SETTINGS in apps/web/src/lib/settings.ts (buyConsensus/
@@ -991,7 +1171,20 @@ export async function scoreForRiskTolerance(
     }
 
     const finalized = substituteBetterCandidate(proposal.input, finalBacktestResult, candidates);
-    return validateRiskScoredProposal(finalized.input, research.citations, finalized.backtestResult);
+    const finalizedInput = finalized.input as Record<string, unknown>;
+    const validatedEarningsDate = await validateEarningsDate(
+      ticker,
+      {
+        date: typeof finalizedInput.nextEarningsDate === 'string' ? finalizedInput.nextEarningsDate : null,
+        sourceDomain: typeof finalizedInput.nextEarningsDateSource === 'string' ? finalizedInput.nextEarningsDateSource : null,
+      },
+      new Date(),
+      options,
+      options.earningsDateGeminiOptions ?? {},
+    );
+    const inputWithValidatedEarningsDate = { ...finalizedInput, nextEarningsDate: validatedEarningsDate };
+
+    return validateRiskScoredProposal(inputWithValidatedEarningsDate, research.citations, finalized.backtestResult);
   })();
 
   return withWallClock(work, timeoutMs);

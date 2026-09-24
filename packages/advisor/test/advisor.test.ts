@@ -73,6 +73,16 @@ function mkResearch(research: string, citations: ResearchProposal['citations'] =
   return { research, citations };
 }
 
+/** scoreForRiskTolerance now runs its result's nextEarningsDate through
+ * validateEarningsDate, which checks staleness against the real wall
+ * clock (see advisor.ts; there's no injectable "now" for this, unlike
+ * checkForMaterialUpdates's context.now). A fixture hardcoded to a
+ * specific calendar date would silently start failing (or start making
+ * real network calls to a fake client) the moment real time passed it;
+ * computed a year out from whenever the suite actually runs instead, so
+ * it's always safely in the future regardless of when that is. */
+const FUTURE_EARNINGS_DATE = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
 function proposeSettingsBlock(overrides: Record<string, unknown> = {}) {
   return {
     type: 'tool_use',
@@ -83,7 +93,8 @@ function proposeSettingsBlock(overrides: Record<string, unknown> = {}) {
       settings: VALID_SETTINGS,
       fit: 'within-bounds',
       fitReason: 'Nothing in the research suggests unusual risk.',
-      nextEarningsDate: '2026-10-22',
+      nextEarningsDate: FUTURE_EARNINGS_DATE,
+      nextEarningsDateSource: 'investor.example.com',
       earningsOutlook: 'Analysts expect revenue growth of 15% year over year.',
       earningsLikelihood: 'moderate',
       earningsLikelihoodReason: 'The company has beaten expectations 3 of the last 4 quarters.',
@@ -133,6 +144,27 @@ function scriptedGeminiClient(text: string | undefined, candidates?: unknown[]) 
       async generateContent(p) {
         params.push(p);
         return { text, candidates: candidates as never };
+      },
+    },
+  };
+  return { client, params };
+}
+
+/** Like scriptedGeminiClient, but a different response per call (falling
+ * back to the last one after that), for tests exercising the earnings-date
+ * validation's domain-excluded second search: the first call is the main
+ * check/research response, the second is searchEarningsDateExcludingDomain's
+ * own follow-up. */
+function scriptedGeminiClientSequence(responses: Array<{ text?: string }>) {
+  let call = 0;
+  const params: unknown[] = [];
+  const client: GeminiLike = {
+    models: {
+      async generateContent(p) {
+        params.push(p);
+        const response = responses[call] ?? responses[responses.length - 1]!;
+        call++;
+        return { text: response.text };
       },
     },
   };
@@ -570,8 +602,8 @@ test('parses a NO response as no updates, with no earnings date given', async ()
   assert.equal(result.nextEarningsDate, null);
 });
 
-test('parses a YES response with an earnings date and a summary', async () => {
-  const { client } = scriptedGeminiClient('YES\n2026-10-22\nThe company announced a major new product line.');
+test('parses a YES response with an earnings date, its source domain, and a summary', async () => {
+  const { client } = scriptedGeminiClient('YES\n2026-10-22\ninvestor.example.com\nThe company announced a major new product line.');
   const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, { client });
   assert.equal(result.hasUpdates, true);
   assert.equal(result.nextEarningsDate, '2026-10-22');
@@ -630,6 +662,85 @@ test('passes a given prior research summary into contents as a labeled reference
   assert.match(body.contents, /Apple faces DOJ antitrust scrutiny\./);
 });
 
+// --- validateEarningsDate: deterministic checks on a model-reported date,
+// exercised through checkForMaterialUpdates ---
+
+test('a well-formed, non-stale date is used directly with no extra calls', async () => {
+  const { client, params } = scriptedGeminiClient(`NO\n${FUTURE_EARNINGS_DATE}\ninvestor.example.com`);
+  const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, { client });
+  assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
+  assert.equal(params.length, 1, 'no fallback parse or second search should have been attempted');
+});
+
+test('re-searches excluding the source domain when the found date is stale, and uses what it finds', async () => {
+  const { client, params } = scriptedGeminiClientSequence([
+    { text: 'NO\n2020-01-01\nstale-calendar.example.com' },
+    { text: `${FUTURE_EARNINGS_DATE}\ninvestor.example.com` },
+  ]);
+  const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, { client });
+  assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
+  assert.equal(params.length, 2);
+  const secondCallContents = (params[1] as { contents: string }).contents;
+  assert.match(secondCallContents, /stale-calendar\.example\.com/);
+});
+
+test('reports missing when even the domain-excluded second search still finds a stale date', async () => {
+  const { client } = scriptedGeminiClientSequence([
+    { text: 'NO\n2020-01-01\nstale-calendar.example.com' },
+    { text: '2020-06-01\nanother-stale-site.example.com' },
+  ]);
+  const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, { client });
+  assert.equal(result.nextEarningsDate, null);
+});
+
+test('still attempts a second search when stale but no source domain was attributed, without an exclusion clause', async () => {
+  const { client, params } = scriptedGeminiClientSequence([
+    { text: 'NO\n2020-01-01\nNONE' },
+    { text: `${FUTURE_EARNINGS_DATE}\ninvestor.example.com` },
+  ]);
+  const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, { client });
+  assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
+  const secondCallContents = (params[1] as { contents: string }).contents;
+  assert.doesNotMatch(secondCallContents, /Do not use/);
+});
+
+test('salvages an unparseable date via the Claude fallback when it yields a valid, non-stale date', async () => {
+  const { client: geminiClient } = scriptedGeminiClient('NO\nlate October next year\nexample.com');
+  const { client: claudeClient } = scriptedClaudeClient([{ content: [{ type: 'text', text: FUTURE_EARNINGS_DATE }] }]);
+  const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, {
+    client: geminiClient,
+    earningsDateClaudeOptions: { client: claudeClient },
+  });
+  assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
+});
+
+test('reports missing without a second search when the date is unparseable even after the Claude fallback', async () => {
+  const { client: geminiClient, params } = scriptedGeminiClient('NO\ngarbage-not-a-date\nexample.com');
+  const { client: claudeClient } = scriptedClaudeClient([{ content: [{ type: 'text', text: 'UNKNOWN' }] }]);
+  const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, {
+    client: geminiClient,
+    earningsDateClaudeOptions: { client: claudeClient },
+  });
+  assert.equal(result.nextEarningsDate, null);
+  assert.equal(params.length, 1, 'no domain-excluded second search should have been attempted');
+});
+
+test('still triggers the domain-excluded second search when the Claude-salvaged date turns out to be stale', async () => {
+  const { client: geminiClient, params } = scriptedGeminiClientSequence([
+    { text: 'NO\ngarbage-not-a-date\nstale-source.example.com' },
+    { text: `${FUTURE_EARNINGS_DATE}\ninvestor.example.com` },
+  ]);
+  const { client: claudeClient } = scriptedClaudeClient([{ content: [{ type: 'text', text: '2020-01-01' }] }]);
+  const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, {
+    client: geminiClient,
+    earningsDateClaudeOptions: { client: claudeClient },
+  });
+  assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
+  assert.equal(params.length, 2);
+  const secondCallContents = (params[1] as { contents: string }).contents;
+  assert.match(secondCallContents, /stale-source\.example\.com/);
+});
+
 // --- scoreForRiskTolerance: a backtest-validating tool loop ---
 
 test('validates with run_backtest before propose_settings is honored, then returns the proposal', async () => {
@@ -642,7 +753,7 @@ test('validates with run_backtest before propose_settings is honored, then retur
   assert.equal(result.rationale, 'Because the sector is trending.');
   assert.deepEqual(result.settings, VALID_SETTINGS);
   assert.equal(result.fit, 'within-bounds');
-  assert.equal(result.nextEarningsDate, '2026-10-22');
+  assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
   assert.equal(result.earningsOutlook, 'Analysts expect revenue growth of 15% year over year.');
   assert.equal(result.earningsLikelihood, 'moderate');
   assert.equal(bodies.length, 2, 'one run_backtest turn, then one propose_settings turn');
@@ -900,6 +1011,25 @@ test('accepts and normalizes a null nextEarningsDate', async () => {
   ]);
   const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client });
   assert.equal(result.nextEarningsDate, null);
+});
+
+test('validates the finalized nextEarningsDate, correcting a stale one via a domain-excluded search', async () => {
+  const bars = syntheticBars();
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
+    {
+      content: [
+        proposeSettingsBlock({ nextEarningsDate: '2020-01-01', nextEarningsDateSource: 'stale-site.example.com' }),
+      ],
+    },
+  ]);
+  const { client: geminiClient, params } = scriptedGeminiClient(`${FUTURE_EARNINGS_DATE}\ninvestor.example.com`);
+  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, {
+    client,
+    earningsDateGeminiOptions: { client: geminiClient },
+  });
+  assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
+  assert.match((params[0] as { contents: string }).contents, /stale-site\.example\.com/);
 });
 
 test('strips stray trailing pseudo-XML scaffolding from rationale, fitReason, and earnings fields', async () => {
