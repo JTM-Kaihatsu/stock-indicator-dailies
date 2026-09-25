@@ -390,6 +390,15 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.7); curs
   border-radius: 999px; padding: 3px 10px; cursor: pointer;
 }
 .pill-source:hover, .pill-source:focus-visible { background: var(--surface); }
+/* A time-sensitive claim the backend tried, and failed, to corroborate
+   with a second independent-domain source; same caution color as the AI
+   Suggestion panel's other "proceed carefully" badges (FIT_STYLES). */
+.pill-unconfirmed {
+  display: inline-flex; align-items: center; margin-left: 6px;
+  font-family: var(--mono); font-size: calc(10px * var(--type-scale)); text-transform: uppercase; letter-spacing: .04em;
+  color: var(--hold); background: var(--hold-bg); border: 1px solid var(--hold);
+  border-radius: 999px; padding: 3px 8px; cursor: help;
+}
 
 .source-popout {
   position: absolute; top: calc(100% + 8px); left: 0; z-index: 20;

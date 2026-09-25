@@ -33,10 +33,17 @@ export type EarningsLikelihood = 'low' | 'moderate' | 'high';
  * not a raw Google grounding-redirect link. `thumbnailUrl`/`siteName`/
  * `articleTitle` are a best-effort scrape of that page; `siteName` is
  * nearly always present, `thumbnailUrl`/`articleTitle` are commonly absent
- * (scrape failure, or the page has neither tag). */
+ * (scrape failure, or the page has neither tag).
+ *
+ * `sourceConfidence` is set only for a quote the backend judged
+ * time-sensitive (a date, recent event, or specific figure) and couldn't
+ * find a second, independent-domain source to corroborate: the quote and
+ * its one source are still shown (never dropped), just flagged lower
+ * confidence. undefined means no confidence concern, not "unknown". */
 export interface ResearchQuote {
   quote: string;
   sources: Array<{ title: string; url: string; thumbnailUrl?: string; siteName?: string; articleTitle?: string }>;
+  sourceConfidence?: 'single-source';
 }
 
 /** One synthesized claim the advisor made in support of one of its output
