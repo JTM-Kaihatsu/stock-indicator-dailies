@@ -25,8 +25,12 @@ function prettifySiteName(url: string): string {
  * every source in order (site name, article title, URL, thumbnail).
  * Multiple sources per quote is normal: Gemini's grounding metadata
  * attributes one segment of its research text to every search result that
- * corroborates it, not just one. */
-function SourcePill({ sources }: { sources: ResearchQuote['sources'] }) {
+ * corroborates it, not just one. `sourceConfidence: 'single-source'` adds
+ * a small "unconfirmed" label next to the pill: the backend already tried
+ * once to find a second, independent-domain source for this specific
+ * (time-sensitive) claim and couldn't, so it's shown with visibly lower
+ * confidence rather than the same weight as a corroborated one. */
+function SourcePill({ sources, sourceConfidence }: { sources: ResearchQuote['sources']; sourceConfidence?: ResearchQuote['sourceConfidence'] }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement>(null);
 
@@ -61,6 +65,14 @@ function SourcePill({ sources }: { sources: ResearchQuote['sources'] }) {
       >
         {label}
       </button>
+      {sourceConfidence === 'single-source' && (
+        <span
+          className="pill-unconfirmed"
+          title="This time-sensitive claim has only one source; a second, independent source could not be found to corroborate it."
+        >
+          unconfirmed
+        </span>
+      )}
       {open && (
         <div className="source-popout" role="dialog" aria-label="Sources">
           {sources.map((s, i) => (
@@ -177,7 +189,7 @@ export function CitationButton({ citations }: { citations: FieldClaim[] }) {
                         }}
                       >
                         <div style={{ color: 'var(--muted)', fontStyle: 'italic' }}>{q.quote}</div>
-                        <SourcePill sources={q.sources} />
+                        <SourcePill sources={q.sources} sourceConfidence={q.sourceConfidence} />
                       </div>
                     ))}
                   </div>

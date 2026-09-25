@@ -27,10 +27,21 @@ export type RiskTolerance = 'averse' | 'neutral' | 'seeking';
  * same page; `siteName` is nearly always present (falls back to a
  * hostname-derived label with no network needed), `thumbnailUrl` and
  * `articleTitle` are commonly absent (scrape failure, or the page simply
- * has neither tag). */
+ * has neither tag).
+ *
+ * `sourceConfidence` is set only for a quote verifyTimeSensitiveClaims
+ * (advisor.ts) judged time-sensitive (a date, recent event, or specific
+ * figure -- something that could go stale, unlike general background):
+ * 'single-source' when a second, different-domain source couldn't be
+ * found to corroborate it (the quote and its one existing source are
+ * still shown, just flagged lower-confidence rather than dropped);
+ * undefined for any quote that either wasn't time-sensitive at all, or
+ * already had (or was successfully given) 2+ distinct-domain sources --
+ * i.e. undefined means "no confidence concern," not "unknown." */
 export interface ResearchQuote {
   quote: string;
   sources: Array<{ title: string; url: string; thumbnailUrl?: string; siteName?: string; articleTitle?: string }>;
+  sourceConfidence?: 'single-source';
 }
 
 /** Stage 1's output: a reusable research brief, gathered by Gemini via

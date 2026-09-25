@@ -155,7 +155,7 @@ function scriptedGeminiClient(text: string | undefined, candidates?: unknown[]) 
  * validation's domain-excluded second search: the first call is the main
  * check/research response, the second is searchEarningsDateExcludingDomain's
  * own follow-up. */
-function scriptedGeminiClientSequence(responses: Array<{ text?: string }>) {
+function scriptedGeminiClientSequence(responses: Array<{ text?: string; candidates?: unknown[] }>) {
   let call = 0;
   const params: unknown[] = [];
   const client: GeminiLike = {
@@ -164,7 +164,7 @@ function scriptedGeminiClientSequence(responses: Array<{ text?: string }>) {
         params.push(p);
         const response = responses[call] ?? responses[responses.length - 1]!;
         call++;
-        return { text: response.text };
+        return { text: response.text, candidates: response.candidates as never };
       },
     },
   };
@@ -590,6 +590,164 @@ test('researchCompany throws AdvisorWallClockTimeoutError when the call runs pas
   await assert.rejects(() => researchCompany('NVDA', null, { client, timeoutMs: 10 }), AdvisorWallClockTimeoutError);
 });
 
+// --- verifyTimeSensitiveClaims: dual-source corroboration for
+// time-sensitive research quotes ---
+
+/** A single-quote, single-source grounding fixture, for tests exercising
+ * the time-sensitive-claim verification step; `quoteText` defaults to
+ * something plausibly time-sensitive so classification tests don't need
+ * to restate it. */
+function singleSourceQuoteCandidates(quoteText = 'Revenue grew 34% in Q3 2026.', sourceUri = 'https://redirect/1') {
+  return [
+    {
+      groundingMetadata: {
+        groundingChunks: [{ web: { title: 'Reuters', uri: sourceUri } }],
+        groundingSupports: [{ segment: { text: quoteText }, groundingChunkIndices: [0] }],
+      },
+    },
+  ];
+}
+
+test('classifying no quotes as time-sensitive leaves citations unchanged, with no corroboration search', async () => {
+  const { client: geminiClient, params } = scriptedGeminiClientSequence([
+    { text: 'Findings.', candidates: singleSourceQuoteCandidates() },
+  ]);
+  const { client: claudeClient } = scriptedClaudeClient([{ content: [{ type: 'text', text: 'NONE' }] }]);
+  const result = await researchCompany('GOOG', null, { client: geminiClient, claudeOptions: { client: claudeClient } });
+  assert.equal(result.citations[0]!.sourceConfidence, undefined);
+  assert.equal(result.citations[0]!.sources.length, 1);
+  assert.equal(params.length, 1, 'no corroboration search should have been attempted');
+});
+
+test('skips the corroboration search for a time-sensitive quote that already has 2+ distinct-domain sources', async () => {
+  const candidates = [
+    {
+      groundingMetadata: {
+        groundingChunks: [
+          { web: { title: 'Reuters', uri: 'https://redirect/1' } },
+          { web: { title: 'Bloomberg', uri: 'https://redirect/2' } },
+        ],
+        groundingSupports: [{ segment: { text: 'Revenue grew 34% in Q3 2026.' }, groundingChunkIndices: [0, 1] }],
+      },
+    },
+  ];
+  const { client: geminiClient, params } = scriptedGeminiClientSequence([{ text: 'Findings.', candidates }]);
+  const { client: claudeClient } = scriptedClaudeClient([{ content: [{ type: 'text', text: '0' }] }]);
+  const { fetchFn } = fakeResolveFetch({
+    'https://redirect/1': 'https://reuters.com/a',
+    'https://redirect/2': 'https://bloomberg.com/b',
+  });
+  const result = await researchCompany('GOOG', null, { client: geminiClient, claudeOptions: { client: claudeClient }, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sourceConfidence, undefined);
+  assert.equal(params.length, 1, 'already independently corroborated; no search needed');
+});
+
+test('appends a second, independent source when corroboration finds one for a time-sensitive, single-sourced quote', async () => {
+  const { client: geminiClient, params } = scriptedGeminiClientSequence([
+    { text: 'Findings.', candidates: singleSourceQuoteCandidates() },
+    { text: 'https://redirect/2' },
+  ]);
+  const { client: claudeClient } = scriptedClaudeClient([{ content: [{ type: 'text', text: '0' }] }]);
+  const { fetchFn } = fakeResolveFetch({
+    'https://redirect/1': 'https://reuters.com/a',
+    'https://redirect/2': 'https://bloomberg.com/b',
+  });
+  const result = await researchCompany('GOOG', null, { client: geminiClient, claudeOptions: { client: claudeClient }, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sourceConfidence, undefined);
+  assert.equal(result.citations[0]!.sources.length, 2);
+  assert.equal(result.citations[0]!.sources[1]!.url, 'https://bloomberg.com/b');
+  assert.equal(params.length, 2);
+  const searchContents = (params[1] as { contents: string }).contents;
+  assert.match(searchContents, /reuters\.com/);
+});
+
+test('marks a time-sensitive, single-sourced quote as single-source when no corroboration is found', async () => {
+  const { client: geminiClient } = scriptedGeminiClientSequence([
+    { text: 'Findings.', candidates: singleSourceQuoteCandidates() },
+    { text: 'NONE' },
+  ]);
+  const { client: claudeClient } = scriptedClaudeClient([{ content: [{ type: 'text', text: '0' }] }]);
+  const { fetchFn } = fakeResolveFetch({ 'https://redirect/1': 'https://reuters.com/a' });
+  const result = await researchCompany('GOOG', null, { client: geminiClient, claudeOptions: { client: claudeClient }, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sourceConfidence, 'single-source');
+  assert.equal(result.citations[0]!.sources.length, 1, 'the one real source is kept, not dropped');
+});
+
+test('does not count a "corroborating" source that turns out to be the same excluded domain', async () => {
+  const { client: geminiClient } = scriptedGeminiClientSequence([
+    { text: 'Findings.', candidates: singleSourceQuoteCandidates() },
+    { text: 'https://reuters.com/a-different-article' },
+  ]);
+  const { client: claudeClient } = scriptedClaudeClient([{ content: [{ type: 'text', text: '0' }] }]);
+  const { fetchFn } = fakeResolveFetch({
+    'https://redirect/1': 'https://reuters.com/a',
+    'https://reuters.com/a-different-article': 'https://reuters.com/a-different-article',
+  });
+  const result = await researchCompany('GOOG', null, { client: geminiClient, claudeOptions: { client: claudeClient }, resolveFetch: fetchFn });
+  assert.equal(result.citations[0]!.sourceConfidence, 'single-source');
+  assert.equal(result.citations[0]!.sources.length, 1);
+});
+
+test('gracefully leaves citations unverified when the classification call itself fails', async () => {
+  const { client: geminiClient, params } = scriptedGeminiClientSequence([
+    { text: 'Findings.', candidates: singleSourceQuoteCandidates() },
+  ]);
+  const claudeClient: AnthropicLike = {
+    messages: {
+      async create() {
+        throw new Error('simulated Claude outage');
+      },
+    },
+  };
+  const result = await researchCompany('GOOG', null, { client: geminiClient, claudeOptions: { client: claudeClient } });
+  assert.equal(result.citations[0]!.sourceConfidence, undefined);
+  assert.equal(result.citations[0]!.sources.length, 1);
+  assert.equal(params.length, 1, 'no corroboration search attempted once classification itself failed');
+});
+
+test('caps corroboration searches, but still marks every eligible quote single-source even past the cap', async () => {
+  const candidates = [
+    {
+      groundingMetadata: {
+        groundingChunks: [
+          { web: { title: 'A', uri: 'https://redirect/a' } },
+          { web: { title: 'B', uri: 'https://redirect/b' } },
+          { web: { title: 'C', uri: 'https://redirect/c' } },
+          { web: { title: 'D', uri: 'https://redirect/d' } },
+          { web: { title: 'E', uri: 'https://redirect/e' } },
+          { web: { title: 'F', uri: 'https://redirect/f' } },
+        ],
+        groundingSupports: [
+          { segment: { text: 'Claim 0.' }, groundingChunkIndices: [0] },
+          { segment: { text: 'Claim 1.' }, groundingChunkIndices: [1] },
+          { segment: { text: 'Claim 2.' }, groundingChunkIndices: [2] },
+          { segment: { text: 'Claim 3.' }, groundingChunkIndices: [3] },
+          { segment: { text: 'Claim 4.' }, groundingChunkIndices: [4] },
+          { segment: { text: 'Claim 5.' }, groundingChunkIndices: [5] },
+        ],
+      },
+    },
+  ];
+  const { client: geminiClient, params } = scriptedGeminiClientSequence([
+    { text: 'Findings.', candidates },
+    { text: 'NONE' },
+    { text: 'NONE' },
+    { text: 'NONE' },
+    { text: 'NONE' },
+    { text: 'NONE' },
+  ]);
+  const { client: claudeClient } = scriptedClaudeClient([{ content: [{ type: 'text', text: '0,1,2,3,4,5' }] }]);
+  const { fetchFn } = fakeResolveFetch(
+    Object.fromEntries('abcdef'.split('').map((l) => [`https://redirect/${l}`, `https://site-${l}.example.com/`])),
+  );
+  const result = await researchCompany('GOOG', null, { client: geminiClient, claudeOptions: { client: claudeClient }, resolveFetch: fetchFn });
+  assert.equal(params.length, 6, '1 main call + 5 corroboration searches (the cap), not 6');
+  assert.ok(
+    result.citations.every((c) => c.sourceConfidence === 'single-source'),
+    'every eligible quote is marked single-source, including the one past the search cap',
+  );
+});
+
 // --- checkForMaterialUpdates: the cheap refresh check ---
 
 const NO_CONTEXT = { sinceDate: '2026-09-01', now: '2026-09-10', priorNextEarningsDate: null, priorResearch: null };
@@ -709,7 +867,7 @@ test('salvages an unparseable date via the Claude fallback when it yields a vali
   const { client: claudeClient } = scriptedClaudeClient([{ content: [{ type: 'text', text: FUTURE_EARNINGS_DATE }] }]);
   const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, {
     client: geminiClient,
-    earningsDateClaudeOptions: { client: claudeClient },
+    claudeOptions: { client: claudeClient },
   });
   assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
 });
@@ -719,7 +877,7 @@ test('reports missing without a second search when the date is unparseable even 
   const { client: claudeClient } = scriptedClaudeClient([{ content: [{ type: 'text', text: 'UNKNOWN' }] }]);
   const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, {
     client: geminiClient,
-    earningsDateClaudeOptions: { client: claudeClient },
+    claudeOptions: { client: claudeClient },
   });
   assert.equal(result.nextEarningsDate, null);
   assert.equal(params.length, 1, 'no domain-excluded second search should have been attempted');
@@ -733,7 +891,7 @@ test('still triggers the domain-excluded second search when the Claude-salvaged 
   const { client: claudeClient } = scriptedClaudeClient([{ content: [{ type: 'text', text: '2020-01-01' }] }]);
   const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, {
     client: geminiClient,
-    earningsDateClaudeOptions: { client: claudeClient },
+    claudeOptions: { client: claudeClient },
   });
   assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
   assert.equal(params.length, 2);

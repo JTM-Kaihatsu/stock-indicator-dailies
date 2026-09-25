@@ -255,12 +255,14 @@ export interface ResearchOptions {
    * citation-URL resolution (see resolveSourceUrl) without making real
    * network calls, same testability pattern as `client` above. */
   resolveFetch?: typeof fetch;
-  /** Only used by checkForMaterialUpdates's earnings-date validation (see
-   * validateEarningsDate): options for the Claude call that fallback-parses
-   * a date the strict typecheck rejected. Kept separate from this
-   * interface's own Gemini-shaped fields (apiKey/model/client above all
-   * mean something different for Claude) rather than overloading them. */
-  earningsDateClaudeOptions?: ScoreOptions;
+  /** Options for the handful of small Claude calls this Gemini-primary
+   * stage makes on the side: checkForMaterialUpdates's earnings-date
+   * fallback parse (see validateEarningsDate) and researchCompany's
+   * time-sensitive-claim classification (see verifyTimeSensitiveClaims).
+   * Kept separate from this interface's own Gemini-shaped fields
+   * (apiKey/model/client above all mean something different for Claude)
+   * rather than overloading them. */
+  claudeOptions?: ScoreOptions;
 }
 
 /** scoreForRiskTolerance stays on Claude: a short backtest-validating tool
@@ -288,7 +290,7 @@ export interface ScoreOptions {
    * validateEarningsDate): options for the Gemini call that re-searches for
    * a stale date, excluding whatever source domain produced it. Kept
    * separate from this interface's own Claude-shaped fields for the same
-   * reason ResearchOptions.earningsDateClaudeOptions is separate from its. */
+   * reason ResearchOptions.claudeOptions is separate from its. */
   earningsDateGeminiOptions?: ResearchOptions;
 }
 
@@ -471,6 +473,179 @@ function formatPriorResearch(label: string, priorResearch: string | null): strin
   return `\n\n${label}:\n"""\n${priorResearch}\n"""`;
 }
 
+function domainOf(url: string): string | null {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+const TIME_SENSITIVE_CLASSIFY_PROMPT =
+  'For each numbered research excerpt below, decide whether it asserts a specific, time-sensitive fact -- a ' +
+  'date, a recent event, a specific figure or statistic, or an upcoming catalyst -- that could go stale or ' +
+  'needs current corroboration, as opposed to general background, structural, or definitional information about ' +
+  'the company that does not. Respond with ONLY a comma-separated list of the indices that ARE time-sensitive ' +
+  '(e.g. "0,2,5"), or the single word NONE if none are. No other text.';
+
+/** One cheap, ungrounded Claude call classifying which of `quotes` assert a
+ * time-sensitive fact worth corroborating (see verifyTimeSensitiveClaims),
+ * batched across all of them rather than one call per quote. Malformed or
+ * out-of-range indices in the response are dropped rather than thrown on,
+ * same defensive posture as this file's other lightweight parsers. */
+async function classifyTimeSensitiveQuotes(quotes: readonly ResearchQuote[], options: ScoreOptions): Promise<Set<number>> {
+  if (quotes.length === 0) return new Set();
+  const client = buildClaudeClient(options);
+  const list = quotes.map((q, i) => `[${i}] "${q.quote}"`).join('\n');
+  const response = await createClaudeMessage(client, {
+    model: options.model ?? DEFAULT_MODEL,
+    max_tokens: 256,
+    system: TIME_SENSITIVE_CLASSIFY_PROMPT,
+    messages: [{ role: 'user', content: list }],
+  });
+  const text = extractClaudeText(response.content).trim();
+  if (text.length === 0 || text.toUpperCase() === 'NONE') return new Set();
+  const indices = text
+    .split(',')
+    .map((s) => Number.parseInt(s.trim(), 10))
+    .filter((n) => Number.isInteger(n) && n >= 0 && n < quotes.length);
+  return new Set(indices);
+}
+
+interface CorroborationSource {
+  url: string;
+  title: string;
+  siteName?: string;
+  thumbnailUrl?: string;
+  articleTitle?: string;
+}
+
+/** Searches for a source, other than `excludeDomains`, that independently
+ * confirms `quoteText` about `ticker`. null if Gemini can't find one (or
+ * returns something that doesn't even parse as a URL). Reuses
+ * resolveSourceUrl/scrapeSourceMetadata for the same resolved-URL and
+ * best-effort thumbnail/site-name treatment every other citation source
+ * gets, rather than a second, inconsistent metadata path. */
+async function corroborateQuote(
+  ticker: string,
+  quoteText: string,
+  excludeDomains: readonly string[],
+  options: ResearchOptions,
+): Promise<CorroborationSource | null> {
+  const model = options.model ?? DEFAULT_GEMINI_MODEL;
+  const client = buildGeminiClient(options);
+  const exclusion =
+    excludeDomains.length > 0
+      ? ` Do not count a source on ${excludeDomains.join(' or ')} -- that's already the one source backing this claim, and the goal is independent corroboration from elsewhere.`
+      : '';
+  const response = await createGeminiContent(client, {
+    model,
+    contents: `Regarding ${ticker}: does an independent source confirm this specific claim? "${quoteText}"${exclusion}`,
+    config: {
+      systemInstruction:
+        'Use Google Search. Respond in exactly this format, nothing else:\n' +
+        'Line 1: the URL of a source that independently confirms this specific claim, or the single word NONE ' +
+        "if you can't find one.",
+      tools: [{ googleSearch: {} }],
+      maxOutputTokens: 128,
+    },
+  });
+  const urlLine = (response.text ?? '').trim().split('\n')[0]?.trim() ?? '';
+  if (urlLine.length === 0 || urlLine.toUpperCase() === 'NONE' || domainOf(urlLine) === null) return null;
+
+  const resolveFetch = options.resolveFetch ?? fetch;
+  const resolvedUrl = await resolveSourceUrl(urlLine, resolveFetch);
+  const meta = await scrapeSourceMetadata(resolvedUrl, resolveFetch);
+  const siteName = meta.siteName ?? prettifyHostname(resolvedUrl);
+  return { url: resolvedUrl, title: siteName ?? resolvedUrl, siteName, thumbnailUrl: meta.thumbnailUrl, articleTitle: meta.articleTitle };
+}
+
+/** Caps how many corroboration searches one researchCompany call will make;
+ * each is a real, billed Gemini call, so this bounds cost regardless of how
+ * many time-sensitive, single-sourced quotes a given research run happens
+ * to produce. Whichever come first in the citations list are searched;
+ * every eligible quote (searched or not) still gets marked 'single-source'
+ * below, so a quote that missed the cap is never silently presented as if
+ * it were fully corroborated. */
+const MAX_CORROBORATION_SEARCHES = 5;
+
+/** After Gemini's own grounding, a research quote can end up backed by
+ * only one source (Gemini attributed that segment to a single search
+ * result). For a time-sensitive one specifically -- a date, recent event,
+ * or specific figure, as opposed to general background -- a single source
+ * isn't enough to trust without question. This classifies which quotes
+ * are time-sensitive (see classifyTimeSensitiveQuotes), then for each
+ * single-domain-sourced one among those, tries once (in parallel, capped
+ * at MAX_CORROBORATION_SEARCHES) to find a second, different-domain
+ * source corroborating the same specific claim.
+ *
+ * Found -> appended to that quote's sources; `sourceConfidence` left
+ * unset, same as any organically multi-sourced quote. Not found (or over
+ * the cap, or that one search itself failed) -> the quote and its one
+ * existing source are KEPT, never dropped -- a real, true fact reported by
+ * only one credible outlet is still worth showing -- but marked
+ * `sourceConfidence: 'single-source'` so the frontend can display it with
+ * visibly lower confidence rather than the same weight as a corroborated
+ * claim. A single failed search shouldn't cost the others their result
+ * (Promise.allSettled, not Promise.all), and a failure in classification
+ * itself (no Claude key configured, network hiccup) degrades the whole
+ * step to a no-op rather than failing research: this is a best-effort
+ * confidence enhancement on top of citations that are already perfectly
+ * usable unverified, same posture as resolveSourceUrl/scrapeSourceMetadata
+ * elsewhere in this file. */
+async function verifyTimeSensitiveClaims(
+  ticker: string,
+  quotes: readonly ResearchQuote[],
+  claudeOptions: ScoreOptions,
+  geminiOptions: ResearchOptions,
+): Promise<ResearchQuote[]> {
+  if (quotes.length === 0) return [];
+  try {
+    const timeSensitive = await classifyTimeSensitiveQuotes(quotes, claudeOptions);
+    if (timeSensitive.size === 0) return quotes.slice();
+
+    const singleSourced = Array.from(timeSensitive)
+      .sort((a, b) => a - b)
+      .map((i) => {
+        const quote = quotes[i]!;
+        const existingDomains = new Set(quote.sources.map((s) => domainOf(s.url)).filter((d): d is string => d !== null));
+        return { i, quote, existingDomains };
+      })
+      .filter((e) => e.existingDomains.size < 2);
+
+    const result = quotes.slice();
+    for (const e of singleSourced) result[e.i] = { ...e.quote, sourceConfidence: 'single-source' };
+
+    const toSearch = singleSourced.slice(0, MAX_CORROBORATION_SEARCHES);
+    const corroborations = await Promise.allSettled(
+      toSearch.map((e) => corroborateQuote(ticker, e.quote.quote, Array.from(e.existingDomains), geminiOptions)),
+    );
+    toSearch.forEach((e, idx) => {
+      const settled = corroborations[idx]!;
+      const found = settled.status === 'fulfilled' ? settled.value : null;
+      const foundDomain = found ? domainOf(found.url) : null;
+      if (found && foundDomain && !e.existingDomains.has(foundDomain)) {
+        result[e.i] = {
+          ...e.quote,
+          sources: [
+            ...e.quote.sources,
+            { title: found.title, url: found.url, siteName: found.siteName, thumbnailUrl: found.thumbnailUrl, articleTitle: found.articleTitle },
+          ],
+        };
+      }
+    });
+
+    return result;
+  } catch {
+    return quotes.slice();
+  }
+}
+
+/** Wider than DEFAULT_TIMEOUT_MS: the main research call is now followed by
+ * a classification call and up to MAX_CORROBORATION_SEARCHES corroboration
+ * searches (run in parallel, but still real latency on top). */
+const RESEARCH_DEFAULT_TIMEOUT_MS = 150_000;
+
 /** Researches `ticker`'s company via Gemini + Grounding with Google Search
  * and returns a reusable research brief. Stage 1 of 2 (see
  * scoreForRiskTolerance for stage 2); split out so the expensive,
@@ -493,7 +668,7 @@ export async function researchCompany(
 ): Promise<ResearchProposal> {
   const model = options.model ?? DEFAULT_GEMINI_MODEL;
   const maxOutputTokens = options.maxOutputTokens ?? DEFAULT_MAX_TOKENS;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? RESEARCH_DEFAULT_TIMEOUT_MS;
   const client = buildGeminiClient(options);
 
   const work = (async () => {
@@ -512,7 +687,9 @@ export async function researchCompany(
     if (research.length === 0) {
       throw new Error('Gemini research call returned no usable text');
     }
-    return { research, citations: await extractCitations(response, options.resolveFetch ?? fetch) };
+    const citations = await extractCitations(response, options.resolveFetch ?? fetch);
+    const verifiedCitations = await verifyTimeSensitiveClaims(ticker, citations, options.claudeOptions ?? {}, options);
+    return { research, citations: verifiedCitations };
   })();
 
   return withWallClock(work, timeoutMs);
@@ -623,7 +800,7 @@ export async function checkForMaterialUpdates(
       ticker,
       { date: rawEarningsDate, sourceDomain: rawSourceDomain },
       new Date(context.now),
-      options.earningsDateClaudeOptions ?? {},
+      options.claudeOptions ?? {},
       options,
     );
     return { hasUpdates, summary, nextEarningsDate };
