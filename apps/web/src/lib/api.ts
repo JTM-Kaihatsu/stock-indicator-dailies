@@ -51,3 +51,55 @@ export async function analyzeDaily(ticker: string): Promise<DailyResult> {
     return failure(message, userMessage);
   }
 }
+
+/** Outcome of a manual refresh attempt (see refreshDaily): `result` is the
+ * same DailyResult shape analyzeDaily resolves to, and `refreshAvailableAt`
+ * is the next allowed refresh time whenever the server told us one -- on a
+ * successful kick-off (the coming hour-long cooldown) or a cooldown
+ * rejection (the existing one). null only when the request itself failed
+ * before the server had a chance to say either. */
+export interface RefreshDailyOutcome {
+  result: DailyResult;
+  refreshAvailableAt: string | null;
+  /** True specifically when the server rejected this for being on cooldown
+   * (as opposed to a network error or a real pipeline failure), so the
+   * caller can show "refreshed recently" rather than a generic error. */
+  cooldown: boolean;
+}
+
+type RefreshStartResponse =
+  | { ok: true; jobId: string; refreshAvailableAt: string }
+  | { ok: false; reason: string; refreshAvailableAt?: string };
+
+/**
+ * The ad-hoc/watchlist-parity manual refresh action for `ticker`: forces a
+ * fresh capture (bypassing the normal cache-freshness check) via
+ * POST /api/daily/:ticker/refresh, subject to the same 1h per-ticker
+ * cooldown as a watchlisted ticker's own refresh (see
+ * apps/api/src/refreshCooldown.ts) -- this endpoint isn't watchlist-scoped,
+ * so it works for any ticker regardless of whether it's on anyone's list.
+ * Same job-polling shape as analyzeDaily once the request is accepted.
+ */
+export async function refreshDaily(ticker: string): Promise<RefreshDailyOutcome> {
+  const startRes = await fetch(apiUrl(`/api/daily/${encodeURIComponent(ticker)}/refresh`), { method: 'POST' });
+  const start: RefreshStartResponse = await startRes.json();
+
+  if (!start.ok) {
+    return {
+      result: failure(start.reason),
+      refreshAvailableAt: start.refreshAvailableAt ?? null,
+      cooldown: start.reason === 'cooldown',
+    };
+  }
+
+  try {
+    const result = await pollUntilDone<DailyResult>(async () => {
+      const statusRes = await fetch(apiUrl(`/api/daily/jobs/${start.jobId}`));
+      return (await statusRes.json()) as JobStatusResponse;
+    });
+    return { result, refreshAvailableAt: start.refreshAvailableAt, cooldown: false };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Polling failed';
+    return { result: failure(message), refreshAvailableAt: start.refreshAvailableAt, cooldown: false };
+  }
+}

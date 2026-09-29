@@ -54,19 +54,6 @@ function toIndicatorSettings(raw: Record<string, unknown> | null): IndicatorSett
   return raw as unknown as IndicatorSettings;
 }
 
-function formatGeneratedAt(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return 'an unknown time';
-  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
-
-function formatCooldown(msRemaining: number): string {
-  const mins = Math.ceil(msRemaining / 60000);
-  if (mins <= 1) return 'in under a minute';
-  if (mins < 60) return `in ~${mins} min`;
-  return 'in ~1 hr';
-}
-
 type Ready = {
   kind: 'ready';
   report: DailyReport;
@@ -88,69 +75,6 @@ type Status =
   | { kind: 'failed'; stage: string; reason: string; userMessage?: string }
   | Ready;
 
-/** The "Report generated <when>" line plus the manual Refresh button. The
- * button is disabled while a capture is in flight and for 1h after the last
- * attempt (`refreshAvailableAt`); a local 30s tick re-enables it once that
- * passes without needing a page reload. */
-function RefreshBar({
-  retrievedAt,
-  stale,
-  refreshAvailableAt,
-  refreshing,
-  error,
-  onRefresh,
-}: {
-  retrievedAt: string;
-  stale: boolean;
-  refreshAvailableAt: string | null;
-  refreshing: boolean;
-  error: string | null;
-  onRefresh: () => void;
-}) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, []);
-
-  const availableAtMs = refreshAvailableAt ? new Date(refreshAvailableAt).getTime() : 0;
-  const cooldownRemaining = Math.max(0, availableAtMs - now);
-  const onCooldown = cooldownRemaining > 0;
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'baseline',
-        justifyContent: 'space-between',
-        gap: 12,
-        flexWrap: 'wrap',
-        margin: '16px 0 24px',
-      }}
-    >
-      <span className="fact">
-        Report generated {formatGeneratedAt(retrievedAt)}
-        {stale && <span style={{ color: 'var(--hold)' }}> · stale</span>}
-      </span>
-      <span style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-        {error && <span className="fact" style={{ color: 'var(--sell)' }}>{error}</span>}
-        {refreshing ? (
-          <span className="fact">Refreshing...</span>
-        ) : onCooldown ? (
-          <span className="fact">Refresh available {formatCooldown(cooldownRemaining)}</span>
-        ) : null}
-        <button
-          type="button"
-          className="btn-sm"
-          onClick={onRefresh}
-          disabled={refreshing || onCooldown}
-        >
-          Refresh
-        </button>
-      </span>
-    </div>
-  );
-}
 
 export default function WatchlistTickerPage({ params }: { params: Promise<{ ticker: string }> }) {
   const { ticker } = use(params);
@@ -430,15 +354,14 @@ export default function WatchlistTickerPage({ params }: { params: Promise<{ tick
             options={toLiveOptions(status.settings)}
             overallOverride={status.overall}
             overallOverrideReason={status.overallOverrideReason}
-          />
-
-          <RefreshBar
-            retrievedAt={status.retrievedAt}
-            stale={status.stale}
-            refreshAvailableAt={status.refreshAvailableAt}
-            refreshing={refreshing}
-            error={refreshError}
-            onRefresh={handleRefresh}
+            refresh={{
+              stale: status.stale,
+              generatedAt: status.retrievedAt,
+              refreshAvailableAt: status.refreshAvailableAt,
+              refreshing,
+              error: refreshError,
+              onRefresh: handleRefresh,
+            }}
           />
 
           <PositionPanel

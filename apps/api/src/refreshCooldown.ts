@@ -1,3 +1,5 @@
+import { getCachedReportMeta, getLatestFailure } from './cache.ts';
+
 /**
  * How long a manually-refreshed watchlisted ticker stays un-refreshable
  * for. A product rule about how often a person should be hand-triggering a
@@ -32,4 +34,19 @@ export function computeRefreshAvailableAt(
 
   const availableAt = Math.max(...attempts) + cooldownMs;
   return availableAt > now ? new Date(availableAt).toISOString() : null;
+}
+
+/**
+ * Looks up `ticker`'s own last-attempt timestamps and applies
+ * computeRefreshAvailableAt; the one place both the watchlist refresh route
+ * and the ad-hoc daily refresh route should call, so their cooldown
+ * enforcement can't drift apart. Ticker-scoped only, same as the cooldown
+ * itself (chart_cache/capture_failures have no notion of "which user"), so
+ * it's equally correct for an authenticated, watchlist-membership-checked
+ * caller and an anonymous, ad-hoc one.
+ */
+export async function checkRefreshCooldown(ticker: string): Promise<string | null> {
+  const meta = await getCachedReportMeta(ticker);
+  const failure = await getLatestFailure(ticker);
+  return computeRefreshAvailableAt(meta?.retrievedAt ?? null, failure?.occurredAt ?? null);
 }

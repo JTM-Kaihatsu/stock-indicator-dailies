@@ -18,10 +18,13 @@ import { runPipeline } from './pipeline.ts';
  */
 const store = createJobStore<DailyResult>(6 * 60 * 1000);
 
-/** Starts a pipeline run in the background; returns immediately with a job id. */
-export function startJob(ticker: string): string {
+/** Starts a pipeline run in the background; returns immediately with a job
+ * id. `force`, when true, bypasses the cache-freshness check the same way
+ * the daily sweep and a watchlisted ticker's manual refresh already do (see
+ * pipeline.ts's RunPipelineOptions); used by the ad-hoc refresh route. */
+export function startJob(ticker: string, options: { force?: boolean } = {}): string {
   return store.start(
-    () => runPipeline(ticker),
+    () => runPipeline(ticker, { force: options.force }),
     (err) => ({
       ok: false,
       stage: 'capture',
