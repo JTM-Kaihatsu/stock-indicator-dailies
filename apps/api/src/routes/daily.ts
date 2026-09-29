@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { getCachedReport } from '../cache.ts';
 import { getJob, startJob } from '../jobs.ts';
 import { pendingCount } from '../pipeline.ts';
-import { checkRefreshCooldown, REFRESH_COOLDOWN_MS } from '../refreshCooldown.ts';
+import { checkRefreshCooldown, proactiveRefreshAvailableAt } from '../refreshCooldown.ts';
 import { parseTicker } from '../ticker.ts';
 
 export const daily = new Hono();
@@ -49,8 +49,11 @@ daily.post('/daily/:ticker/refresh', async (c) => {
   // checkRefreshCooldown again right now would still see "available".
   // Returning the resulting window proactively lets the frontend disable
   // the button and show a countdown immediately, without needing to
-  // duplicate REFRESH_COOLDOWN_MS as a second constant of its own.
-  return c.json({ ok: true, jobId, refreshAvailableAt: new Date(Date.now() + REFRESH_COOLDOWN_MS).toISOString() });
+  // duplicate this logic as a second copy of its own. Accounts for the
+  // market-hours guardrail too (see proactiveRefreshAvailableAt): a
+  // refresh kicked off after a close shows the real next-open wait right
+  // away, not a flat "+1h" the very next real check would contradict.
+  return c.json({ ok: true, jobId, refreshAvailableAt: proactiveRefreshAvailableAt() });
 });
 
 daily.get('/daily/jobs/:id', (c) => {
