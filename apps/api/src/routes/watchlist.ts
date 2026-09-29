@@ -4,7 +4,7 @@ import { outageMessageFor, recomputeReport, resolveDualOverall, type DeriveSigna
 
 import { getCachedReportDetail, getCachedReportMeta, getLatestFailure } from '../cache.ts';
 import { canAttempt, isRunning, runPipeline } from '../pipeline.ts';
-import { checkRefreshCooldown, computeRefreshAvailableAt } from '../refreshCooldown.ts';
+import { checkRefreshCooldown, computeRefreshAvailableAt, laterOf, marketGuardrailAvailableAt } from '../refreshCooldown.ts';
 import { parseTicker } from '../ticker.ts';
 import {
   addToWatchlist,
@@ -373,7 +373,14 @@ watchlistRoute.get('/watchlist/:ticker/report', requireAuth, async (c) => {
       scenarioSettings: entry.scenarioSettings,
       retrievedAt: detail.retrievedAt,
       stale: detail.stale,
-      refreshAvailableAt: computeRefreshAvailableAt(detail.retrievedAt, failure?.occurredAt ?? null),
+      // Combines the plain 1h cooldown with the market-hours guardrail
+      // (see refreshCooldown.ts's checkRefreshCooldown, whose combining
+      // logic this mirrors inline rather than re-fetching detail.retrievedAt
+      // a second time through that function's own DB read).
+      refreshAvailableAt: laterOf(
+        computeRefreshAvailableAt(detail.retrievedAt, failure?.occurredAt ?? null),
+        marketGuardrailAvailableAt(detail.retrievedAt, new Date()),
+      ),
       overall: risk.overall,
       lots,
       ledgerRows: computeLedger(lots).rows,
