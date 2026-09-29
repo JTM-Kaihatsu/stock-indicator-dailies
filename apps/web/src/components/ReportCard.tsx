@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DeriveSignalOptions, IndicatorKey, Signal } from '@stock-indicator-dailies/shared';
 import { deriveIndicatorSignal, resolveDualOverall } from '@stock-indicator-dailies/shared';
 import type { DailyReport } from '@/types/api';
+import { formatCooldown } from '@/lib/format';
 import { SignalPill } from './SignalPill';
 import { IndicatorRow } from './IndicatorRow';
 import { ChartImage } from './ChartImage';
@@ -16,12 +17,66 @@ function sigClass(s: string): string {
   return 'sig-neutral';
 }
 
+/** The retry-with-cooldown action next to "as of [date]"; shared by the
+ * ad-hoc lookup page and a watchlisted ticker's own page so both get the
+ * exact same look and cooldown behavior instead of two implementations
+ * (see apps/api/src/refreshCooldown.ts for why the same 1h rule applies
+ * to both equally). The caller owns the actual fetch/poll and all of this
+ * state; this component only renders based on it. */
+export interface ReportRefreshState {
+  stale?: boolean;
+  /** Full generation timestamp, when the caller has one to show (a
+   * watchlisted ticker's own page does; DailyReport itself carries no such
+   * field, so the ad-hoc lookup page has nothing to pass here). Rendered as
+   * a small "generated <when>" note; omitted entirely when absent rather
+   * than showing nothing where a value would have been. */
+  generatedAt?: string;
+  refreshAvailableAt: string | null;
+  refreshing: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}
+
+function formatGeneratedAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'an unknown time';
+  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function RefreshControl({ refresh }: { refresh: ReportRefreshState }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const availableAtMs = refresh.refreshAvailableAt ? new Date(refresh.refreshAvailableAt).getTime() : 0;
+  const cooldownRemaining = Math.max(0, availableAtMs - now);
+  const onCooldown = cooldownRemaining > 0;
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+      {refresh.generatedAt && <span className="fact">generated {formatGeneratedAt(refresh.generatedAt)}</span>}
+      {refresh.error && <span className="fact" style={{ color: 'var(--sell)' }}>{refresh.error}</span>}
+      {refresh.refreshing ? (
+        <span className="fact">Refreshing…</span>
+      ) : onCooldown ? (
+        <span className="fact">Refresh available {formatCooldown(cooldownRemaining)}</span>
+      ) : null}
+      <button type="button" className="btn-sm" onClick={refresh.onRefresh} disabled={refresh.refreshing || onCooldown}>
+        Refresh
+      </button>
+    </span>
+  );
+}
+
 export function ReportCard({
   report,
   options,
   onAddToWatchlist,
   overallOverride,
   overallOverrideReason,
+  refresh,
 }: {
   report: DailyReport;
   options?: DeriveSignalOptions;
@@ -37,6 +92,11 @@ export function ReportCard({
   /** Plain-language reason shown under the Overall pill when overallOverride
    * is active. */
   overallOverrideReason?: string | null;
+  /** When present, renders the manual-refresh button + cooldown state right
+   * next to "as of [date]". Omitted entirely on a context with no refresh
+   * concept of its own (there currently isn't one, but keeping this
+   * optional costs nothing and avoids assuming every caller wants it). */
+  refresh?: ReportRefreshState;
 }) {
   const { ticker, verdict, deterministic, image, warnings, timings } = report;
   const [addState, setAddState] = useState<'idle' | 'adding' | 'added' | 'error'>('idle');
@@ -82,8 +142,15 @@ export function ReportCard({
         <div>
           <div className="eyebrow">{report.companyName ?? ticker}</div>
           <h1 style={{ fontFamily: 'var(--mono)', fontSize: 'calc(40px * var(--type-scale))', fontWeight: 600, letterSpacing: '-.01em', margin: '2px 0 0' }}>{ticker}</h1>
-          <div className="tabular" style={{ color: 'var(--muted)', fontSize: 'calc(13px * var(--type-scale))' }}>
-            daily bars · as of {deterministic?.asOf ?? 'N/A'}
+          <div
+            className="tabular"
+            style={{ color: 'var(--muted)', fontSize: 'calc(13px * var(--type-scale))', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}
+          >
+            <span>
+              daily bars · as of {deterministic?.asOf ?? 'N/A'}
+              {refresh?.stale && <span style={{ color: 'var(--hold)' }}> · stale</span>}
+            </span>
+            {refresh && <RefreshControl refresh={refresh} />}
           </div>
           {onAddToWatchlist && (
             <div style={{ marginTop: 8 }}>

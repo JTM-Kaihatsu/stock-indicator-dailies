@@ -4,7 +4,7 @@ import { outageMessageFor, recomputeReport, resolveDualOverall, type DeriveSigna
 
 import { getCachedReportDetail, getCachedReportMeta, getLatestFailure } from '../cache.ts';
 import { canAttempt, isRunning, runPipeline } from '../pipeline.ts';
-import { computeRefreshAvailableAt } from '../refreshCooldown.ts';
+import { checkRefreshCooldown, computeRefreshAvailableAt } from '../refreshCooldown.ts';
 import { parseTicker } from '../ticker.ts';
 import {
   addToWatchlist,
@@ -551,9 +551,7 @@ watchlistRoute.post('/watchlist/:ticker/refresh', requireAuth, async (c) => {
 
   // Enforce the 1h manual-refresh cooldown here too, not just in the UI: a
   // client with a stale button state (or a direct API call) can't bypass it.
-  const meta = await getCachedReportMeta(ticker);
-  const failure = await getLatestFailure(ticker);
-  const availableAt = computeRefreshAvailableAt(meta?.retrievedAt ?? null, failure?.occurredAt ?? null);
+  const availableAt = await checkRefreshCooldown(ticker);
   if (availableAt) {
     return c.json({ ok: false, reason: 'cooldown', refreshAvailableAt: availableAt }, 429);
   }
