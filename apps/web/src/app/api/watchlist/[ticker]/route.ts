@@ -1,3 +1,5 @@
+import { forward } from '@/lib/proxy';
+
 const PIPELINE_URL = process.env.PIPELINE_API_URL;
 
 function authHeaders(req: Request): Record<string, string> {
@@ -12,12 +14,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ ticke
     return Response.json({ ok: false, reason: 'PIPELINE_API_URL not configured' }, { status: 503 });
   }
 
-  const upstream = await fetch(target, { method: 'DELETE', headers: authHeaders(req) });
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return forward(target, { method: 'DELETE', headers: authHeaders(req) });
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ ticker: string }> }) {
@@ -28,14 +25,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ ticker
   }
 
   const body = await req.text();
-  const upstream = await fetch(target, {
+  return forward(target, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders(req) },
     body,
-  });
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: { 'Content-Type': 'application/json' },
   });
 }

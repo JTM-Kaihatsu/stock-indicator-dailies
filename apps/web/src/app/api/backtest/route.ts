@@ -1,3 +1,5 @@
+import { forward } from '@/lib/proxy';
+
 const PIPELINE_URL = process.env.PIPELINE_API_URL;
 
 // Pure computation on the API side (no Playwright/VLM); stays well within
@@ -9,14 +11,9 @@ export async function POST(req: Request) {
   }
 
   const body = await req.text();
-  const upstream = await fetch(target, {
+  return forward(target, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,
-  });
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: { 'Content-Type': 'application/json' },
   });
 }

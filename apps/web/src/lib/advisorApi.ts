@@ -37,7 +37,7 @@ export async function requestAiSuggestion(
     body: JSON.stringify({ ticker, riskTolerance }),
   });
   const start: StartAdvisorResponse = await startRes.json();
-  if (!start.ok) throw new AdvisorRequestError(start.reason, false);
+  if (!start.ok) throw new AdvisorRequestError(start.userMessage ?? start.reason, false);
 
   let jobResult: AdvisorJobResult;
   try {

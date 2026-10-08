@@ -31,7 +31,7 @@ export async function analyzeDaily(ticker: string): Promise<DailyResult> {
   });
   const start: StartResponse = await startRes.json();
 
-  if (!start.ok) return failure(start.reason);
+  if (!start.ok) return failure(start.reason, start.userMessage);
   if ('report' in start) return { ok: true, report: start.report };
 
   try {
@@ -69,7 +69,7 @@ export interface RefreshDailyOutcome {
 
 type RefreshStartResponse =
   | { ok: true; jobId: string; refreshAvailableAt: string }
-  | { ok: false; reason: string; refreshAvailableAt?: string };
+  | { ok: false; reason: string; userMessage?: string; refreshAvailableAt?: string };
 
 /**
  * The ad-hoc/watchlist-parity manual refresh action for `ticker`: forces a
@@ -86,7 +86,7 @@ export async function refreshDaily(ticker: string): Promise<RefreshDailyOutcome>
 
   if (!start.ok) {
     return {
-      result: failure(start.reason),
+      result: failure(start.reason, start.userMessage),
       refreshAvailableAt: start.refreshAvailableAt ?? null,
       cooldown: start.reason === 'cooldown',
     };
