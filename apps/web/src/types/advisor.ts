@@ -108,7 +108,7 @@ export type AdvisorJobResult =
  * "hit" shortcut left (see apps/api/src/advisorJobs.ts). */
 export type StartAdvisorResponse =
   | { ok: true; jobId: string }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; userMessage?: string };
 
 export type AdvisorJobStatusResponse =
   | { status: 'pending'; stage?: string }

@@ -62,7 +62,7 @@ export type DailyResult =
 export type StartResponse =
   | { ok: true; report: DailyReport }
   | { ok: true; jobId: string }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; userMessage?: string };
 
 /** Response from GET /api/daily/jobs/:id. */
 export type JobStatusResponse =

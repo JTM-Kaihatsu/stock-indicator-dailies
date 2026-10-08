@@ -1,3 +1,5 @@
+import { forward } from '@/lib/proxy';
+
 const PIPELINE_URL = process.env.PIPELINE_API_URL;
 
 // A cache hit resolves inline (fast); a miss just kicks off a background job
@@ -10,14 +12,9 @@ export async function POST(req: Request) {
   }
 
   const body = await req.text();
-  const upstream = await fetch(target, {
+  return forward(target, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body,
-  });
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: { 'Content-Type': 'application/json' },
   });
 }

@@ -1,3 +1,5 @@
+import { forward } from '@/lib/proxy';
+
 const PIPELINE_URL = process.env.PIPELINE_API_URL;
 
 export async function GET(req: Request, { params }: { params: Promise<{ ticker: string }> }) {
@@ -9,10 +11,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ ticker: 
     return Response.json({ ok: false, reason: 'PIPELINE_API_URL not configured' }, { status: 503 });
   }
 
-  const upstream = await fetch(target);
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return forward(target);
 }

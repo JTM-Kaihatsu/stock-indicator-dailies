@@ -1,3 +1,5 @@
+import { forward } from '@/lib/proxy';
+
 const PIPELINE_URL = process.env.PIPELINE_API_URL;
 
 export async function POST(req: Request, { params }: { params: Promise<{ ticker: string }> }) {
@@ -8,10 +10,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ ticker:
   }
 
   const auth = req.headers.get('authorization');
-  const upstream = await fetch(target, { method: 'POST', headers: auth ? { Authorization: auth } : {} });
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return forward(target, { method: 'POST', headers: auth ? { Authorization: auth } : {} });
 }
