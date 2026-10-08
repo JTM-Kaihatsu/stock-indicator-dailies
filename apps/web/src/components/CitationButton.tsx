@@ -155,6 +155,7 @@ export function CitationButton({ citations }: { citations: FieldClaim[] }) {
           <div
             role="dialog"
             aria-label="Sources"
+            className="source-panel"
             style={{
               position: 'fixed', top: 0, right: 0, height: '100vh', width: 'min(420px, 92vw)',
               background: 'var(--surface-2)', borderLeft: '1px solid var(--border)',
