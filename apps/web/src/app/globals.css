@@ -513,7 +513,9 @@ footer {
   .agree { grid-column: 1 / -1; text-align: left; }
   .ticker-input { font-size: calc(18px * var(--type-scale)); width: 140px; }
   header { flex-direction: column; }
-  .headline { text-align: left !important; }
+  /* Beats the right-alignment set inline on the Overall block (and its
+     children) once the header stacks into a column. */
+  .headline, .headline > * { text-align: left !important; justify-content: flex-start !important; }
   .site-title { font-size: 26px; letter-spacing: .1em; word-spacing: .3em; }
   .eyebrow, .section-label { font-size: calc(16px * var(--type-scale)); }
 }

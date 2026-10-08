@@ -170,7 +170,7 @@ export function ReportCard({
             </div>
           )}
         </div>
-        <div style={{ textAlign: 'right' }}>
+        <div className="headline" style={{ textAlign: 'right' }}>
           <span style={{ display: 'block', textTransform: 'uppercase', letterSpacing: '.1em', fontSize: 'calc(10px * var(--type-scale))', color: 'var(--faint)', marginBottom: 6 }}>
             Overall
           </span>
