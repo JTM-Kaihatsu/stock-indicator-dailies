@@ -302,6 +302,29 @@ body {
    alone (line-height/padding/border make that unreliable). */
 .trade-list-scroll { max-height: 316px; overflow-y: auto; }
 .trade-list-scroll thead th { position: sticky; top: 0; background: var(--ground); z-index: 1; }
+/* Themed scrollbars for the app's inner scroll areas (watchlist overview,
+   source pop-out). The OS default is a bright, square track that clashes with
+   the dark theme. Chrome/Safari/Edge: custom ::-webkit-scrollbar pieces so
+   the track can have rounded ends. Firefox has no pseudo-elements, so it gets
+   the standard scrollbar-color instead (guarded, because in Chrome 121+ setting
+   scrollbar-color switches off the ::-webkit-scrollbar styling below). */
+.trade-list-scroll::-webkit-scrollbar,
+.source-popout::-webkit-scrollbar { width: 12px; height: 12px; }
+.trade-list-scroll::-webkit-scrollbar-track,
+.source-popout::-webkit-scrollbar-track { background: var(--surface); border-radius: 999px; }
+.trade-list-scroll::-webkit-scrollbar-thumb,
+.source-popout::-webkit-scrollbar-thumb {
+  background: var(--border); border-radius: 999px;
+  /* Inset ring in the track color so the thumb floats inside the track. */
+  border: 3px solid var(--surface);
+}
+.trade-list-scroll::-webkit-scrollbar-thumb:hover,
+.source-popout::-webkit-scrollbar-thumb:hover { background: var(--faint); }
+.trade-list-scroll::-webkit-scrollbar-corner,
+.source-popout::-webkit-scrollbar-corner { background: transparent; }
+@supports not selector(::-webkit-scrollbar) {
+  .trade-list-scroll, .source-popout { scrollbar-color: var(--border) var(--surface); scrollbar-width: thin; }
+}
 .drag-handle { cursor: grab; color: var(--faint); width: 20px; user-select: none; }
 .drag-handle:active { cursor: grabbing; }
 
