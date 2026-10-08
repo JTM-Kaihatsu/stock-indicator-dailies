@@ -139,7 +139,11 @@ export function ReportCard({
   return (
     <div>
       <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
-        <div>
+        {/* flex: 1 1 320px + minWidth: 0 lets this block shrink so its meta
+            row (as-of / generated / refresh) wraps inside it. Without that, its
+            max-content width (the refresh text is long) exceeds the column and
+            flex-wrap bumps the Overall block onto its own row. */}
+        <div style={{ flex: '1 1 320px', minWidth: 0 }}>
           <div className="eyebrow">{report.companyName ?? ticker}</div>
           <h1 style={{ fontFamily: 'var(--mono)', fontSize: 'calc(40px * var(--type-scale))', fontWeight: 600, letterSpacing: '-.01em', margin: '2px 0 0' }}>{ticker}</h1>
           <div
