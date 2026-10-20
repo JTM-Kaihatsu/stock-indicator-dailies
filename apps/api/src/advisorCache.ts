@@ -16,8 +16,8 @@ const CACHE_WINDOW_HOURS = 24 * 7;
  * which no longer hides a stale row behind `null` the way this module's
  * other caches do; the refresh flow needs to see a stale row too, to
  * decide whether it's cheap-refreshable or needs a full regeneration). */
-export function isFresh(retrievedAt: string): boolean {
-  return Date.now() - new Date(retrievedAt).getTime() <= CACHE_WINDOW_HOURS * 60 * 60 * 1000;
+export function isFresh(retrievedAt: string, nowMs: number = Date.now()): boolean {
+  return nowMs - new Date(retrievedAt).getTime() <= CACHE_WINDOW_HOURS * 60 * 60 * 1000;
 }
 
 /** Much shorter than CACHE_WINDOW_HOURS: this gates how often the cheap
@@ -32,9 +32,9 @@ const CHEAP_CHECK_WINDOW_HOURS = 24;
  * worth it yet. `null` (never checked, including every row from before
  * this column existed) counts as NOT recent, so a check is always
  * attempted at least once. */
-export function checkedRecently(lastCheckedAt: string | null): boolean {
+export function checkedRecently(lastCheckedAt: string | null, nowMs: number = Date.now()): boolean {
   if (!lastCheckedAt) return false;
-  return Date.now() - new Date(lastCheckedAt).getTime() <= CHEAP_CHECK_WINDOW_HOURS * 60 * 60 * 1000;
+  return nowMs - new Date(lastCheckedAt).getTime() <= CHEAP_CHECK_WINDOW_HOURS * 60 * 60 * 1000;
 }
 
 interface ResearchCacheRow {
@@ -282,6 +282,31 @@ export async function recordQuickCheck(
     const patch: Record<string, unknown> = { quick_update_note: note, last_checked_at: new Date().toISOString() };
     if (nextEarningsDate !== null) patch.next_earnings_date = nextEarningsDate;
     await db.from('advisor_suggestion_cache').update(patch).eq('ticker', ticker).eq('risk_tolerance', riskTolerance);
+  } catch {
+    // Best-effort.
+  }
+}
+
+/** Saves an earnings date a material-update check found onto every
+ * risk-tolerance suggestion for `ticker`, not just the one that happened to
+ * poll: the date is a fact about the company, so the other tolerances'
+ * rows shouldn't keep carrying a stale or missing one. A row whose own date
+ * has already passed is deliberately left alone, though: that row's date
+ * passing is the signal it needs its own post-earnings regeneration, and
+ * overwriting it with the next quarter's date would silently cancel that.
+ * `today` is the caller's UTC calendar date (YYYY-MM-DD); a row dated today
+ * still counts as not yet passed (same end-of-day rule as advisorJobs).
+ * Best-effort, same posture as recordQuickCheck. */
+export async function recordEarningsDate(ticker: string, nextEarningsDate: string, today: string): Promise<void> {
+  const db = getClient();
+  if (!db) return;
+
+  try {
+    await db
+      .from('advisor_suggestion_cache')
+      .update({ next_earnings_date: nextEarningsDate })
+      .eq('ticker', ticker)
+      .or(`next_earnings_date.is.null,next_earnings_date.gte.${today}`);
   } catch {
     // Best-effort.
   }

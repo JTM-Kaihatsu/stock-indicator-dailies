@@ -11,7 +11,8 @@ import {
 import { yahooDataSource } from '@stock-indicator-dailies/indicators';
 import { isOutageError } from '@stock-indicator-dailies/shared';
 
-import { cacheResearch, cacheSuggestion, checkedRecently, getCachedResearch, getCachedSuggestion, isFresh, recordQuickCheck } from './advisorCache.ts';
+import { cacheResearch, cacheSuggestion, getCachedResearch, getCachedSuggestion, recordEarningsDate, recordQuickCheck } from './advisorCache.ts';
+import { canReuseResearch, decideRefresh, type RegenReason } from './advisorRefreshPolicy.ts';
 import { createJobStore } from './jobStore.ts';
 
 /** RiskScoredProposal plus cache metadata the frontend needs to display
@@ -53,21 +54,19 @@ function classifyOutage(err: unknown): boolean {
   return err instanceof AdvisorUpstreamError || err instanceof AdvisorWallClockTimeoutError || isOutageError(err);
 }
 
-function isPastEarningsDate(nextEarningsDate: string | null, now: Date): boolean {
-  if (!nextEarningsDate) return false;
-  // Through the end of that calendar day (UTC), not the instant it starts;
-  // an earnings date is still "current" for the whole day it happens.
-  return now.getTime() > new Date(`${nextEarningsDate}T23:59:59Z`).getTime();
-}
-
 async function fullRegeneration(
   ticker: string,
   riskTolerance: RiskTolerance,
   reportStage: (stage: string) => void,
+  why: { reason: RegenReason; earningsDate: string | null },
 ): Promise<AdvisorJobResult> {
   const cachedResearch = await getCachedResearch(ticker);
   let research: ResearchProposal;
-  if (cachedResearch && isFresh(cachedResearch.retrievedAt)) {
+  // Whether to reuse depends on WHY we're regenerating, not just on the
+  // research's age; see canReuseResearch. (Previously any research under a
+  // week old was reused, which silently swallowed the news / earnings
+  // events that triggered this regeneration in the first place.)
+  if (cachedResearch && canReuseResearch(cachedResearch, why, new Date())) {
     research = cachedResearch.proposal;
   } else {
     reportStage(`Researching ${ticker}'s business, industry, and recent news…`);
@@ -114,6 +113,13 @@ async function fullRegeneration(
  *   regeneration. If a check was already attempted recently, just return
  *   what's cached, with no new API calls at all.
  *
+ * The decision itself lives in advisorRefreshPolicy.ts (pure, unit-tested).
+ * Whether a regeneration also redoes stage-1 research is a separate gate
+ * from the cheap-check window above (see canReuseResearch there): news or
+ * a passed earnings date force fresh research unless a sibling risk
+ * tolerance already refreshed it since. Any earnings date the cheap check
+ * finds is saved to every risk tolerance's row, with or without news.
+ *
  * "Now" is always this server's real clock (`new Date()`), never something
  * inferred by a model, so the earnings-date and freshness comparisons can't
  * drift on a model's own sense of the date. */
@@ -122,47 +128,56 @@ export function startAdvisorJob(ticker: string, riskTolerance: RiskTolerance): s
     async (reportStage) => {
       const now = new Date();
       const cached = await getCachedSuggestion(ticker, riskTolerance);
+      const decision = decideRefresh(cached && { nextEarningsDate: cached.result.nextEarningsDate, retrievedAt: cached.retrievedAt, lastCheckedAt: cached.lastCheckedAt }, now);
+      const knownEarningsDate = cached?.result.nextEarningsDate ?? null;
 
-      if (cached) {
-        const knownEarningsDate = cached.result.nextEarningsDate;
-        const earningsDatePassed = isPastEarningsDate(knownEarningsDate, now);
-        const staleWithNoEarningsDate = knownEarningsDate === null && !isFresh(cached.retrievedAt);
-
-        if (!earningsDatePassed && !staleWithNoEarningsDate) {
-          if (checkedRecently(cached.lastCheckedAt)) {
-            // Checked recently enough; nothing new to do.
-            return { ok: true, result: { ...cached.result, retrievedAt: cached.retrievedAt, quickUpdateNote: cached.quickUpdateNote } };
-          }
-
-          reportStage(`Checking for material news on ${ticker} since the last update…`);
-          const priorResearch = await getCachedResearch(ticker);
-          const check = await checkForMaterialUpdates(ticker, {
-            sinceDate: cached.retrievedAt.slice(0, 10),
-            now: now.toISOString().slice(0, 10),
-            priorNextEarningsDate: knownEarningsDate,
-            priorResearch: priorResearch?.proposal.research ?? null,
-          });
-          if (!check.hasUpdates) {
-            const note =
-              `Quick update attempt as of ${now.toISOString().slice(0, 10)}: No significant news updates were found ` +
-              'across company, industry, or related political news.';
-            await recordQuickCheck(ticker, riskTolerance, note, check.nextEarningsDate);
-            return {
-              ok: true,
-              result: {
-                ...cached.result,
-                nextEarningsDate: check.nextEarningsDate ?? cached.result.nextEarningsDate,
-                retrievedAt: cached.retrievedAt,
-                quickUpdateNote: note,
-              },
-            };
-          }
-          // Material news found; fall through to a full regeneration so it
-          // actually gets incorporated, rather than just noted.
-        }
+      if (decision.action === 'regenerate') {
+        return fullRegeneration(ticker, riskTolerance, reportStage, { reason: decision.reason, earningsDate: knownEarningsDate });
       }
 
-      return fullRegeneration(ticker, riskTolerance, reportStage);
+      // The other two outcomes only exist when something is cached.
+      const existing = cached!;
+      if (decision.action === 'serve-cached') {
+        // Checked recently enough; nothing new to do.
+        return { ok: true, result: { ...existing.result, retrievedAt: existing.retrievedAt, quickUpdateNote: existing.quickUpdateNote } };
+      }
+
+      reportStage(`Checking for material news on ${ticker} since the last update…`);
+      const today = now.toISOString().slice(0, 10);
+      const priorResearch = await getCachedResearch(ticker);
+      const check = await checkForMaterialUpdates(ticker, {
+        sinceDate: existing.retrievedAt.slice(0, 10),
+        now: today,
+        priorNextEarningsDate: knownEarningsDate,
+        priorResearch: priorResearch?.proposal.research ?? null,
+      });
+
+      // The poll's earnings date is saved whichever way the check came out,
+      // and onto every risk tolerance's row (it's a fact about the company).
+      // check.nextEarningsDate is already validated (strict ISO, not stale)
+      // or null; null never overwrites a known date.
+      if (check.nextEarningsDate !== null) await recordEarningsDate(ticker, check.nextEarningsDate, today);
+
+      if (!check.hasUpdates) {
+        const note =
+          `Quick update attempt as of ${today}: No significant news updates were found ` +
+          'across company, industry, or related political news.';
+        await recordQuickCheck(ticker, riskTolerance, note, check.nextEarningsDate);
+        return {
+          ok: true,
+          result: {
+            ...existing.result,
+            nextEarningsDate: check.nextEarningsDate ?? existing.result.nextEarningsDate,
+            retrievedAt: existing.retrievedAt,
+            quickUpdateNote: note,
+          },
+        };
+      }
+
+      // Material news found; regenerate so it actually gets incorporated,
+      // rather than just noted -- and re-research it (see canReuseResearch),
+      // since the cached research predates the news.
+      return fullRegeneration(ticker, riskTolerance, reportStage, { reason: 'material-news', earningsDate: check.nextEarningsDate ?? knownEarningsDate });
     },
     (err) => ({
       ok: false,
