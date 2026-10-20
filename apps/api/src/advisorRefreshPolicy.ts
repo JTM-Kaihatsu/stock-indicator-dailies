@@ -1,14 +1,17 @@
-import { checkedRecently, isFresh } from './advisorCache.ts';
+import { checkedRecently, isFresh, manualRefreshWaitMs } from './advisorCache.ts';
 
 /** Why a full (stage 1 + stage 2) regeneration is happening. Drives whether
  * the cached stage-1 research can be reused (see canReuseResearch); kept
  * separate from the cheap-check cadence on purpose: the cheap check's 24h
  * window decides how often we *look* for news, while the research window
  * decides whether a regeneration actually *re-researches*. */
-export type RegenReason = 'no-cache' | 'earnings-passed' | 'stale-no-earnings-date' | 'material-news';
+export type RegenReason = 'no-cache' | 'earnings-passed' | 'stale-no-earnings-date' | 'material-news' | 'manual';
 
 export type RefreshDecision =
-  | { action: 'regenerate'; reason: 'no-cache' | 'earnings-passed' | 'stale-no-earnings-date' }
+  | { action: 'regenerate'; reason: 'no-cache' | 'earnings-passed' | 'stale-no-earnings-date' | 'manual' }
+  /** A manual refresh was asked for, but this was regenerated too recently
+   * to do it again; `availableAt` is when it will be allowed. */
+  | { action: 'manual-cooldown'; availableAt: string }
   | { action: 'quick-check' }
   | { action: 'serve-cached' };
 
@@ -27,8 +30,18 @@ export function isPastEarningsDate(nextEarningsDate: string | null, now: Date): 
 
 /** First-level decision for a request against an existing (or missing)
  * cached suggestion; see startAdvisorJob's doc comment for the reasoning. */
-export function decideRefresh(cached: CachedSuggestionState | null, now: Date): RefreshDecision {
+export function decideRefresh(cached: CachedSuggestionState | null, now: Date, options: { force?: boolean } = {}): RefreshDecision {
   if (!cached) return { action: 'regenerate', reason: 'no-cache' };
+  // An explicit user refresh overrides every automatic gate below (the daily
+  // cheap-check window, an unpassed earnings date, the weekly fallback): the
+  // person asked for current research, so it's regenerated, subject only to
+  // the short repeat-click guard.
+  if (options.force) {
+    const waitMs = manualRefreshWaitMs(cached.retrievedAt, now.getTime());
+    return waitMs > 0
+      ? { action: 'manual-cooldown', availableAt: new Date(now.getTime() + waitMs).toISOString() }
+      : { action: 'regenerate', reason: 'manual' };
+  }
   if (isPastEarningsDate(cached.nextEarningsDate, now)) return { action: 'regenerate', reason: 'earnings-passed' };
   if (cached.nextEarningsDate === null && !isFresh(cached.retrievedAt, now.getTime())) {
     return { action: 'regenerate', reason: 'stale-no-earnings-date' };
@@ -51,6 +64,8 @@ export function decideRefresh(cached: CachedSuggestionState | null, now: Date): 
  *   earnings day ended, i.e. a sibling already re-researched post-earnings.
  * - material-news: only if the research was retrieved within the cheap-check
  *   window (a day), i.e. as recent as the check that flagged the news.
+ * - manual: only if the research was retrieved within the manual-refresh
+ *   cooldown (an hour), i.e. a sibling tolerance's refresh just did it.
  *
  * `earningsDate` is the suggestion's own known date (needed for
  * earnings-passed). */
@@ -72,5 +87,7 @@ export function canReuseResearch(
     }
     case 'material-news':
       return checkedRecently(research.retrievedAt, nowMs);
+    case 'manual':
+      return manualRefreshWaitMs(research.retrievedAt, nowMs) > 0;
   }
 }

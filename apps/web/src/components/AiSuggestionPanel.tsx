@@ -145,13 +145,17 @@ export function AiSuggestionPanel({
   }, [proposal]);
 
   async function request() {
+    // Clicking Refresh on an already-shown suggestion is an explicit "update
+    // this" request, so it forces a real regeneration; the first "Get" has
+    // nothing cached to short-circuit against anyway.
+    const isRefresh = proposal !== null;
     setLoading(true);
     setError(null);
     setErrorIsOutage(false);
     setProposal(null);
     setStage(null);
     try {
-      setProposal(await requestAiSuggestion(ticker, riskTolerance, setStage));
+      setProposal(await requestAiSuggestion(ticker, riskTolerance, setStage, isRefresh));
     } catch (err) {
       const outage = err instanceof AdvisorRequestError && err.outage;
       setError(err instanceof Error ? err.message : 'Network error');
@@ -343,6 +347,8 @@ export function AiSuggestionPanel({
                 <b>{earningsStyle.label}</b>
                 <span style={{ fontWeight: 400, opacity: 0.85 }}>
                   Next earnings: {proposal.nextEarningsDate ?? 'not found in research'}
+                  {proposal.nextEarningsDate !== null && proposal.nextEarningsDateConfirmed !== null &&
+                    (proposal.nextEarningsDateConfirmed ? ' (confirmed)' : ' (estimated)')}
                 </span>
               </div>
               <div style={{ marginTop: 4, fontWeight: 400 }}>

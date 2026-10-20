@@ -102,3 +102,46 @@ test('earnings-passed: research retrieved after the earnings day ended IS reused
 test('earnings-passed: without a known date there is nothing to compare against, so re-research', () => {
   assert.equal(canReuseResearch({ retrievedAt: ago(DAY) }, { reason: 'earnings-passed', earningsDate: null }, NOW), false);
 });
+
+// --- manual refresh (the panel's explicit Refresh click) ---
+
+const HOUR = 60 * 60 * 1000;
+
+test('manual refresh regenerates even when the cheap check ran within the last day (the "does nothing" case)', () => {
+  const cached = { nextEarningsDate: '2026-11-20', retrievedAt: ago(20 * DAY), lastCheckedAt: ago(HOUR) };
+  assert.deepEqual(decideRefresh(cached, NOW), { action: 'serve-cached' });
+  assert.deepEqual(decideRefresh(cached, NOW, { force: true }), { action: 'regenerate', reason: 'manual' });
+});
+
+test('manual refresh regenerates even when the earnings date is still in the future and nothing is stale', () => {
+  const cached = { nextEarningsDate: '2026-11-20', retrievedAt: ago(2 * DAY), lastCheckedAt: ago(2 * DAY) };
+  assert.deepEqual(decideRefresh(cached, NOW, { force: true }), { action: 'regenerate', reason: 'manual' });
+});
+
+test('manual refresh with nothing cached is just a normal first generation', () => {
+  assert.deepEqual(decideRefresh(null, NOW, { force: true }), { action: 'regenerate', reason: 'no-cache' });
+});
+
+test('manual refresh right after a regeneration is held for the repeat-click guard, with when it opens', () => {
+  const cached = { nextEarningsDate: '2026-11-20', retrievedAt: ago(20 * 60 * 1000), lastCheckedAt: ago(20 * 60 * 1000) };
+  const d = decideRefresh(cached, NOW, { force: true });
+  assert.equal(d.action, 'manual-cooldown');
+  if (d.action === 'manual-cooldown') assert.equal(d.availableAt, new Date(NOW.getTime() + 40 * 60 * 1000).toISOString());
+});
+
+test('manual refresh is allowed again exactly an hour after the last regeneration', () => {
+  const cached = { nextEarningsDate: '2026-11-20', retrievedAt: ago(HOUR), lastCheckedAt: ago(HOUR) };
+  assert.deepEqual(decideRefresh(cached, NOW, { force: true }), { action: 'regenerate', reason: 'manual' });
+});
+
+test('manual: research from a month ago is never reused', () => {
+  assert.equal(canReuseResearch({ retrievedAt: ago(31 * DAY) }, { reason: 'manual', earningsDate: '2026-10-28' }, NOW), false);
+});
+
+test('manual: research from yesterday (inside the weekly window) is still redone', () => {
+  assert.equal(canReuseResearch({ retrievedAt: ago(DAY) }, { reason: 'manual', earningsDate: '2026-10-28' }, NOW), false);
+});
+
+test('manual: research from the last hour is shared (a sibling risk tolerance just refreshed it)', () => {
+  assert.equal(canReuseResearch({ retrievedAt: ago(10 * 60 * 1000) }, { reason: 'manual', earningsDate: '2026-10-28' }, NOW), true);
+});

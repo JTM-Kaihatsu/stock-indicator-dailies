@@ -71,6 +71,8 @@ export interface AdvisorProposal {
   fit: FitVerdict;
   fitReason: string;
   nextEarningsDate: string | null;
+  /** true = officially confirmed, false = estimate, null = unknown. */
+  nextEarningsDateConfirmed: boolean | null;
   earningsOutlook: string;
   earningsLikelihood: EarningsLikelihood;
   earningsLikelihoodReason: string;

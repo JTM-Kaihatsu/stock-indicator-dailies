@@ -37,6 +37,19 @@ export function checkedRecently(lastCheckedAt: string | null, nowMs: number = Da
   return nowMs - new Date(lastCheckedAt).getTime() <= CHEAP_CHECK_WINDOW_HOURS * 60 * 60 * 1000;
 }
 
+/** A user-initiated refresh (the panel's Refresh button) always forces a real
+ * regeneration with fresh research, so it needs its own guard against
+ * accidental repeat clicks spending the same expensive calls twice: nothing
+ * is regenerated again within this long of the last regeneration, and
+ * research this recent is shared across risk tolerances rather than redone. */
+const MANUAL_REFRESH_COOLDOWN_HOURS = 1;
+
+/** Milliseconds until a manual refresh is allowed again for something last
+ * regenerated at `retrievedAt`; 0 when it's allowed now. */
+export function manualRefreshWaitMs(retrievedAt: string, nowMs: number = Date.now()): number {
+  return Math.max(0, new Date(retrievedAt).getTime() + MANUAL_REFRESH_COOLDOWN_HOURS * 60 * 60 * 1000 - nowMs);
+}
+
 interface ResearchCacheRow {
   ticker: string;
   retrieved_at: string;
@@ -130,6 +143,7 @@ interface SuggestionCacheRow {
   fit: string;
   fit_reason: string;
   next_earnings_date: string | null;
+  next_earnings_date_confirmed: boolean | null;
   earnings_outlook: string;
   earnings_likelihood: string;
   earnings_likelihood_reason: string;
@@ -150,6 +164,7 @@ function toProposal(row: SuggestionCacheRow): RiskScoredProposal {
     fit: row.fit as RiskScoredProposal['fit'],
     fitReason: row.fit_reason,
     nextEarningsDate: row.next_earnings_date,
+    nextEarningsDateConfirmed: row.next_earnings_date_confirmed ?? null,
     earningsOutlook: row.earnings_outlook,
     earningsLikelihood: row.earnings_likelihood as RiskScoredProposal['earningsLikelihood'],
     earningsLikelihoodReason: row.earnings_likelihood_reason,
@@ -205,7 +220,7 @@ export async function getCachedSuggestion(ticker: string, riskTolerance: RiskTol
       .from('advisor_suggestion_cache')
       .select(
         'ticker, risk_tolerance, retrieved_at, rationale, settings, fit, fit_reason, ' +
-          'next_earnings_date, earnings_outlook, earnings_likelihood, earnings_likelihood_reason, ' +
+          'next_earnings_date, next_earnings_date_confirmed, earnings_outlook, earnings_likelihood, earnings_likelihood_reason, ' +
           'quick_update_note, field_citations, backtest_result, last_checked_at',
       )
       .eq('ticker', ticker)
@@ -245,6 +260,7 @@ export async function cacheSuggestion(ticker: string, riskTolerance: RiskToleran
       fit: result.fit,
       fit_reason: result.fitReason,
       next_earnings_date: result.nextEarningsDate,
+      next_earnings_date_confirmed: result.nextEarningsDateConfirmed,
       earnings_outlook: result.earningsOutlook,
       earnings_likelihood: result.earningsLikelihood,
       earnings_likelihood_reason: result.earningsLikelihoodReason,
@@ -274,13 +290,18 @@ export async function recordQuickCheck(
   riskTolerance: RiskTolerance,
   note: string,
   nextEarningsDate: string | null,
+  nextEarningsDateConfirmed: boolean | null,
 ): Promise<void> {
   const db = getClient();
   if (!db) return;
 
   try {
     const patch: Record<string, unknown> = { quick_update_note: note, last_checked_at: new Date().toISOString() };
-    if (nextEarningsDate !== null) patch.next_earnings_date = nextEarningsDate;
+    if (nextEarningsDate !== null) {
+      patch.next_earnings_date = nextEarningsDate;
+      // Written with the date it describes (null = this poll couldn't tell).
+      patch.next_earnings_date_confirmed = nextEarningsDateConfirmed;
+    }
     await db.from('advisor_suggestion_cache').update(patch).eq('ticker', ticker).eq('risk_tolerance', riskTolerance);
   } catch {
     // Best-effort.
@@ -297,14 +318,19 @@ export async function recordQuickCheck(
  * `today` is the caller's UTC calendar date (YYYY-MM-DD); a row dated today
  * still counts as not yet passed (same end-of-day rule as advisorJobs).
  * Best-effort, same posture as recordQuickCheck. */
-export async function recordEarningsDate(ticker: string, nextEarningsDate: string, today: string): Promise<void> {
+export async function recordEarningsDate(
+  ticker: string,
+  nextEarningsDate: string,
+  nextEarningsDateConfirmed: boolean | null,
+  today: string,
+): Promise<void> {
   const db = getClient();
   if (!db) return;
 
   try {
     await db
       .from('advisor_suggestion_cache')
-      .update({ next_earnings_date: nextEarningsDate })
+      .update({ next_earnings_date: nextEarningsDate, next_earnings_date_confirmed: nextEarningsDateConfirmed })
       .eq('ticker', ticker)
       .or(`next_earnings_date.is.null,next_earnings_date.gte.${today}`);
   } catch {

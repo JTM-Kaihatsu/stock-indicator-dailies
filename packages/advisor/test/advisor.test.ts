@@ -774,6 +774,45 @@ test('treats a literal UNKNOWN earnings-date line as no known date', async () =>
   assert.equal(result.nextEarningsDate, null);
 });
 
+test('parses the confirmed status line: CONFIRMED -> true, with the domain and summary shifted down a line', async () => {
+  const { client } = scriptedGeminiClient(`YES\n${FUTURE_EARNINGS_DATE}\nCONFIRMED\ninvestor.example.com\nThey confirmed the date.`);
+  const result = await checkForMaterialUpdates('GOOG', NO_CONTEXT, { client });
+  assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
+  assert.equal(result.nextEarningsDateConfirmed, true);
+  assert.equal(result.summary, 'They confirmed the date.');
+});
+
+test('parses the confirmed status line: ESTIMATED -> false', async () => {
+  const { client } = scriptedGeminiClient(`NO\n${FUTURE_EARNINGS_DATE}\nESTIMATED\nfinance.example.com`);
+  const result = await checkForMaterialUpdates('GOOG', NO_CONTEXT, { client });
+  assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
+  assert.equal(result.nextEarningsDateConfirmed, false);
+});
+
+test('a reply without the status line (older 3-line shape) still parses, with the status unknown', async () => {
+  const { client } = scriptedGeminiClient(`NO\n${FUTURE_EARNINGS_DATE}\ninvestor.example.com`);
+  const result = await checkForMaterialUpdates('GOOG', NO_CONTEXT, { client });
+  assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
+  assert.equal(result.nextEarningsDateConfirmed, null);
+});
+
+test('no date means no confirmed status, whatever the model said', async () => {
+  const { client } = scriptedGeminiClient('NO\nUNKNOWN\nCONFIRMED\nNONE');
+  const result = await checkForMaterialUpdates('GOOG', NO_CONTEXT, { client });
+  assert.equal(result.nextEarningsDate, null);
+  assert.equal(result.nextEarningsDateConfirmed, null);
+});
+
+test('a stale date replaced by the re-search does not inherit the status reported for the stale one', async () => {
+  const { client: geminiClient } = scriptedGeminiClientSequence([
+    { text: 'NO\n2020-01-01\nCONFIRMED\nstale-calendar.example.com' },
+    { text: `${FUTURE_EARNINGS_DATE}\nfresh.example.com` },
+  ]);
+  const result = await checkForMaterialUpdates('GOOG', NO_CONTEXT, { client: geminiClient });
+  assert.equal(result.nextEarningsDate, FUTURE_EARNINGS_DATE);
+  assert.equal(result.nextEarningsDateConfirmed, null);
+});
+
 test('treats an empty or malformed response as no updates and no known date', async () => {
   const { client } = scriptedGeminiClient(undefined);
   const result = await checkForMaterialUpdates('NVDA', NO_CONTEXT, { client });
@@ -1141,6 +1180,36 @@ test('rejects a proposal missing fitReason', async () => {
     { content: [proposeSettingsBlock({ fitReason: '' })] },
   ]);
   await assert.rejects(() => scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', bars, { client }), /fitReason/);
+});
+
+test('carries the confirmed/estimated flag through from the proposal', async () => {
+  for (const flag of [true, false]) {
+    const { client } = scriptedClaudeClient([
+      { content: [runBacktestBlock()] },
+      { content: [proposeSettingsBlock({ nextEarningsDateConfirmed: flag })] },
+    ]);
+    const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', syntheticBars(), { client });
+    assert.equal(result.nextEarningsDateConfirmed, flag);
+  }
+});
+
+test('a proposal that omits the confirmed flag is accepted, with the status unknown', async () => {
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
+    { content: [proposeSettingsBlock()] },
+  ]);
+  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', syntheticBars(), { client });
+  assert.equal(result.nextEarningsDateConfirmed, null);
+});
+
+test('the confirmed flag is null whenever the earnings date is null', async () => {
+  const { client } = scriptedClaudeClient([
+    { content: [runBacktestBlock()] },
+    { content: [proposeSettingsBlock({ nextEarningsDate: null, nextEarningsDateSource: null, nextEarningsDateConfirmed: true })] },
+  ]);
+  const result = await scoreForRiskTolerance('NVDA', mkResearch('research'), 'neutral', syntheticBars(), { client });
+  assert.equal(result.nextEarningsDate, null);
+  assert.equal(result.nextEarningsDateConfirmed, null);
 });
 
 test('rejects a proposal with an invalid earningsLikelihood value', async () => {
