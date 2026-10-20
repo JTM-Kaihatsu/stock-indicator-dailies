@@ -716,7 +716,10 @@ Respond in exactly this format, nothing else:
 Line 1: YES or NO (whether anything materially significant has happened)
 Line 2: the confirmed or estimated next earnings date, ISO 8601 (e.g. "2026-10-22"), or the single word UNKNOWN
 if you genuinely find no timing indication at all.
-Line 3: the domain of the source you drew that date from (e.g. "investor.apple.com"), or the single word NONE if
+Line 3: the single word CONFIRMED if that date has been officially announced by the company (or its investor
+relations calendar), ESTIMATED if it is only a projection (an analyst or data-provider estimate, or inferred from
+the company's usual reporting pattern), or UNKNOWN if line 2 is UNKNOWN.
+Line 4: the domain of the source you drew that date from (e.g. "investor.apple.com"), or the single word NONE if
 line 2 is UNKNOWN or you can't attribute it to a specific source.
 Remaining lines (only if line 1 is YES): a 1-2 sentence summary of what changed.`;
 
@@ -731,6 +734,10 @@ export interface MaterialUpdateCheck {
    * suggestion's earnings date current even when hasUpdates is false and no
    * full regeneration happens (see apps/api/src/advisorJobs.ts). */
   nextEarningsDate: string | null;
+  /** Whether the date above is officially confirmed (true), an estimate
+   * (false), or unknown (null; always null when nextEarningsDate is, or when
+   * validation replaced the date the model reported with a different one). */
+  nextEarningsDateConfirmed: boolean | null;
 }
 
 /** Everything checkForMaterialUpdates needs to know about the existing,
@@ -792,10 +799,18 @@ export async function checkForMaterialUpdates(
     const firstLine = (lines[0] ?? '').trim().toUpperCase();
     const hasUpdates = firstLine.startsWith('YES');
     const earningsLine = (lines[1] ?? '').trim();
-    const domainLine = (lines[2] ?? '').trim();
+    // Line 3 is the confirmed/estimated status. A reply that omits it (the
+    // older 3-line shape, or a model that drifts from the format) is still
+    // understood: if line 3 isn't one of the three status words, it's the
+    // domain line and the status is simply unknown.
+    const statusWord = (lines[2] ?? '').trim().toUpperCase();
+    const hasStatusLine = statusWord === 'CONFIRMED' || statusWord === 'ESTIMATED' || statusWord === 'UNKNOWN';
+    const dateConfirmedByModel = statusWord === 'CONFIRMED' ? true : statusWord === 'ESTIMATED' ? false : null;
+    const domainIndex = hasStatusLine ? 3 : 2;
+    const domainLine = (lines[domainIndex] ?? '').trim();
     const rawEarningsDate = earningsLine.length > 0 && earningsLine.toUpperCase() !== 'UNKNOWN' ? earningsLine : null;
     const rawSourceDomain = domainLine.length > 0 && domainLine.toUpperCase() !== 'NONE' ? domainLine : null;
-    const summary = hasUpdates ? lines.slice(3).join('\n').trim() || null : null;
+    const summary = hasUpdates ? lines.slice(domainIndex + 1).join('\n').trim() || null : null;
     const nextEarningsDate = await validateEarningsDate(
       ticker,
       { date: rawEarningsDate, sourceDomain: rawSourceDomain },
@@ -803,7 +818,10 @@ export async function checkForMaterialUpdates(
       options.claudeOptions ?? {},
       options,
     );
-    return { hasUpdates, summary, nextEarningsDate };
+    // The status describes the date the model reported; if validation
+    // replaced it (stale date re-searched) or dropped it, it no longer applies.
+    const nextEarningsDateConfirmed = nextEarningsDate !== null && nextEarningsDate === rawEarningsDate ? dateConfirmedByModel : null;
+    return { hasUpdates, summary, nextEarningsDate, nextEarningsDateConfirmed };
   })();
 
   return withWallClock(work, timeoutMs);
@@ -1194,7 +1212,8 @@ Using the research and whichever one of these is stated in the request, you must
    sentiment, rough upside/downside percentages when the research supports them, and a likelihood assessment
    (low/moderate/high) for whether those expectations will be met, reasoned from the company's historical
    earnings pattern, current industry trends, and any political/regulatory factors the research covers. If the
-   date is an estimate rather than officially confirmed, say so in earningsOutlook. If the research doesn't
+   date is officially confirmed or only an estimate goes in nextEarningsDateConfirmed (not in
+   earningsOutlook, which should not describe the date's status; it's displayed separately). If the research doesn't
    cover earnings specifics for this company at all, say so honestly in earningsOutlook rather than inventing
    detail, and reason earningsLikelihood from whatever general volatility/predictability information the
    research does contain.
@@ -1359,7 +1378,15 @@ export async function scoreForRiskTolerance(
       options,
       options.earningsDateGeminiOptions ?? {},
     );
-    const inputWithValidatedEarningsDate = { ...finalizedInput, nextEarningsDate: validatedEarningsDate };
+    // The confirmed/estimated flag describes the date the model reported; if
+    // validation swapped in a different one (a stale date replaced via
+    // re-search), the flag no longer applies to it.
+    const dateUnchanged = validatedEarningsDate !== null && validatedEarningsDate === finalizedInput.nextEarningsDate;
+    const inputWithValidatedEarningsDate = {
+      ...finalizedInput,
+      nextEarningsDate: validatedEarningsDate,
+      nextEarningsDateConfirmed: dateUnchanged ? finalizedInput.nextEarningsDateConfirmed : null,
+    };
 
     return validateRiskScoredProposal(inputWithValidatedEarningsDate, research.citations, finalized.backtestResult);
   })();

@@ -30,11 +30,15 @@ export async function requestAiSuggestion(
   ticker: string,
   riskTolerance: RiskTolerance,
   onStage?: (stage: string) => void,
+  /** True for an explicit user Refresh: skips the server's automatic
+   * "still current, nothing to do" shortcuts and regenerates (with fresh
+   * research), rather than just re-checking what's cached. */
+  force = false,
 ): Promise<AdvisorProposal> {
   const startRes = await fetch(apiUrl('/api/advisor/start'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ticker, riskTolerance }),
+    body: JSON.stringify({ ticker, riskTolerance, ...(force ? { force: true } : {}) }),
   });
   const start: StartAdvisorResponse = await startRes.json();
   if (!start.ok) throw new AdvisorRequestError(start.userMessage ?? start.reason, false);

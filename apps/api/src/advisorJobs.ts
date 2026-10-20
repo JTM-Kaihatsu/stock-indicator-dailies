@@ -113,6 +113,9 @@ async function fullRegeneration(
  *   regeneration. If a check was already attempted recently, just return
  *   what's cached, with no new API calls at all.
  *
+ * An explicit user refresh (`options.force`) skips all of the above and
+ * regenerates with fresh research, guarded only against repeat clicks.
+ *
  * The decision itself lives in advisorRefreshPolicy.ts (pure, unit-tested).
  * Whether a regeneration also redoes stage-1 research is a separate gate
  * from the cheap-check window above (see canReuseResearch there): news or
@@ -123,20 +126,27 @@ async function fullRegeneration(
  * "Now" is always this server's real clock (`new Date()`), never something
  * inferred by a model, so the earnings-date and freshness comparisons can't
  * drift on a model's own sense of the date. */
-export function startAdvisorJob(ticker: string, riskTolerance: RiskTolerance): string {
+export function startAdvisorJob(ticker: string, riskTolerance: RiskTolerance, options: { force?: boolean } = {}): string {
   return store.start(
     async (reportStage) => {
       const now = new Date();
       const cached = await getCachedSuggestion(ticker, riskTolerance);
-      const decision = decideRefresh(cached && { nextEarningsDate: cached.result.nextEarningsDate, retrievedAt: cached.retrievedAt, lastCheckedAt: cached.lastCheckedAt }, now);
+      const decision = decideRefresh(cached && { nextEarningsDate: cached.result.nextEarningsDate, retrievedAt: cached.retrievedAt, lastCheckedAt: cached.lastCheckedAt }, now, { force: options.force });
       const knownEarningsDate = cached?.result.nextEarningsDate ?? null;
 
       if (decision.action === 'regenerate') {
         return fullRegeneration(ticker, riskTolerance, reportStage, { reason: decision.reason, earningsDate: knownEarningsDate });
       }
 
-      // The other two outcomes only exist when something is cached.
+      // The other outcomes only exist when something is cached.
       const existing = cached!;
+      if (decision.action === 'manual-cooldown') {
+        // Not persisted: a transient note explaining why a manual refresh
+        // didn't regenerate, shown through the normal quick-update slot.
+        const minutes = Math.max(1, Math.ceil((new Date(decision.availableAt).getTime() - now.getTime()) / 60000));
+        const note = `Already refreshed recently; a new refresh is available in about ${minutes} min.`;
+        return { ok: true, result: { ...existing.result, retrievedAt: existing.retrievedAt, quickUpdateNote: note } };
+      }
       if (decision.action === 'serve-cached') {
         // Checked recently enough; nothing new to do.
         return { ok: true, result: { ...existing.result, retrievedAt: existing.retrievedAt, quickUpdateNote: existing.quickUpdateNote } };
@@ -156,18 +166,20 @@ export function startAdvisorJob(ticker: string, riskTolerance: RiskTolerance): s
       // and onto every risk tolerance's row (it's a fact about the company).
       // check.nextEarningsDate is already validated (strict ISO, not stale)
       // or null; null never overwrites a known date.
-      if (check.nextEarningsDate !== null) await recordEarningsDate(ticker, check.nextEarningsDate, today);
+      if (check.nextEarningsDate !== null) await recordEarningsDate(ticker, check.nextEarningsDate, check.nextEarningsDateConfirmed, today);
 
       if (!check.hasUpdates) {
         const note =
           `Quick update attempt as of ${today}: No significant news updates were found ` +
           'across company, industry, or related political news.';
-        await recordQuickCheck(ticker, riskTolerance, note, check.nextEarningsDate);
+        await recordQuickCheck(ticker, riskTolerance, note, check.nextEarningsDate, check.nextEarningsDateConfirmed);
         return {
           ok: true,
           result: {
             ...existing.result,
             nextEarningsDate: check.nextEarningsDate ?? existing.result.nextEarningsDate,
+            nextEarningsDateConfirmed:
+              check.nextEarningsDate !== null ? check.nextEarningsDateConfirmed : existing.result.nextEarningsDateConfirmed,
             retrievedAt: existing.retrievedAt,
             quickUpdateNote: note,
           },

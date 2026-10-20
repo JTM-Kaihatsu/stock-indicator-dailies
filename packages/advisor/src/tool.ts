@@ -162,6 +162,15 @@ export const PROPOSE_SETTINGS_TOOL = {
           'The domain of the source the research drew nextEarningsDate from (e.g. "investor.apple.com"), if ' +
           "attributable to one. null if nextEarningsDate is null, or you can't attribute it to a specific source.",
       },
+      nextEarningsDateConfirmed: {
+        type: ['boolean', 'null'] as const,
+        description:
+          'true if nextEarningsDate is an officially confirmed date (announced by the company or its investor ' +
+          'relations calendar), false if it is only an estimate or projection (e.g. an analyst or data-provider ' +
+          'estimate from the historical reporting pattern). null if nextEarningsDate is null or the research ' +
+          "doesn't say which. This is displayed separately from earningsOutlook, so do not describe the date's " +
+          'status there.',
+      },
       earningsOutlook: {
         type: 'string' as const,
         description:
@@ -311,6 +320,11 @@ export interface RiskScoredProposal {
   fit: FitVerdict;
   fitReason: string;
   nextEarningsDate: string | null;
+  /** Whether nextEarningsDate is officially confirmed (true), an estimate
+   * (false), or unknown (null; also always null when nextEarningsDate is).
+   * Structured, rather than a sentence inside earningsOutlook, so a cheap
+   * material-update check can refresh it without regenerating the prose. */
+  nextEarningsDateConfirmed: boolean | null;
   earningsOutlook: string;
   earningsLikelihood: EarningsLikelihood;
   earningsLikelihoodReason: string;
@@ -429,6 +443,10 @@ export function validateRiskScoredProposal(
   }
   const strippedEarningsDate = typeof obj.nextEarningsDate === 'string' ? stripTrailingArtifacts(obj.nextEarningsDate) : '';
   const nextEarningsDate = strippedEarningsDate.length > 0 ? strippedEarningsDate : null;
+  // Lenient on purpose: an absent or non-boolean value just means "unknown",
+  // never a rejected proposal (it's display metadata, not a setting).
+  const nextEarningsDateConfirmed =
+    nextEarningsDate !== null && typeof obj.nextEarningsDateConfirmed === 'boolean' ? obj.nextEarningsDateConfirmed : null;
 
   if (typeof obj.earningsOutlook !== 'string') {
     throw new Error('propose_settings missing earningsOutlook');
@@ -458,6 +476,7 @@ export function validateRiskScoredProposal(
     fit: obj.fit as FitVerdict,
     fitReason,
     nextEarningsDate,
+    nextEarningsDateConfirmed,
     earningsOutlook,
     earningsLikelihood: obj.earningsLikelihood as EarningsLikelihood,
     earningsLikelihoodReason,

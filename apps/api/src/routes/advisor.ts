@@ -20,7 +20,9 @@ function parseRiskTolerance(raw: unknown): RiskTolerance | undefined {
 }
 
 advisor.post('/advisor/start', async (c) => {
-  const body = await c.req.json<{ ticker?: string; riskTolerance?: unknown }>().catch(() => ({}) as { ticker?: string; riskTolerance?: unknown });
+  const body = await c.req
+    .json<{ ticker?: string; riskTolerance?: unknown; force?: unknown }>()
+    .catch(() => ({}) as { ticker?: string; riskTolerance?: unknown; force?: unknown });
   const ticker = parseTicker(body.ticker);
   if (!ticker) {
     return c.json({ ok: false, reason: 'Invalid or missing ticker' }, 400);
@@ -35,7 +37,8 @@ advisor.post('/advisor/start', async (c) => {
   // fresh-enough cached suggestion for this exact ticker+tolerance and the
   // next earnings date, if any, hasn't passed) and a full regeneration, so
   // even a "hit" needs at least one upstream call before it can resolve.
-  const jobId = startAdvisorJob(ticker, riskTolerance);
+  // `force` is the panel's explicit Refresh click (see decideRefresh).
+  const jobId = startAdvisorJob(ticker, riskTolerance, { force: body.force === true });
   return c.json({ ok: true, jobId });
 });
 
