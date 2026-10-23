@@ -146,11 +146,52 @@ export async function runPipeline(ticker: string, opts: RunPipelineOptions = {})
   }
 }
 
+/** Capture failures worth one more try: the chart itself loaded, but a
+ * transient rendering problem got in the way. `studies-not-rendered` (an
+ * indicator pane painted late or not at all: seen on GOOG Oct 2, MU Oct 23,
+ * and each time clean on the next run), `popup-blocking` (a promo modal that
+ * happened to land on top), and `timeout`. Deliberately NOT retried:
+ * `chart-not-found` (the layout is missing studies; persistent, and the
+ * failure mode of an under-resourced host, where a retry would only double
+ * how long a whole sweep takes to fail), `not-authenticated`,
+ * `unknown-ticker`, `wrong-interval`, and anything after capture (a VLM
+ * failure isn't a flaky page). */
+const RETRYABLE_CAPTURE_REASONS: ReadonlySet<string> = new Set(['studies-not-rendered', 'popup-blocking', 'timeout']);
+
+export function isTransientFailure(result: DailyResult): boolean {
+  return !result.ok && result.stage === 'capture' && RETRYABLE_CAPTURE_REASONS.has(result.reason);
+}
+
+const RETRY_DELAY_MS = Number(process.env.PIPELINE_RETRY_DELAY_MS ?? 5000);
+
+/** Runs `run`, and if it fails with a transient capture problem, runs it
+ * once more after a short pause (each attempt launches a fresh browser, so
+ * the second is a genuinely clean try, not a replay of the same page).
+ * Returns the retry's result either way; the caller only ever logs/serves
+ * that final outcome, so a flake that clears on the second try leaves no
+ * failure row (and doesn't start a refresh cooldown). `sleepFn` is injectable
+ * for tests. */
+export async function runWithRetry(
+  run: () => Promise<DailyResult>,
+  options: { delayMs?: number; sleepFn?: (ms: number) => Promise<void>; onRetry?: (failure: DailyResult) => void } = {},
+): Promise<DailyResult> {
+  const first = await run();
+  if (!isTransientFailure(first)) return first;
+  options.onRetry?.(first);
+  await (options.sleepFn ?? sleep)(options.delayMs ?? RETRY_DELAY_MS);
+  return run();
+}
+
 /** The actual work `runExclusive` bounds with `withTimeout` below; split out
  * only so that wrapping is a one-line call, not a factor in its own right. */
 async function attempt(ticker: string): Promise<DailyResult> {
   ensureInitialized();
-  const result = await runDaily({ ticker, agent: agent!, provider: provider! });
+  const result = await runWithRetry(() => runDaily({ ticker, agent: agent!, provider: provider! }), {
+    onRetry: (failure) => {
+      const reason = failure.ok ? 'unknown' : failure.reason;
+      console.warn(`[pipeline] ${ticker}: transient capture failure (${reason}); retrying once`);
+    },
+  });
   if (result.ok) {
     // Independent, both best-effort: run concurrently rather than
     // sequentially awaiting each.
